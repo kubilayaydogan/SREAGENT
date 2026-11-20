@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# APP_VM (Rocky Linux 9) — Docker Engine + Compose plugin + chrony + firewalld kuralları.
-# Kullanım: sudo ./install-docker.sh <yönetim-CIDR>   ör. sudo ./install-docker.sh 10.0.0.0/24
+# APP_VM (Rocky Linux 9 veya 10) — Docker Engine + Compose plugin + chrony + firewalld kuralları.
+# Kullanım: sudo ./install-docker.sh <yönetim-CIDR>   ör. sudo ./install-docker.sh 192.168.1.0/24
 # SELinux ve firewalld KAPATILMAZ. Uygulama portları yalnız yönetim ağına açılır.
 set -euo pipefail
 ADMIN_CIDR="${1:?yönetim ağı CIDR'ı verin (ör. 10.0.0.0/24)}"
@@ -8,7 +8,9 @@ ADMIN_CIDR="${1:?yönetim ağı CIDR'ı verin (ör. 10.0.0.0/24)}"
 
 dnf install -y dnf-plugins-core chrony
 systemctl enable --now chronyd
-dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+# Docker resmî Rocky deposu (Rocky 8/9/10). Dağıtımın podman-docker/runc paketleri çakışır → kaldır.
+dnf remove -y docker docker-client docker-common docker-latest podman-docker runc >/dev/null 2>&1 || true
+[[ -f /etc/yum.repos.d/docker-ce.repo ]] || dnf config-manager --add-repo https://download.docker.com/linux/rocky/docker-ce.repo
 dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 # Docker log rotasyonu ve canlı geri yükleme
 install -d /etc/docker

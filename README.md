@@ -4,11 +4,11 @@ Dört Java 21 / Spring Boot iş uygulaması (Reservation, Check-in, Flight Opera
 yalnız HTTP ile yük veren **chaos-controller** ve Dynatrace gözlemlenebilirlik hazırlığı.
 Aşama 2 (Dynatrace MCP üzerinden çalışan Python SRE Agent) **henüz yazılmadı**.
 
-- Topoloji: APP_VM (Rocky 9, Docker) ↔ DB_VM (Rocky 9, postgresql-17 systemd) — `docs/architecture.md`
+- Topoloji: APP_VM (Rocky 9/10, Docker) ↔ DB_VM (Rocky 9, postgresql-17 systemd) — `docs/architecture.md`
 - Tablo/transaction/kilit bağımlılıkları — `docs/sql-dependencies.md`
 - Deney reçeteleri ve yerel ölçümler — `docs/experiments.md`
 - Telemetri sözleşmesi (Aşama 2 girdisi) — `docs/telemetry-contract.md`
-- Kurulum / işletim / acil durdurma — `docs/runbook.md`
+- Kurulum / işletim / acil durdurma — `docs/runbook.md` · bu ortama özel sıralı plan — `docs/deploy-plan.md`
 - Kabul kapısı — `docs/acceptance-gate.md` · Durum — `PROJECT_STATE.md`
 - Sürüm ve tasarım kararları — `docs/decisions/` · OpenAPI — `docs/openapi/*.yaml`
 

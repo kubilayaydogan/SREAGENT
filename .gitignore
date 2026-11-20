@@ -12,3 +12,6 @@ data/
 app-vm/.env
 app-vm/.env.local
 db-vm/db-vm.env
+
+# VM env çıktıları (parola içerir)
+deploy/out/

@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-Son güncelleme: 2026-11-20 · Aşama: **1 (kod tamam, hedef VM + Dynatrace doğrulaması bekliyor)** · Aşama 2: **başlanmadı**
+Son güncelleme: 2026-11-21 · Aşama: **1 (kod tamam, hedef VM + Dynatrace doğrulaması bekliyor)** · Aşama 2: **başlanmadı**
 
 ## Özet
 
@@ -41,18 +41,29 @@ Ayrıntılı tablo: `docs/acceptance-gate.md`. Kısa durum:
 - E6: disk düzeyi I/O Docker Desktop page cache nedeniyle ölçülmedi — VM'de ölçülmeli.
 - Tüm sayılar Docker Desktop'ta, kısa pencerelerle; hedef donanımda yeniden kalibre edilmeli.
 
-## Sıradaki adım: VM + Dynatrace doğrulaması (kullanıcı ortamında)
+## Hedef ortam (kullanıcıdan, 2026-11-21)
 
-Girdi gerekli (secret değil): APP_VM / DB_VM IP, Rocky sürümü, CPU/RAM; Dynatrace tenant türü, OneAgent/ActiveGate yerleşimi,
-PostgreSQL extension durumu, MCP türü ve endpoint'i. Parolalar/token'lar yalnız `app-vm/.env` ve `db-vm/db-vm.env` içinde.
+| | Değer |
+|---|---|
+| APP_VM | 192.168.1.1, Rocky Linux 10.3 |
+| DB_VM | 192.168.1.2, Rocky Linux 10.3 |
+| Dynatrace | SaaS (güncel platform); OneAgent iki VM'e kurulacak; PostgreSQL extension kurulu değil |
+| ActiveGate | Karar: **APP_VM** (DB_VM ölçülen kaynak). ⚠ Rocky 10.3 ActiveGate destek listesinde yok (10.1/10.2 var) → sorun çıkarsa ayrı Rocky 9.8/10.2 VM |
+| MCP | Remote MCP, `https://<env>.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp`, platform token (Bearer) |
+| VM / CPU / RAM | **bilinmiyor** — `scripts/vm-precheck.sh` ölçer (APP_VM ≥ 8 GB / 4 vCPU önerilir) |
 
-1. DB_VM: `docs/runbook.md` §1 → `verify-db-vm.sh` çıktısı (kriter 1).
-2. APP_VM: runbook §2 → migrate / seed / check / up.
-3. Doğrulama: runbook §3 (`smoke.sh`, `verify-db.sh`, `lock-chain-demo.sh`) APP_VM'den.
-4. Dynatrace: `observability/dynatrace/README.md`; OneAgent (iki host), ActiveGate + PG extension, collector `COLLECTOR_DT_MODE`.
-5. Deneyler E0 → E2 → E1 (E1 en az 3 tekrar); her sinyal için `docs/acceptance-gate.md` "Telemetri / MCP kapısı" tablosu
-   ve `docs/telemetry-contract.md` §I doldurulur (UI / DQL / MCP araç adı / ingest gecikmesi).
-6. Kapı dolunca Aşama 2'ye geçilir. Kapı dolmadan Aşama 2'ye başlanmayacak.
+Bu ortam için hazırlananlar (kod; VM'de çalıştırılmadı):
+- `db-vm/install-postgres17.sh`, `app-vm/install-docker.sh`: EL-10 desteği (PGDG EL-10 deposu, Docker Rocky deposu, EL10'da modül yok).
+- `scripts/gen-vm-env.sh`: iki VM için tutarlı rastgele parolalı env dosyaları → `deploy/out/` (git dışı). Yerelde test edildi.
+- `scripts/vm-precheck.sh`: işletim sistemi, x86-64-v3, RAM/disk, SELinux, saat, Dynatrace erişimi, ağ geçidi IP çakışması.
+- `scripts/mcp-probe.py`: Remote MCP initialize → tools/list → kabul kapısı DQL'leri; sonucu VERI_VAR/BOS/HATA/IZIN_HATASI olarak ayırır,
+  token'sız kanıt JSON'u yazar. **Yalnız sahte MCP sunucusuna karşı test edildi** (SSE + JSON yanıt, oturum başlığı, 403, redaksiyon).
+- `docs/deploy-plan.md`: token listesi (T1–T4 ve kapsamları), sıralı kurulum, kabul satırları, deney ve kanıt komutları.
+
+## Sıradaki adım (kullanıcı ortamında)
+
+`docs/deploy-plan.md` §2–§8'i uygulayın ve `deploy/evidence/` çıktılarını iletin. Ardından kabul kapısı ve bu belge
+gerçek sonuçlarla güncellenir. **Kapı dolmadan Aşama 2'ye başlanmayacak.**
 
 ## Aşama 2
 

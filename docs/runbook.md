@@ -1,6 +1,6 @@
 # Runbook
 
-Yer tutucular: `APP_VM=192.0.2.10`, `DB_VM=192.0.2.20`, yönetim ağı `10.0.0.0/24`. Kendi değerlerinizle değiştirin.
+Bu ortamın gerçek değerleriyle sıralı plan: `docs/deploy-plan.md`. Yer tutucular: `APP_VM=192.0.2.10`, `DB_VM=192.0.2.20`, yönetim ağı `10.0.0.0/24`. Kendi değerlerinizle değiştirin.
 
 ## 1. DB_VM kurulumu (Rocky 9, root)
 ```bash

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# DB_VM (Rocky Linux 9, x86_64) — PostgreSQL 17 (PGDG) systemd kurulumu.
+# DB_VM (Rocky Linux 9 veya 10, x86_64) — PostgreSQL 17 (PGDG) systemd kurulumu.
+# EL sürümü /etc/os-release'ten okunur (Rocky 10.3 → EL-10 PGDG deposu).
 # Kullanım:  sudo ./install-postgres17.sh ./db-vm.env
 # İdempotenttir: tekrar çalıştırıldığında konfigürasyonu yeniler, veriyi silmez.
 # SELinux ve firewalld KAPATILMAZ; yalnız APP_VM (ve varsa ActiveGate) IP'sine 5432 açılır.
@@ -26,10 +27,14 @@ systemctl enable --now chronyd
 chronyc tracking | head -3 || true
 
 echo "== 2/6 PGDG deposu ve paketler"
+EL_MAJOR="$(. /etc/os-release && echo "${VERSION_ID%%.*}")"
+[[ "$EL_MAJOR" == "9" || "$EL_MAJOR" == "10" ]] || { echo "Desteklenmeyen EL sürümü: $EL_MAJOR"; exit 1; }
+echo "   EL-${EL_MAJOR} ($(. /etc/os-release && echo "$PRETTY_NAME"))"
 if ! rpm -q pgdg-redhat-repo >/dev/null 2>&1; then
-  dnf install -y "https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-$(uname -m)/pgdg-redhat-repo-latest.noarch.rpm"
+  dnf install -y "https://download.postgresql.org/pub/repos/yum/reporpms/EL-${EL_MAJOR}-$(uname -m)/pgdg-redhat-repo-latest.noarch.rpm"
 fi
-dnf -qy module disable postgresql || true
+# EL9: AppStream postgresql modülü PGDG paketlerini gölgeler → kapat. EL10'da modularity yok.
+if [[ "$EL_MAJOR" == "9" ]]; then dnf -qy module disable postgresql || true; fi
 dnf install -y "postgresql${PGVER}-server" "postgresql${PGVER}-contrib"
 
 echo "== 3/6 initdb (yalnız ilk kurulumda)"

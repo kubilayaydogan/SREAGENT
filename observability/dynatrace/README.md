@@ -12,14 +12,14 @@
      OneAgent (full) │             │ Extensions 2.0 │ Metrics API v2 / Logs API v2
                      │             │                │  (metrics.ingest, logs.ingest)
  ┌───────────────────┴──┐   ┌──────┴────────┐   ┌───┴──────────────────────────┐
- │ APP_VM (Rocky 9)     │   │ Environment   │   │ pg-lock-collector (APP_VM)   │
+ │ APP_VM (Rocky 10.3)  │   │ Environment   │   │ pg-lock-collector (APP_VM)   │
  │  OneAgent full-stack │   │ ActiveGate    │   │ Micrometer Dynatrace export  │
  │  Docker: 4 app +     │   │ (APP_VM'de    │   │ (opsiyonel, uygulamalardan)  │
  │  chaos + collector   │   │  varsayılan)  │   └──────────────────────────────┘
  └──────────────────────┘   └──────┬────────┘
                                    │ 5432 (dynatrace rolü, pg_monitor)
  ┌──────────────────────┐          ▼
- │ DB_VM (Rocky 9)      │◄─────────┘
+ │ DB_VM (Rocky 10.3)   │◄─────────┘
  │  OneAgent (host/     │
  │  infra modu yeterli) │
  │  postgresql-17       │
@@ -30,7 +30,7 @@
 |---|---|---|---|
 | OneAgent full-stack | APP_VM | Java code module: servis, PurePath, JDBC çağrıları, JVM/GC/thread; Docker container metrikleri; container stdout logları | Docker'da otomatik enjeksiyon resmi destek tablosunda var (`Auto-injection in Docker container (Deep monitoring)`) |
 | OneAgent (Infrastructure/Foundation modu) | DB_VM | Host CPU/RAM/disk/ağ, postgres process'leri. PostgreSQL iç metriklerini OneAgent'a bırakmıyoruz | Rocky Linux 8/9/10 x86-64 destek tablosunda |
-| Environment ActiveGate | Varsayılan APP_VM (değiştirilebilir) | PostgreSQL extension uzaktan izleme ActiveGate grubunda koşar | Düşük kaynaklı lab'da ayrı VM yoksa APP_VM; ActiveGate bellek tüketimi APP_VM ölçümlerine **eklenir** — raporda ayrı gösterin. Ayrı VM varsa `ACTIVEGATE_IP` ile DB_VM firewall'una eklenir |
+| Environment ActiveGate | **APP_VM** (karar: `docs/deploy-plan.md` §0). ⚠ ActiveGate destek tablosu Rocky 10.1/10.2 listeler, **10.3 listede yok**; sorun çıkarsa ayrı Rocky 9.8/10.2 VM (B planı) | PostgreSQL extension uzaktan izleme ActiveGate grubunda koşar | Düşük kaynaklı lab'da ayrı VM yoksa APP_VM; ActiveGate bellek tüketimi APP_VM ölçümlerine **eklenir** — raporda ayrı gösterin. Ayrı VM varsa `ACTIVEGATE_IP` ile DB_VM firewall'una eklenir |
 | PostgreSQL extension (Extensions 2.0) | ActiveGate grubu | `postgres.*` metrikleri, top queries/longest queries **log** olarak | Varsayılan sorgu aralığı 1 dk, long query 5 dk |
 | pg-lock-collector | APP_VM container (değiştirilebilir) | 5 sn aralıkla blocking zinciri + rol/app oturumları + rol bazlı statement deltaları | Agent değildir, salt-okur |
 
@@ -90,7 +90,7 @@ docker compose --profile observability up -d pg-lock-collector
 |---|---|---|
 | Ingest token | `metrics.ingest`, `logs.ingest` | pg-lock-collector, Micrometer (yol A) |
 | OneAgent kurulum | PaaS / installer token (UI'nın ürettiği) | yalnız kurulum anı |
-| (Aşama 2) MCP/okuma | Aşama 2'de MCP sunucusunun belgelenen gereksinimine göre belirlenecek | — |
+| MCP (platform token) | `mcp-gateway:servers:invoke`, `mcp-gateway:servers:read`, `storage:{metrics,logs,entities,events,buckets,smartscape,spans}:read` | `scripts/mcp-probe.py`, Aşama 2 |
 
 ## 4. Bilinen sınırlar
 - PostgreSQL extension varsayılan 1 dk aralıkla örnekler; 2–4 sn'lik kilitleri kaçırabilir → collector 5 sn.

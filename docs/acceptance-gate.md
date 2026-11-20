@@ -1,5 +1,7 @@
 # Aşama 1 kabul kapısı
 
+Bu ortam için sıralı kurulum ve kanıt dosyaları: `docs/deploy-plan.md` (APP_VM 192.168.1.1, DB_VM 192.168.1.2, Rocky 10.3).
+
 Durum değerleri: **YEREL** = bu repoda yerel Docker ortamında çalıştırılarak doğrulandı ·
 **KOD** = kod/yapılandırma hazır, çalıştırılmadı · **VM** = kullanıcının VM'lerinde doğrulanmalı ·
 **TENANT** = Dynatrace tenant'ında doğrulanmalı · **MCP** = gerçek MCP aracıyla doğrulanmalı.
@@ -18,7 +20,7 @@ Durum değerleri: **YEREL** = bu repoda yerel Docker ortamında çalıştırıla
 | 10 | Kilit kanıtı | kaynak/etkilenen session + servis eşlemesi ile gerçek zincir | YEREL | ReservationIT, collector `blocking_edge`, `lock-chain-demo.sh` |
 | 11 | Durdurma | yeni yük durur; sunucu işleri sınırlı sürede biter | YEREL | E4 stop-all: pressure=0, aktif lab sorgusu=0 |
 | 12 | Telemetri | 4 servis, 2 host, JDBC, Hikari, PG sinyalleri Dynatrace'te | Hikari/HTTP export **STUB**; geri kalanı **TENANT** | `observability/dynatrace/README.md` |
-| 13 | MCP veri yolu | agent sinyalleri gerçek MCP aracıyla sorgulanabilir | **MCP** | aşağıdaki tablo |
+| 13 | MCP veri yolu | agent sinyalleri gerçek MCP aracıyla sorgulanabilir | **MCP** (probe hazır, sahte sunucuya karşı test edildi) | `scripts/mcp-probe.py gate`, aşağıdaki tablo |
 | 14 | Eksikler | doğrulanamayanlar açık | bu belge + PROJECT_STATE.md | |
 
 ## Telemetri / MCP kapısı (Aşama 2 öncesi doldurun)
