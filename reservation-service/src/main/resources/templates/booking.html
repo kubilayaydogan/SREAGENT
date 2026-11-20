@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Rezervasyon')}"></head>
+<body>
+<header th:replace="~{fragments :: header('✈ Reservation')}"></header>
+<main>
+  <div th:replace="~{fragments :: flash}"></div>
+  <section th:if="${b}">
+    <h2>Rezervasyon <code th:text="${b.pnr}"></code> <span class="tag" th:classappend="${b.status}" th:text="${b.status}"></span></h2>
+    <table>
+      <tr><th>Yolcu</th><td th:text="${b.firstName} + ' ' + ${b.lastName} + ' (' + ${b.email} + ')'"></td></tr>
+      <tr><th>Uçuş</th><td th:text="${b.flightNo} + ' ' + ${b.origin} + ' → ' + ${b.destination} + ' (#' + ${b.flightId} + ')'"></td></tr>
+      <tr><th>Kalkış (UTC)</th><td th:text="${#temporals.format(b.depTime, 'yyyy-MM-dd HH:mm')}"></td></tr>
+      <tr><th>Sınıf / Fiyat</th><td th:text="${b.fareClass} + ' / ' + ${b.price}"></td></tr>
+      <tr><th>Check-in</th><td th:text="${b.checkedIn} ? 'Yapıldı' : 'Yapılmadı'"></td></tr>
+      <tr><th>Oluşturma</th><td th:text="${b.createdAt}"></td></tr>
+      <tr th:if="${b.cancelledAt}"><th>İptal</th><td th:text="${b.cancelledAt}"></td></tr>
+    </table>
+    <form th:if="${b.status == 'CONFIRMED'}" method="post" th:action="@{/ui/bookings/{p}/cancel(p=${b.pnr})}" style="margin-top:.6rem">
+      <button class="danger">Rezervasyonu iptal et</button>
+    </form>
+    <p class="muted">API: <code th:text="'GET /api/bookings/' + ${b.pnr}"></code></p>
+  </section>
+  <p><a href="/">← Arama</a></p>
+</main>
+</body>
+</html>

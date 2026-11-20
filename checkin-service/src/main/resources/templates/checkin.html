@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Check-in')}"></head>
+<body>
+<header th:replace="~{fragments :: header('🛂 Check-in')}"></header>
+<main>
+  <div th:replace="~{fragments :: flash}"></div>
+  <section th:if="${c}">
+    <h2>PNR <code th:text="${c.pnr}"></code> <span class="tag" th:classappend="${c.bookingStatus}" th:text="${c.bookingStatus}"></span></h2>
+    <table>
+      <tr><th>Yolcu</th><td th:text="${c.firstName} + ' ' + ${c.lastName}"></td></tr>
+      <tr><th>Uçuş</th><td th:text="${c.flightNo} + ' ' + ${c.origin} + ' → ' + ${c.destination} + ' (#' + ${c.flightId} + ', ' + ${c.flightStatus} + ')'"></td></tr>
+      <tr><th>Kalkış (UTC)</th><td th:text="${#temporals.format(c.depTime, 'yyyy-MM-dd HH:mm')}"></td></tr>
+      <tr><th>Check-in</th><td th:text="${c.checkedIn} ? (${c.checkedInAt} + ' / ' + ${c.channel}) : 'Yapılmadı'"></td></tr>
+      <tr><th>Koltuk</th><td th:text="${c.seatNo} ?: '-'"></td></tr>
+    </table>
+    <div class="row" style="margin-top:.6rem">
+      <form th:if="${!c.checkedIn}" method="post" th:action="@{/ui/checkin/{p}(p=${c.pnr})}" class="row">
+        <select name="channel"><option>WEB</option><option>KIOSK</option><option>COUNTER</option><option>MOBILE</option></select>
+        <button>Check-in yap</button>
+      </form>
+      <form th:if="${c.checkedIn}" method="post" th:action="@{/ui/checkin/{p}/seat(p=${c.pnr})}" class="row">
+        <label>Koltuk <input name="seatNo" placeholder="12C" maxlength="3" required></label>
+        <button>Koltuk ata</button>
+      </form>
+    </div>
+  </section>
+  <section th:if="${seats}">
+    <h2>Dolu koltuklar <span class="muted" th:text="'(' + ${#lists.size(seats)} + ')'"></span></h2>
+    <p><span th:each="s : ${seats}" class="tag" th:text="${s.seatNo}" style="margin:.1rem"></span></p>
+  </section>
+  <p><a href="/">← Geri</a></p>
+</main>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{
+  "name": "Etkisiz/bağımsız yük: Baggage okuma",
+  "scenario": "E1-independent-baggage-read",
+  "warmupSec": 30,
+  "baselineSec": 120,
+  "loadSec": 180,
+  "recoverySec": 120,
+  "background": {
+    "enabled": true,
+    "rpsPerApp": 1.0,
+    "apps": null
+  },
+  "targets": [
+    {
+      "app": "baggage",
+      "role": "stress",
+      "mode": "RPS",
+      "rps": 40,
+      "concurrency": 0,
+      "rampUpSec": 10,
+      "maxInFlight": 64,
+      "timeoutMs": 5000,
+      "mix": {
+        "bag_status": 70,
+        "flight_bags": 30
+      },
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "LOAD"
+    }
+  ]
+}

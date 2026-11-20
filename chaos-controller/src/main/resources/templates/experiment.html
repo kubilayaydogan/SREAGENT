@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="utf-8"><title>Deney</title><link rel="stylesheet" href="/lab.css"></head>
+<body>
+<header><h1>⚡ Chaos Controller</h1><a href="/">Panel</a><a href="/experiments">Deney geçmişi</a></header>
+<main>
+  <p class="err" th:unless="${r}">Deney bulunamadı</p>
+  <th:block th:if="${r}">
+  <section>
+    <h2 th:text="${r.experimentId} + ' — ' + ${r.spec.name}"></h2>
+    <table>
+      <tr><th>Senaryo etiketi</th><td th:text="${r.spec.scenario}"></td></tr>
+      <tr><th>Durum</th><td th:text="${r.state} + (${r.stopReason} != null ? ' (' + ${r.stopReason} + ')' : '')"></td></tr>
+      <tr><th>clientRequestId</th><td th:text="${r.clientRequestId}"></td></tr>
+      <tr><th>Fazlar (UTC)</th><td><div th:each="p : ${r.phases}" th:text="${p.key} + ': ' + ${p.value[0]} + ' → ' + ${p.value[1]}"></div></td></tr>
+      <tr><th>Üretici kaynak kullanımı</th><td th:text="${r.producer}"></td></tr>
+      <tr><th>Cleanup</th><td><div th:each="c : ${r.cleanup}" th:text="${c.key} + ': ' + ${c.value}"></div></td></tr>
+      <tr><th>Not</th><td th:text="${r.notes}"></td></tr>
+    </table>
+    <p><a th:href="@{/api/experiments/{id}(id=${r.experimentId})}">JSON kaydı</a></p>
+  </section>
+  <section>
+    <h2>Sonuçlar (faz × kaynak × uygulama × operasyon)</h2>
+    <table>
+      <tr><th>Faz</th><th>Kaynak</th><th>Uygulama</th><th>Operasyon</th><th>Hedef</th><th>Gönderilen</th><th>Yanıt</th>
+        <th>OK</th><th>409</th><th>4xx</th><th>5xx</th><th>Timeout</th><th>IO</th><th>Dropped</th><th>Veri yok</th>
+        <th>p50 ms</th><th>p95 ms</th><th>p99 ms</th><th>RPS</th><th>Hata oranı</th></tr>
+      <tr th:each="x : ${r.results}">
+        <td th:text="${x.phase}"></td><td th:text="${x.source}"></td><td th:text="${x.app}"></td><td th:text="${x.op}"></td>
+        <td th:text="${x.intended}"></td><td th:text="${x.sent}"></td><td th:text="${x.completed}"></td>
+        <td th:text="${x.ok}"></td><td th:text="${x.conflict}"></td><td th:text="${x.clientError}"></td>
+        <td th:text="${x.serverError}"></td><td th:text="${x.timeout}"></td><td th:text="${x.ioError}"></td>
+        <td th:text="${x.dropped}"></td><td th:text="${x.noData}"></td>
+        <td th:text="${x.p50Ms}"></td><td th:text="${x.p95Ms}"></td><td th:text="${x.p99Ms}"></td>
+        <td th:text="${x.achievedRps}"></td><td th:text="${x.errorRate}"></td>
+      </tr>
+    </table>
+    <p class="muted">p95 değerleri her satırın kendi örneklerinden hesaplanır; farklı servislerin p95'leri ortalanmaz.</p>
+  </section>
+  </th:block>
+</main>
+</body>
+</html>

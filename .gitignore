@@ -1,0 +1,14 @@
+target/
+build.log
+*.iml
+.idea/
+.vscode/
+__pycache__/
+.pytest_cache/
+data/
+# secret içeren dosyalar
+.env
+.env.local
+app-vm/.env
+app-vm/.env.local
+db-vm/db-vm.env

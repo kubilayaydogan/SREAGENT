@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: chaos-controller
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    problemdetails:
+      enabled: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+chaos:
+  apps:
+    reservation: ${RESERVATION_URL:http://localhost:8081}
+    checkin: ${CHECKIN_URL:http://localhost:8082}
+    flightops: ${FLIGHTOPS_URL:http://localhost:8083}
+    baggage: ${BAGGAGE_URL:http://localhost:8084}
+  lab-token: ${LAB_TOKEN:}
+  data-dir: ${CHAOS_DATA_DIR:./data/experiments}
+  background: ${CHAOS_BACKGROUND_RPS:1.0}
+  auth:
+    enabled: ${CHAOS_AUTH_ENABLED:true}
+    user: ${CHAOS_USER:chaos}
+    password: ${CHAOS_PASSWORD:}
+  limits:
+    max-total-rps: ${CHAOS_MAX_TOTAL_RPS:250}
+    max-rps-per-target: ${CHAOS_MAX_RPS_PER_TARGET:150}
+    max-concurrency-per-target: ${CHAOS_MAX_CONCURRENCY_PER_TARGET:64}
+    max-total-concurrency: ${CHAOS_MAX_TOTAL_CONCURRENCY:128}
+    max-in-flight-per-target: ${CHAOS_MAX_INFLIGHT_PER_TARGET:256}
+    max-duration-sec: ${CHAOS_MAX_DURATION_SEC:3600}
+    max-hold-ms: ${CHAOS_MAX_HOLD_MS:5000}
+    max-timeout-ms: ${CHAOS_MAX_TIMEOUT_MS:30000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    tags:
+      service: ${spring.application.name}
+
+logging:
+  structured:
+    format:
+      console: ${LOG_FORMAT:ecs}

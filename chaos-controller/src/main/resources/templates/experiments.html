@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="utf-8"><title>Deney geçmişi</title><link rel="stylesheet" href="/lab.css"></head>
+<body>
+<header><h1>⚡ Chaos Controller</h1><a href="/">Panel</a><a href="/experiments">Deney geçmişi</a></header>
+<main>
+  <section>
+    <h2>Deneyler</h2>
+    <table>
+      <tr><th>ID</th><th>Senaryo</th><th>Durum</th><th>Başlangıç (UTC)</th><th>Bitiş (UTC)</th><th>Hedefler</th></tr>
+      <tr th:each="r : ${experiments}">
+        <td><a th:href="@{/experiments/{id}(id=${r.experimentId})}" th:text="${r.experimentId}"></a></td>
+        <td th:text="${r.spec.scenario}"></td>
+        <td><span class="tag" th:text="${r.state}"></span></td>
+        <td th:text="${r.startedAt}"></td>
+        <td th:text="${r.endedAt}"></td>
+        <td><span th:each="t : ${r.spec.targets}" class="tag" th:text="${t.app} + ':' + ${t.role}" style="margin:.1rem"></span></td>
+      </tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,390 @@
+openapi: 3.1.0
+info:
+  title: OpenAPI definition
+  version: v0
+servers:
+- url: http://127.0.0.1:8083
+  description: Generated server url
+paths:
+  /lab/hold-connection:
+    post:
+      tags:
+      - lab-controller
+      operationId: holdConnection
+      parameters:
+      - name: holdMs
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: pool
+        in: query
+        required: false
+        schema:
+          type: string
+          default: main
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /lab/flights/capacity-hold:
+    post:
+      tags:
+      - flight-ops-lab-controller
+      operationId: hold
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabHoldRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Result"
+  /lab/cleanup:
+    post:
+      tags:
+      - lab-controller
+      operationId: cleanup
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/flights/{id}/status:
+    post:
+      tags:
+      - flight-ops-api-controller
+      operationId: status
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StatusUpdate"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Result"
+  /api/flights/{id}/capacity:
+    post:
+      tags:
+      - flight-ops-api-controller
+      operationId: capacity
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CapacityUpdate"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Result"
+  /lab/status:
+    get:
+      tags:
+      - lab-controller
+      operationId: status_1
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/reports/load-factor:
+    get:
+      tags:
+      - flight-ops-api-controller
+      operationId: loadFactor
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 7
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LoadFactor"
+  /api/flights:
+    get:
+      tags:
+      - flight-ops-api-controller
+      operationId: list
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: hoursAhead
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 48
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Flight"
+  /api/flights/{id}:
+    get:
+      tags:
+      - flight-ops-api-controller
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/FlightDetail"
+  /api/flights/sample:
+    get:
+      tags:
+      - flight-ops-api-controller
+      operationId: sample
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  type: integer
+                  format: int64
+  /api/flights/hot:
+    get:
+      tags:
+      - flight-ops-api-controller
+      operationId: hot
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Flight"
+components:
+  schemas:
+    LabHoldRequest:
+      type: object
+      properties:
+        flightId:
+          type: integer
+          format: int64
+        holdMs:
+          type: integer
+          format: int64
+      required:
+      - holdMs
+    Flight:
+      type: object
+      properties:
+        flightId:
+          type: integer
+          format: int64
+        flightNo:
+          type: string
+        origin:
+          type: string
+        destination:
+          type: string
+        depTime:
+          type: string
+          format: date-time
+        arrTime:
+          type: string
+          format: date-time
+        aircraft:
+          type: string
+        status:
+          type: string
+        gate:
+          type: string
+        delayMin:
+          type: integer
+          format: int32
+        capacity:
+          type: integer
+          format: int32
+        sold:
+          type: integer
+          format: int32
+        checkedIn:
+          type: integer
+          format: int32
+        hot:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+        updatedAt:
+          type: string
+          format: date-time
+    Result:
+      type: object
+      properties:
+        flight:
+          $ref: "#/components/schemas/Flight"
+        replayed:
+          type: boolean
+    StatusUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          pattern: SCHEDULED|DELAYED|BOARDING|DEPARTED|ARRIVED|CANCELLED
+        gate:
+          type: string
+          pattern: "[A-Z][0-9]{1,3}"
+        delayMin:
+          type: integer
+          format: int32
+          maximum: 1440
+          minimum: 0
+      required:
+      - status
+    CapacityUpdate:
+      type: object
+      properties:
+        capacity:
+          type: integer
+          format: int32
+          maximum: 1000000
+          minimum: 1
+      required:
+      - capacity
+    LoadFactor:
+      type: object
+      properties:
+        flightId:
+          type: integer
+          format: int64
+        flightNo:
+          type: string
+        origin:
+          type: string
+        destination:
+          type: string
+        depTime:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+          format: int32
+        sold:
+          type: integer
+          format: int32
+        confirmedBookings:
+          type: integer
+          format: int64
+        cancelledBookings:
+          type: integer
+          format: int64
+        loadFactorPct:
+          type: number
+        inventoryMismatch:
+          type: boolean
+    FlightDetail:
+      type: object
+      properties:
+        flight:
+          $ref: "#/components/schemas/Flight"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpsEvent"
+    OpsEvent:
+      type: object
+      properties:
+        eventId:
+          type: integer
+          format: int64
+        eventType:
+          type: string
+        detail:
+          type: string
+        createdAt:
+          type: string
+          format: date-time

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head(title)">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${title}">airlab</title>
+  <link rel="stylesheet" href="/lab.css">
+</head>
+<body>
+<header th:fragment="header(name)">
+  <h1 th:text="${name}">Servis</h1>
+  <a href="/">Ana sayfa</a>
+  <a href="/swagger-ui.html">API (OpenAPI)</a>
+  <a href="/actuator/health">Health</a>
+</header>
+<div th:fragment="flash">
+  <p class="msg" th:if="${msg}" th:text="${msg}"></p>
+  <p class="err" th:if="${error}" th:text="${error}"></p>
+</div>
+</body>
+</html>

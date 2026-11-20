@@ -1,0 +1,14 @@
+{
+  "name": "Normal trafik (yalnız arka plan)",
+  "scenario": "E0-normal-baseline",
+  "warmupSec": 30,
+  "baselineSec": 120,
+  "loadSec": 120,
+  "recoverySec": 120,
+  "background": {
+    "enabled": true,
+    "rpsPerApp": 1.0,
+    "apps": null
+  },
+  "targets": []
+}

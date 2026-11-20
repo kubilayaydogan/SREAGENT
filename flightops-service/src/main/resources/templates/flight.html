@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Uçuş')}"></head>
+<body>
+<header th:replace="~{fragments :: header('🛫 Flight Operations')}"></header>
+<main>
+  <div th:replace="~{fragments :: flash}"></div>
+  <section th:if="${f}">
+    <h2 th:text="${f.flightNo} + ' ' + ${f.origin} + ' → ' + ${f.destination} + ' (#' + ${f.flightId} + ')'"></h2>
+    <table>
+      <tr><th>Kalkış / Varış (UTC)</th><td th:text="${#temporals.format(f.depTime, 'yyyy-MM-dd HH:mm')} + ' / ' + ${#temporals.format(f.arrTime, 'yyyy-MM-dd HH:mm')}"></td></tr>
+      <tr><th>Uçak</th><td th:text="${f.aircraft}"></td></tr>
+      <tr><th>Durum</th><td><span class="tag" th:text="${f.status}"></span> kapı: <span th:text="${f.gate} ?: '-'"></span>, gecikme: <span th:text="${f.delayMin}"></span> dk</td></tr>
+      <tr><th>Envanter</th><td th:text="'kapasite ' + ${f.capacity} + ', satılan ' + ${f.sold} + ', check-in ' + ${f.checkedIn} + ', versiyon ' + ${f.version}"></td></tr>
+    </table>
+  </section>
+  <section th:if="${f}">
+    <h2>Operasyon güncelle</h2>
+    <form method="post" th:action="@{/ui/flights/{id}/status(id=${f.flightId})}" class="row">
+      <label>Durum
+        <select name="status">
+          <option th:each="s : ${ {'SCHEDULED','DELAYED','BOARDING','DEPARTED','ARRIVED','CANCELLED'} }"
+                  th:value="${s}" th:text="${s}" th:selected="${s == f.status}"></option>
+        </select>
+      </label>
+      <label>Kapı <input name="gate" th:value="${f.gate}" placeholder="B12" maxlength="4"></label>
+      <label>Gecikme (dk) <input type="number" name="delayMin" min="0" max="1440" th:value="${f.delayMin}"></label>
+      <button>Kaydet</button>
+    </form>
+    <form method="post" th:action="@{/ui/flights/{id}/capacity(id=${f.flightId})}" class="row" style="margin-top:.6rem">
+      <label>Kapasite <input type="number" name="capacity" min="1" th:value="${f.capacity}"></label>
+      <button>Kapasiteyi güncelle</button>
+      <span class="muted">Ortak envanter satırını günceller; satılan koltuk sayısının altına inemez.</span>
+    </form>
+  </section>
+  <section th:if="${events}">
+    <h2>Operasyon olayları</h2>
+    <table>
+      <tr><th>Zaman</th><th>Tür</th><th>Ayrıntı</th></tr>
+      <tr th:each="e : ${events}"><td th:text="${e.createdAt}"></td><td th:text="${e.eventType}"></td><td th:text="${e.detail}"></td></tr>
+    </table>
+  </section>
+  <p><a href="/">← Liste</a></p>
+</main>
+</body>
+</html>

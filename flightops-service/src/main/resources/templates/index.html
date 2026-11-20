@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Flight Operations')}"></head>
+<body>
+<header th:replace="~{fragments :: header('🛫 Flight Operations')}"></header>
+<main>
+  <div th:replace="~{fragments :: flash}"></div>
+  <section>
+    <h2>Uçuş listesi</h2>
+    <form method="get" action="/" class="row">
+      <label>Durum
+        <select name="status">
+          <option value="">(hepsi)</option>
+          <option th:each="s : ${ {'SCHEDULED','DELAYED','BOARDING','DEPARTED','ARRIVED','CANCELLED'} }"
+                  th:value="${s}" th:text="${s}" th:selected="${s == status}"></option>
+        </select>
+      </label>
+      <label>Önümüzdeki saat <input type="number" name="hoursAhead" min="1" max="1440" th:value="${hoursAhead}"></label>
+      <button>Listele</button>
+    </form>
+    <table style="margin-top:.6rem">
+      <tr><th>Uçuş</th><th>Rota</th><th>Kalkış (UTC)</th><th>Durum</th><th>Kapı</th><th>Kapasite / Satılan / Check-in</th></tr>
+      <tr th:each="f : ${flights}">
+        <td><a th:href="@{/ui/flights/{id}(id=${f.flightId})}" th:text="${f.flightNo}"></a> <span class="tag hot" th:if="${f.hot}">HOT</span></td>
+        <td th:text="${f.origin} + ' → ' + ${f.destination}"></td>
+        <td th:text="${#temporals.format(f.depTime, 'yyyy-MM-dd HH:mm')}"></td>
+        <td><span class="tag" th:text="${f.status}"></span><span class="muted" th:if="${f.delayMin > 0}" th:text="' +' + ${f.delayMin} + 'dk'"></span></td>
+        <td th:text="${f.gate} ?: '-'"></td>
+        <td th:text="${f.capacity} + ' / ' + ${f.sold} + ' / ' + ${f.checkedIn}"></td>
+      </tr>
+    </table>
+  </section>
+  <section>
+    <h2>Sıcak uçuşlar (ortak envanter satırı)</h2>
+    <table>
+      <tr><th>ID</th><th>Uçuş</th><th>Kapasite / Satılan / Check-in</th><th>Versiyon</th></tr>
+      <tr th:each="f : ${hot}">
+        <td><a th:href="@{/ui/flights/{id}(id=${f.flightId})}" th:text="${f.flightId}"></a></td>
+        <td th:text="${f.flightNo}"></td>
+        <td th:text="${f.capacity} + ' / ' + ${f.sold} + ' / ' + ${f.checkedIn}"></td>
+        <td th:text="${f.version}"></td>
+      </tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

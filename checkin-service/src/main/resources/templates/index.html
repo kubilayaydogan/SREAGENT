@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Check-in')}"></head>
+<body>
+<header th:replace="~{fragments :: header('🛂 Check-in')}"></header>
+<main>
+  <div th:replace="~{fragments :: flash}"></div>
+  <section>
+    <h2>Rezervasyon bul</h2>
+    <form method="get" action="/ui/lookup" class="row">
+      <label>PNR <input name="pnr" required maxlength="8"></label><button>Bul</button>
+    </form>
+  </section>
+  <section>
+    <h2>Check-in bekleyen örnek rezervasyonlar</h2>
+    <table>
+      <tr><th>PNR</th><th>Uçuş ID</th></tr>
+      <tr th:each="c : ${candidates}">
+        <td><a th:href="@{/ui/checkin/{p}(p=${c.pnr})}" th:text="${c.pnr}"></a></td>
+        <td th:text="${c.flightId}"></td>
+      </tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Reservation')}"></head>
+<body>
+<header th:replace="~{fragments :: header('✈ Reservation')}"></header>
+<main>
+  <div th:replace="~{fragments :: flash}"></div>
+
+  <section>
+    <h2>Uçuş ara</h2>
+    <form method="get" action="/" class="row">
+      <label>Kalkış <input name="origin" th:value="${origin}" maxlength="3" placeholder="IST"></label>
+      <label>Varış <input name="destination" th:value="${destination}" maxlength="3" placeholder="LHR"></label>
+      <label>Tarih <input type="date" name="date" th:value="${date}"></label>
+      <label>± gün <input type="number" name="flexDays" min="0" max="30" th:value="${flexDays}"></label>
+      <button>Ara</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>PNR sorgula</h2>
+    <form method="get" action="/ui/lookup" class="row">
+      <label>PNR <input name="pnr" required maxlength="8"></label><button>Göster</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Uçuşlar <span class="muted">(en fazla 50)</span></h2>
+    <table>
+      <tr><th>Uçuş</th><th>Rota</th><th>Kalkış (UTC)</th><th>Durum</th><th>Boş / Kapasite</th><th>Rezervasyon</th></tr>
+      <tr th:each="f : ${flights}">
+        <td><span th:text="${f.flightNo}"></span> <span class="tag hot" th:if="${f.hot}">HOT</span><br><span class="muted" th:text="'#' + ${f.flightId}"></span></td>
+        <td th:text="${f.origin} + ' → ' + ${f.destination}"></td>
+        <td th:text="${#temporals.format(f.depTime, 'yyyy-MM-dd HH:mm')}"></td>
+        <td><span class="tag" th:text="${f.status}"></span></td>
+        <td th:text="${f.available()} + ' / ' + ${f.capacity}"></td>
+        <td>
+          <form method="post" action="/ui/bookings" class="row">
+            <input type="hidden" name="flightId" th:value="${f.flightId}">
+            <input type="hidden" name="idemKey" th:value="${idemKey} + '-' + ${f.flightId}">
+            <input name="firstName" placeholder="Ad" required size="8">
+            <input name="lastName" placeholder="Soyad" required size="8">
+            <input name="email" type="email" placeholder="e-posta" required size="14">
+            <select name="fareClass"><option>Y</option><option>B</option><option>J</option></select>
+            <button>Rezerve et</button>
+          </form>
+        </td>
+      </tr>
+      <tr th:if="${#lists.isEmpty(flights)}"><td colspan="6" class="muted">Sonuç yok</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Sıcak uçuşlar (kilit deneyleri)</h2>
+    <table>
+      <tr><th>ID</th><th>Uçuş</th><th>Kalkış</th><th>Satılan / Kapasite</th></tr>
+      <tr th:each="f : ${hot}">
+        <td th:text="${f.flightId}"></td><td th:text="${f.flightNo}"></td>
+        <td th:text="${#temporals.format(f.depTime, 'yyyy-MM-dd HH:mm')}"></td>
+        <td th:text="${f.sold} + ' / ' + ${f.capacity}"></td>
+      </tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

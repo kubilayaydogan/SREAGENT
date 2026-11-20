@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Baggage')}"></head>
+<body>
+<header th:replace="~{fragments :: header('🧳 Baggage')}"></header>
+<main>
+  <div th:replace="~{fragments :: flash}"></div>
+  <section>
+    <h2>Bagaj kaydet</h2>
+    <form method="post" action="/ui/bags" class="row">
+      <input type="hidden" name="idemKey" th:value="${idemKey}">
+      <label>PNR (check-in yapılmış) <input name="pnr" th:value="${pnr}" required maxlength="8"></label>
+      <label>Ağırlık (kg) <input type="number" name="weightKg" step="0.1" min="0.5" max="50" value="18.5" required></label>
+      <button>Kaydet</button>
+    </form>
+  </section>
+  <section>
+    <h2>Bagaj sorgula</h2>
+    <form method="get" action="/ui/lookup" class="row">
+      <label>Etiket <input name="tag" required maxlength="12"></label><button>Göster</button>
+    </form>
+    <form method="get" action="/" class="row" style="margin-top:.5rem">
+      <label>PNR'a ait bagajlar <input name="pnr" th:value="${pnr}" maxlength="8"></label><button>Listele</button>
+    </form>
+    <table th:if="${!#lists.isEmpty(bags)}" style="margin-top:.5rem">
+      <tr><th>Etiket</th><th>Uçuş</th><th>Ağırlık</th><th>Durum</th></tr>
+      <tr th:each="b : ${bags}">
+        <td><a th:href="@{/ui/bags/{t}(t=${b.tag})}" th:text="${b.tag}"></a></td>
+        <td th:text="${b.flightId}"></td><td th:text="${b.weightKg}"></td>
+        <td><span class="tag" th:classappend="${b.status}" th:text="${b.status}"></span></td>
+      </tr>
+    </table>
+  </section>
+  <section>
+    <h2>Bagaj kaydı yapılabilecek örnek PNR'lar</h2>
+    <p><a th:each="c : ${candidates}" th:href="@{/(pnr=${c})}" th:text="${c}" class="tag" style="margin:.1rem"></a></p>
+  </section>
+</main>
+</body>
+</html>

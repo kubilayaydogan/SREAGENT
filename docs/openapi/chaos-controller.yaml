@@ -1,0 +1,366 @@
+openapi: 3.1.0
+info:
+  title: OpenAPI definition
+  version: v0
+servers:
+- url: http://127.0.0.1:8080
+  description: Generated server url
+paths:
+  /api/experiments:
+    get:
+      tags:
+      - experiment-api-controller
+      operationId: list
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: {}
+    post:
+      tags:
+      - experiment-api-controller
+      operationId: start
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentSpec"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+  /api/experiments/{id}/stop:
+    post:
+      tags:
+      - experiment-api-controller
+      operationId: stop
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/experiments/stop-all:
+    post:
+      tags:
+      - experiment-api-controller
+      operationId: stopAll
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+  /api/status:
+    get:
+      tags:
+      - experiment-api-controller
+      operationId: status
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/presets:
+    get:
+      tags:
+      - experiment-api-controller
+      operationId: presets
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  type: string
+  /api/presets/{name}:
+    get:
+      tags:
+      - experiment-api-controller
+      operationId: preset
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+  /api/limits:
+    get:
+      tags:
+      - experiment-api-controller
+      operationId: limits
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/experiments/{id}:
+    get:
+      tags:
+      - experiment-api-controller
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ExperimentRecord"
+  /api/catalog:
+    get:
+      tags:
+      - experiment-api-controller
+      operationId: catalog
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+components:
+  schemas:
+    Background:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        rpsPerApp:
+          type: number
+          format: double
+        apps:
+          type: array
+          items:
+            type: string
+    ExperimentSpec:
+      type: object
+      properties:
+        clientRequestId:
+          type: string
+        name:
+          type: string
+        scenario:
+          type: string
+        warmupSec:
+          type: integer
+          format: int32
+        baselineSec:
+          type: integer
+          format: int32
+        loadSec:
+          type: integer
+          format: int32
+        recoverySec:
+          type: integer
+          format: int32
+        background:
+          $ref: "#/components/schemas/Background"
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/TargetSpec"
+    TargetSpec:
+      type: object
+      properties:
+        app:
+          type: string
+        role:
+          type: string
+        mode:
+          type: string
+          enum:
+          - RPS
+          - CONCURRENCY
+        rps:
+          type: number
+          format: double
+        concurrency:
+          type: integer
+          format: int32
+        rampUpSec:
+          type: integer
+          format: int32
+        maxInFlight:
+          type: integer
+          format: int32
+        timeoutMs:
+          type: integer
+          format: int32
+        mix:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        dataSize:
+          type: integer
+          format: int32
+        readWriteRatio:
+          type: number
+          format: double
+        hotRow:
+          type: boolean
+        holdMs:
+          type: integer
+          format: int64
+        activePhases:
+          type: string
+          enum:
+          - LOAD
+          - ALL
+    ExperimentRecord:
+      type: object
+      properties:
+        experimentId:
+          type: string
+        clientRequestId:
+          type: string
+        specHash:
+          type: string
+        state:
+          type: string
+        createdAt:
+          type: string
+        startedAt:
+          type: string
+        endedAt:
+          type: string
+        currentPhase:
+          type: string
+        stopReason:
+          type: string
+        spec:
+          $ref: "#/components/schemas/ExperimentSpec"
+        phases:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Row"
+        producer:
+          type: object
+          additionalProperties: {}
+        cleanup:
+          type: object
+          additionalProperties:
+            type: string
+        notes:
+          type: object
+          additionalProperties:
+            type: string
+    Row:
+      type: object
+      properties:
+        phase:
+          type: string
+          enum:
+          - WARMUP
+          - BASELINE
+          - LOAD
+          - RECOVERY
+          - DONE
+        source:
+          type: string
+        app:
+          type: string
+        op:
+          type: string
+        intended:
+          type: integer
+          format: int64
+        sent:
+          type: integer
+          format: int64
+        completed:
+          type: integer
+          format: int64
+        ok:
+          type: integer
+          format: int64
+        conflict:
+          type: integer
+          format: int64
+        clientError:
+          type: integer
+          format: int64
+        serverError:
+          type: integer
+          format: int64
+        timeout:
+          type: integer
+          format: int64
+        ioError:
+          type: integer
+          format: int64
+        dropped:
+          type: integer
+          format: int64
+        noData:
+          type: integer
+          format: int64
+        p50Ms:
+          type: number
+          format: double
+        p95Ms:
+          type: number
+          format: double
+        p99Ms:
+          type: number
+          format: double
+        maxMs:
+          type: number
+          format: double
+        meanMs:
+          type: number
+          format: double
+        achievedRps:
+          type: number
+          format: double
+        errorRate:
+          type: number
+          format: double

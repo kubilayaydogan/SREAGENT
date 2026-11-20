@@ -1,0 +1,50 @@
+{
+  "name": "İki uygulama eşzamanlı: Reservation yazma + FlightOps rapor",
+  "scenario": "E7-two-app-concurrent",
+  "warmupSec": 30,
+  "baselineSec": 120,
+  "loadSec": 180,
+  "recoverySec": 120,
+  "background": {
+    "enabled": true,
+    "rpsPerApp": 1.0,
+    "apps": null
+  },
+  "targets": [
+    {
+      "app": "reservation",
+      "role": "stress",
+      "mode": "RPS",
+      "rps": 40,
+      "concurrency": 0,
+      "rampUpSec": 20,
+      "maxInFlight": 64,
+      "timeoutMs": 5000,
+      "mix": {},
+      "dataSize": 1,
+      "readWriteRatio": 0.5,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "LOAD"
+    },
+    {
+      "app": "flightops",
+      "role": "stress",
+      "mode": "CONCURRENCY",
+      "rps": 0,
+      "concurrency": 4,
+      "rampUpSec": 20,
+      "maxInFlight": 64,
+      "timeoutMs": 20000,
+      "mix": {
+        "load_factor_report": 60,
+        "get_flight": 40
+      },
+      "dataSize": 20,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "LOAD"
+    }
+  ]
+}

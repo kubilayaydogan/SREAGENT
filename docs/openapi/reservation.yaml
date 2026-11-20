@@ -1,0 +1,399 @@
+openapi: 3.1.0
+info:
+  title: OpenAPI definition
+  version: v0
+servers:
+- url: http://127.0.0.1:8081
+  description: Generated server url
+paths:
+  /lab/hold-connection:
+    post:
+      tags:
+      - lab-controller
+      operationId: holdConnection
+      parameters:
+      - name: holdMs
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: pool
+        in: query
+        required: false
+        schema:
+          type: string
+          default: main
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /lab/cleanup:
+    post:
+      tags:
+      - lab-controller
+      operationId: cleanup
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /lab/bookings/hold:
+    post:
+      tags:
+      - reservation-lab-controller
+      operationId: holdBooking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabHoldRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/BookingResult"
+  /api/bookings:
+    post:
+      tags:
+      - reservation-api-controller
+      operationId: create
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBooking"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/BookingResult"
+  /api/bookings/{pnr}/cancel:
+    post:
+      tags:
+      - reservation-api-controller
+      operationId: cancel
+      parameters:
+      - name: pnr
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/BookingResult"
+  /lab/status:
+    get:
+      tags:
+      - lab-controller
+      operationId: status
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/reports/route-demand:
+    get:
+      tags:
+      - reservation-api-controller
+      operationId: routeDemand
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 30
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RouteDemand"
+  /api/flights:
+    get:
+      tags:
+      - reservation-api-controller
+      operationId: search
+      parameters:
+      - name: origin
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: destination
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: date
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: flexDays
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 1
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Flight"
+  /api/flights/{id}:
+    get:
+      tags:
+      - reservation-api-controller
+      operationId: flight
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Flight"
+  /api/flights/hot:
+    get:
+      tags:
+      - reservation-api-controller
+      operationId: hot
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Flight"
+  /api/bookings/{pnr}:
+    get:
+      tags:
+      - reservation-api-controller
+      operationId: get
+      parameters:
+      - name: pnr
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Booking"
+  /api/bookings/sample:
+    get:
+      tags:
+      - reservation-api-controller
+      operationId: sample
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  type: string
+components:
+  schemas:
+    LabHoldRequest:
+      type: object
+      properties:
+        flightId:
+          type: integer
+          format: int64
+        holdMs:
+          type: integer
+          format: int64
+      required:
+      - holdMs
+    Booking:
+      type: object
+      properties:
+        bookingId:
+          type: integer
+          format: int64
+        pnr:
+          type: string
+        flightId:
+          type: integer
+          format: int64
+        flightNo:
+          type: string
+        origin:
+          type: string
+        destination:
+          type: string
+        depTime:
+          type: string
+          format: date-time
+        status:
+          type: string
+        fareClass:
+          type: string
+        price:
+          type: number
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        cancelledAt:
+          type: string
+          format: date-time
+        checkedIn:
+          type: boolean
+    BookingResult:
+      type: object
+      properties:
+        booking:
+          $ref: "#/components/schemas/Booking"
+        replayed:
+          type: boolean
+    CreateBooking:
+      type: object
+      properties:
+        flightId:
+          type: integer
+          format: int64
+        firstName:
+          type: string
+          maxLength: 64
+          minLength: 0
+        lastName:
+          type: string
+          maxLength: 64
+          minLength: 0
+        email:
+          type: string
+          format: email
+          maxLength: 128
+          minLength: 0
+        fareClass:
+          type: string
+          pattern: "[YBJ]"
+      required:
+      - email
+      - firstName
+      - flightId
+      - lastName
+    RouteDemand:
+      type: object
+      properties:
+        origin:
+          type: string
+        destination:
+          type: string
+        bookings:
+          type: integer
+          format: int64
+        cancelled:
+          type: integer
+          format: int64
+        avgPrice:
+          type: number
+        revenue:
+          type: number
+    Flight:
+      type: object
+      properties:
+        flightId:
+          type: integer
+          format: int64
+        flightNo:
+          type: string
+        origin:
+          type: string
+        destination:
+          type: string
+        depTime:
+          type: string
+          format: date-time
+        arrTime:
+          type: string
+          format: date-time
+        status:
+          type: string
+        capacity:
+          type: integer
+          format: int32
+        sold:
+          type: integer
+          format: int32
+        hot:
+          type: boolean

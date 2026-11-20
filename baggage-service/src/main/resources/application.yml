@@ -1,0 +1,112 @@
+spring:
+  application:
+    name: baggage-service
+  threads:
+    virtual:
+      enabled: false        # bilinçli: Tomcat thread havuzu sınırlı (TOMCAT_MAX_THREADS) kalsın
+  datasource:
+    # ApplicationName → pg_stat_activity.application_name ; kullanıcı → DB rolü (pg_stat_statements eşlemesi)
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:airlab}?ApplicationName=${spring.application.name}&connectTimeout=5&socketTimeout=60&tcpKeepAlive=true
+    username: ${DB_USER:svc_baggage}
+    password: ${DB_PASSWORD:}
+    hikari:
+      pool-name: baggage-pool
+      maximum-pool-size: ${HIKARI_MAX_POOL:8}
+      minimum-idle: ${HIKARI_MIN_IDLE:2}
+      connection-timeout: ${HIKARI_CONNECTION_TIMEOUT_MS:2000}
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      leak-detection-threshold: 20000
+      initialization-fail-timeout: -1     # DB geçici yoksa da ayağa kalk; health DOWN gösterir
+  thymeleaf:
+    cache: true
+  mvc:
+    problemdetails:
+      enabled: false
+
+server:
+  port: ${SERVER_PORT:8084}
+  shutdown: graceful
+  servlet:
+    session:
+      tracking-modes: cookie     # URL'de jsessionid taşınmaz
+      cookie:
+        http-only: true
+        same-site: lax
+  tomcat:
+    threads:
+      max: ${TOMCAT_MAX_THREADS:50}
+    accept-count: 100
+    connection-timeout: 10s
+
+app:
+  tx-timeout-seconds: ${APP_TX_TIMEOUT_S:10}
+
+lab:
+  enabled: false
+  token: ${LAB_TOKEN:}
+  allowed-cidrs: ${LAB_ALLOWED_CIDRS:127.0.0.1/32}
+  max-hold-ms: ${LAB_MAX_HOLD_MS:5000}
+  pressure-pool-max: ${LAB_PRESSURE_POOL_MAX:22}
+  max-concurrent-holds: ${LAB_MAX_CONCURRENT_HOLDS:40}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  metrics:
+    tags:
+      service: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      # Servis (instance) başına hesaplanır; servisler arası ORTALANMAZ. Dynatrace'e "percentile" boyutlu gauge olarak gider.
+      percentiles:
+        http.server.requests: 0.5,0.95,0.99
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
+  observations:
+    key-values:
+      service: ${spring.application.name}
+  # Hikari / JVM / HTTP metriklerini Dynatrace'e gönderir. Hedef: SaaS Metrics API v2 (metrics.ingest token)
+  # veya OneAgent yerel ingest ucu. Ayrıntı: observability/dynatrace/metrics-export.md
+  dynatrace:
+    metrics:
+      export:
+        enabled: ${DT_METRICS_EXPORT:false}
+        uri: ${DT_METRICS_URI:http://localhost:14499/metrics/ingest}
+        api-token: ${DT_METRICS_TOKEN:}
+        step: ${DT_METRICS_STEP:30s}
+        v2:
+          metric-key-prefix: airlab.app
+          enrich-with-dynatrace-metadata: true
+          default-dimensions:
+            service: ${spring.application.name}
+            db_role: ${spring.datasource.username:unknown}
+
+logging:
+  structured:
+    format:
+      console: ${LOG_FORMAT:ecs}
+  level:
+    com.zaxxer.hikari.pool.HikariPool: INFO
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+---
+spring:
+  config:
+    activate:
+      on-profile: lab
+lab:
+  enabled: true

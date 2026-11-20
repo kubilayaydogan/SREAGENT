@@ -1,0 +1,71 @@
+# YALNIZ YEREL GELİŞTİRME / DOĞRULAMA. Hedef kurulumda PostgreSQL DB_VM'de systemd servisidir.
+# Kullanım:
+#   docker compose -f docker-compose.yml -f compose.local.yml --env-file .env.local up -d --build
+# Bu container, DB_VM ile AYNI create-roles.sql'i ve aynı temel ayarları kullanır.
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: airlab-postgres-local
+    hostname: postgres
+    networks: [airlab]
+    environment:
+      POSTGRES_PASSWORD: ${LOCAL_PG_SUPERUSER_PASSWORD}
+      DB_NAME: ${DB_NAME:-airlab}
+      OWNER_PW: ${OWNER_DB_PASSWORD}
+      RESERVATION_PW: ${RESERVATION_DB_PASSWORD}
+      CHECKIN_PW: ${CHECKIN_DB_PASSWORD}
+      FLIGHTOPS_PW: ${FLIGHTOPS_DB_PASSWORD}
+      BAGGAGE_PW: ${BAGGAGE_DB_PASSWORD}
+      MONITOR_PW: ${MONITOR_DB_PASSWORD}
+      DYNATRACE_PW: ${DYNATRACE_DB_PASSWORD}
+      TZ: UTC
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - compute_query_id=on
+      - -c
+      - track_io_timing=on
+      - -c
+      - track_activity_query_size=4096
+      - -c
+      - max_connections=100
+      - -c
+      - reserved_connections=3
+      - -c
+      - superuser_reserved_connections=3
+      - -c
+      - log_lock_waits=on
+      - -c
+      - deadlock_timeout=1s
+      - -c
+      - idle_in_transaction_session_timeout=60s
+      - -c
+      - client_connection_check_interval=2s
+      - -c
+      - shared_buffers=256MB
+    volumes:
+      - ../db-vm/create-roles.sql:/airlab/create-roles.sql:ro
+      - ./local/initdb.sh:/docker-entrypoint-initdb.d/10-airlab.sh:ro
+      - pg-local:/var/lib/postgresql/data
+    ports: ["127.0.0.1:55432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${DB_NAME:-airlab}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 1g
+
+  reservation:
+    depends_on: { postgres: { condition: service_healthy } }
+  checkin:
+    depends_on: { postgres: { condition: service_healthy } }
+  flightops:
+    depends_on: { postgres: { condition: service_healthy } }
+  baggage:
+    depends_on: { postgres: { condition: service_healthy } }
+
+volumes:
+  pg-local:

@@ -1,0 +1,176 @@
+# APP_VM (Rocky Linux 9) — dört iş uygulaması + chaos-controller + read-only PG collector.
+# PostgreSQL BURADA DEĞİL: DB_VM'de systemd servisi (db-vm/). Yerel geliştirmede
+# compose.local.yml bir PG17 container'ı ekler (yalnız test amaçlı).
+#
+#   cd app-vm && cp .env.example .env && chmod 600 .env   # değerleri doldur
+#   docker compose build
+#   docker compose --profile tools run --rm db-migrator migrate
+#   docker compose --profile tools run --rm db-migrator seed --scale=1
+#   docker compose up -d
+#   docker compose --profile observability up -d pg-lock-collector
+
+name: airlab
+
+x-app: &app
+  restart: unless-stopped
+  env_file: .env
+  networks: [airlab]
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "3" }
+  environment: &app-env
+    DB_HOST: ${DB_HOST}
+    DB_PORT: ${DB_PORT:-5432}
+    DB_NAME: ${DB_NAME:-airlab}
+    SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-lab}
+    LAB_TOKEN: ${LAB_TOKEN}
+    LAB_ALLOWED_CIDRS: ${LAB_ALLOWED_CIDRS:-172.28.0.0/24,127.0.0.1/32}
+    LAB_MAX_HOLD_MS: ${LAB_MAX_HOLD_MS:-5000}
+    LAB_PRESSURE_POOL_MAX: ${LAB_PRESSURE_POOL_MAX:-22}
+    HIKARI_MAX_POOL: ${HIKARI_MAX_POOL:-8}
+    HIKARI_MIN_IDLE: ${HIKARI_MIN_IDLE:-2}
+    HIKARI_CONNECTION_TIMEOUT_MS: ${HIKARI_CONNECTION_TIMEOUT_MS:-2000}
+    TOMCAT_MAX_THREADS: ${TOMCAT_MAX_THREADS:-50}
+    LOG_FORMAT: ${LOG_FORMAT:-ecs}
+    TZ: UTC
+
+services:
+  reservation:
+    <<: *app
+    image: airlab/reservation:${IMAGE_TAG:-1.0.0}
+    build: { context: .., target: reservation }
+    container_name: airlab-reservation
+    hostname: reservation
+    environment:
+      <<: *app-env
+      DB_USER: svc_reservation
+      DB_PASSWORD: ${RESERVATION_DB_PASSWORD}
+      DT_TAGS: "airlab airlab_service=reservation"
+    ports: ["${APP_BIND_IP:-127.0.0.1}:8081:8081"]
+    mem_limit: ${APP_MEM_LIMIT:-640m}
+    cpus: ${APP_CPUS:-1.0}
+
+  checkin:
+    <<: *app
+    image: airlab/checkin:${IMAGE_TAG:-1.0.0}
+    build: { context: .., target: checkin }
+    container_name: airlab-checkin
+    hostname: checkin
+    environment:
+      <<: *app-env
+      DB_USER: svc_checkin
+      DB_PASSWORD: ${CHECKIN_DB_PASSWORD}
+      DT_TAGS: "airlab airlab_service=checkin"
+    ports: ["${APP_BIND_IP:-127.0.0.1}:8082:8082"]
+    mem_limit: ${APP_MEM_LIMIT:-640m}
+    cpus: ${APP_CPUS:-1.0}
+
+  flightops:
+    <<: *app
+    image: airlab/flightops:${IMAGE_TAG:-1.0.0}
+    build: { context: .., target: flightops }
+    container_name: airlab-flightops
+    hostname: flightops
+    environment:
+      <<: *app-env
+      DB_USER: svc_flightops
+      DB_PASSWORD: ${FLIGHTOPS_DB_PASSWORD}
+      DT_TAGS: "airlab airlab_service=flightops"
+    ports: ["${APP_BIND_IP:-127.0.0.1}:8083:8083"]
+    mem_limit: ${APP_MEM_LIMIT:-640m}
+    cpus: ${APP_CPUS:-1.0}
+
+  baggage:
+    <<: *app
+    image: airlab/baggage:${IMAGE_TAG:-1.0.0}
+    build: { context: .., target: baggage }
+    container_name: airlab-baggage
+    hostname: baggage
+    environment:
+      <<: *app-env
+      DB_USER: svc_baggage
+      DB_PASSWORD: ${BAGGAGE_DB_PASSWORD}
+      DT_TAGS: "airlab airlab_service=baggage"
+    ports: ["${APP_BIND_IP:-127.0.0.1}:8084:8084"]
+    mem_limit: ${APP_MEM_LIMIT:-640m}
+    cpus: ${APP_CPUS:-1.0}
+
+  chaos:
+    restart: unless-stopped
+    image: airlab/chaos-controller:${IMAGE_TAG:-1.0.0}
+    build: { context: .., target: chaos }
+    container_name: airlab-chaos
+    hostname: chaos
+    networks:
+      airlab:
+        ipv4_address: 172.28.0.50
+    env_file: .env
+    environment:
+      RESERVATION_URL: http://reservation:8081
+      CHECKIN_URL: http://checkin:8082
+      FLIGHTOPS_URL: http://flightops:8083
+      BAGGAGE_URL: http://baggage:8084
+      LAB_TOKEN: ${LAB_TOKEN}
+      CHAOS_USER: ${CHAOS_USER:-chaos}
+      CHAOS_PASSWORD: ${CHAOS_PASSWORD}
+      CHAOS_DATA_DIR: /data/experiments
+      LOG_FORMAT: ${LOG_FORMAT:-ecs}
+      DT_TAGS: "airlab airlab_service=chaos"
+      TZ: UTC
+    # Bilinçli olarak DB_* değişkeni YOK: chaos-controller DB'ye bağlanmaz.
+    volumes: ["chaos-data:/data"]
+    ports: ["${APP_BIND_IP:-127.0.0.1}:8080:8080"]
+    mem_limit: ${CHAOS_MEM_LIMIT:-512m}
+    cpus: ${CHAOS_CPUS:-1.0}
+    depends_on: [reservation, checkin, flightops, baggage]
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "3" }
+
+  pg-lock-collector:
+    profiles: [observability]
+    restart: unless-stopped
+    image: airlab/pg-lock-collector:${IMAGE_TAG:-1.0.0}
+    build: { context: ../observability/pg-lock-collector }
+    container_name: airlab-pg-lock-collector
+    networks: [airlab]
+    environment:
+      PG_HOST: ${DB_HOST}
+      PG_PORT: ${DB_PORT:-5432}
+      PG_DB: ${DB_NAME:-airlab}
+      PG_USER: lab_monitor
+      PG_PASSWORD: ${MONITOR_DB_PASSWORD}
+      DB_HOST_LABEL: ${DB_HOST_LABEL:-db-vm}
+      INTERVAL_S: ${COLLECTOR_INTERVAL_S:-5}
+      STATEMENTS_INTERVAL_S: ${COLLECTOR_STATEMENTS_INTERVAL_S:-60}
+      DT_MODE: ${COLLECTOR_DT_MODE:-dryrun}
+      DT_URL: ${DT_URL:-}
+      DT_API_TOKEN: ${DT_INGEST_TOKEN:-}
+      DRYRUN_FILE: /data/collector.jsonl
+    volumes: ["collector-data:/data"]
+    mem_limit: 128m
+    cpus: 0.25
+
+  db-migrator:
+    profiles: [tools]
+    image: airlab/db-migrator:${IMAGE_TAG:-1.0.0}
+    build: { context: .., target: migrator }
+    networks: [airlab]
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-airlab}
+      DB_OWNER_USER: lab_owner
+      DB_OWNER_PASSWORD: ${OWNER_DB_PASSWORD}
+      LAB_ALLOW_RESET: ${LAB_ALLOW_RESET:-false}
+
+networks:
+  airlab:
+    name: airlab
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  chaos-data:
+  collector-data:

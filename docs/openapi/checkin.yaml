@@ -1,0 +1,285 @@
+openapi: 3.1.0
+info:
+  title: OpenAPI definition
+  version: v0
+servers:
+- url: http://127.0.0.1:8082
+  description: Generated server url
+paths:
+  /lab/hold-connection:
+    post:
+      tags:
+      - lab-controller
+      operationId: holdConnection
+      parameters:
+      - name: holdMs
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: pool
+        in: query
+        required: false
+        schema:
+          type: string
+          default: main
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /lab/cleanup:
+    post:
+      tags:
+      - lab-controller
+      operationId: cleanup
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /lab/checkin/hold:
+    post:
+      tags:
+      - checkin-lab-controller
+      operationId: hold
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabHoldRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Result"
+  /api/checkin:
+    post:
+      tags:
+      - checkin-api-controller
+      operationId: checkIn
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckinRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Result"
+  /api/checkin/{pnr}/seat:
+    post:
+      tags:
+      - checkin-api-controller
+      operationId: seat
+      parameters:
+      - name: pnr
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeatRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Result"
+  /lab/status:
+    get:
+      tags:
+      - lab-controller
+      operationId: status
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/flights/{flightId}/seatmap:
+    get:
+      tags:
+      - checkin-api-controller
+      operationId: seatMap
+      parameters:
+      - name: flightId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Seat"
+  /api/checkin/{pnr}:
+    get:
+      tags:
+      - checkin-api-controller
+      operationId: lookup
+      parameters:
+      - name: pnr
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CheckinView"
+  /api/checkin/candidates:
+    get:
+      tags:
+      - checkin-api-controller
+      operationId: candidates
+      parameters:
+      - name: flightId
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: hot
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Candidate"
+components:
+  schemas:
+    LabHoldRequest:
+      type: object
+      properties:
+        pnr:
+          type: string
+        holdMs:
+          type: integer
+          format: int64
+      required:
+      - holdMs
+    CheckinView:
+      type: object
+      properties:
+        pnr:
+          type: string
+        bookingId:
+          type: integer
+          format: int64
+        flightId:
+          type: integer
+          format: int64
+        flightNo:
+          type: string
+        origin:
+          type: string
+        destination:
+          type: string
+        depTime:
+          type: string
+          format: date-time
+        flightStatus:
+          type: string
+        bookingStatus:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        checkedIn:
+          type: boolean
+        checkedInAt:
+          type: string
+          format: date-time
+        channel:
+          type: string
+        seatNo:
+          type: string
+    Result:
+      type: object
+      properties:
+        checkin:
+          $ref: "#/components/schemas/CheckinView"
+        replayed:
+          type: boolean
+    CheckinRequest:
+      type: object
+      properties:
+        pnr:
+          type: string
+          minLength: 1
+          pattern: "[A-Za-z0-9]{6,8}"
+        channel:
+          type: string
+          pattern: WEB|KIOSK|COUNTER|MOBILE|API
+      required:
+      - pnr
+    SeatRequest:
+      type: object
+      properties:
+        seatNo:
+          type: string
+          minLength: 1
+          pattern: "[1-9][0-9]?[A-F]"
+      required:
+      - seatNo
+    Seat:
+      type: object
+      properties:
+        seatNo:
+          type: string
+        pnr:
+          type: string
+    Candidate:
+      type: object
+      properties:
+        pnr:
+          type: string
+        flightId:
+          type: integer
+          format: int64

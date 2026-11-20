@@ -1,0 +1,79 @@
+{
+  "name": "Dört uygulama yükü ve toparlanma",
+  "scenario": "E8-four-app-load-recovery",
+  "warmupSec": 30,
+  "baselineSec": 120,
+  "loadSec": 180,
+  "recoverySec": 180,
+  "background": {
+    "enabled": true,
+    "rpsPerApp": 1.0,
+    "apps": null
+  },
+  "targets": [
+    {
+      "app": "reservation",
+      "role": "stress",
+      "mode": "RPS",
+      "rps": 30,
+      "concurrency": 0,
+      "rampUpSec": 30,
+      "maxInFlight": 64,
+      "timeoutMs": 5000,
+      "mix": {},
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "LOAD"
+    },
+    {
+      "app": "checkin",
+      "role": "stress",
+      "mode": "RPS",
+      "rps": 30,
+      "concurrency": 0,
+      "rampUpSec": 30,
+      "maxInFlight": 64,
+      "timeoutMs": 5000,
+      "mix": {},
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "LOAD"
+    },
+    {
+      "app": "flightops",
+      "role": "stress",
+      "mode": "RPS",
+      "rps": 30,
+      "concurrency": 0,
+      "rampUpSec": 30,
+      "maxInFlight": 64,
+      "timeoutMs": 5000,
+      "mix": {},
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "LOAD"
+    },
+    {
+      "app": "baggage",
+      "role": "stress",
+      "mode": "RPS",
+      "rps": 30,
+      "concurrency": 0,
+      "rampUpSec": 30,
+      "maxInFlight": 64,
+      "timeoutMs": 5000,
+      "mix": {},
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "LOAD"
+    }
+  ]
+}

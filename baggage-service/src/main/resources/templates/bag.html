@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Bagaj')}"></head>
+<body>
+<header th:replace="~{fragments :: header('🧳 Baggage')}"></header>
+<main>
+  <div th:replace="~{fragments :: flash}"></div>
+  <section th:if="${d}">
+    <h2>Bagaj <code th:text="${d.bag.tag}"></code> <span class="tag" th:classappend="${d.bag.status}" th:text="${d.bag.status}"></span></h2>
+    <table>
+      <tr><th>PNR</th><td th:text="${d.bag.pnr}"></td></tr>
+      <tr><th>Uçuş ID</th><td th:text="${d.bag.flightId}"></td></tr>
+      <tr><th>Ağırlık</th><td th:text="${d.bag.weightKg} + ' kg'"></td></tr>
+      <tr><th>Güncelleme</th><td th:text="${d.bag.updatedAt}"></td></tr>
+    </table>
+    <form method="post" th:action="@{/ui/bags/{t}/events(t=${d.bag.tag})}" class="row" style="margin-top:.6rem">
+      <label>Olay
+        <select name="eventType">
+          <option>LOADED</option><option>IN_TRANSIT</option><option>ARRIVED</option><option>DELIVERED</option><option>MISHANDLED</option>
+        </select>
+      </label>
+      <label>Konum <input name="location" value="IST" maxlength="16" required></label>
+      <button>Olay ekle</button>
+    </form>
+  </section>
+  <section th:if="${d}">
+    <h2>Olay geçmişi</h2>
+    <table>
+      <tr><th>Zaman</th><th>Olay</th><th>Konum</th></tr>
+      <tr th:each="e : ${d.events}"><td th:text="${e.createdAt}"></td><td th:text="${e.eventType}"></td><td th:text="${e.location}"></td></tr>
+    </table>
+  </section>
+  <p><a href="/">← Geri</a></p>
+</main>
+</body>
+</html>

@@ -1,0 +1,24 @@
+:root { --c:#0b3d91; --bg:#f5f7fb; --bad:#b00020; --ok:#1b7f3b; }
+* { box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; background: var(--bg); color: #1d2433; }
+header { background: var(--c); color: #fff; padding: .7rem 1.2rem; display: flex; gap: 1.2rem; align-items: baseline; }
+header h1 { font-size: 1.15rem; margin: 0; }
+header a { color: #dfe7ff; text-decoration: none; font-size: .9rem; }
+main { padding: 1rem 1.2rem; max-width: 1200px; }
+section { background: #fff; border: 1px solid #dde3ee; border-radius: 6px; padding: .8rem 1rem; margin-bottom: 1rem; }
+h2 { font-size: 1rem; margin: 0 0 .6rem; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+th, td { border-bottom: 1px solid #e6eaf2; padding: .32rem .45rem; text-align: left; vertical-align: top; }
+th { background: #eef2fa; }
+input, select, button, textarea { font: inherit; padding: .25rem .4rem; }
+input[type=number] { width: 6.5rem; }
+button { background: var(--c); color: #fff; border: 0; border-radius: 4px; padding: .3rem .8rem; cursor: pointer; }
+button.danger { background: var(--bad); }
+.msg { color: var(--ok); font-weight: 600; } .err { color: var(--bad); font-weight: 600; }
+.row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: end; }
+.row label { display: flex; flex-direction: column; font-size: .8rem; gap: .15rem; }
+.muted { color: #6b7385; font-size: .82rem; }
+.tag { display: inline-block; padding: 0 .4rem; border-radius: 3px; background: #e4e9f5; font-size: .78rem; }
+.tag.hot { background: #ffe0d6; } .tag.CANCELLED, .tag.MISHANDLED { background: #fbd5da; }
+.tag.CONFIRMED, .tag.DELIVERED { background: #d6f2df; }
+code { background: #eef2fa; padding: 0 .25rem; }

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <title>Chaos Controller</title>
+  <link rel="stylesheet" href="/lab.css">
+  <style>
+    fieldset { border: 1px solid #dde3ee; border-radius: 6px; margin: .4rem 0; padding: .4rem .7rem; }
+    fieldset.off { opacity: .55; }
+    legend { font-weight: 600; }
+    textarea { width: 100%; font-family: ui-monospace, monospace; font-size: .8rem; }
+    #live td, #live th { font-size: .82rem; }
+    .phase { font-weight: 700; font-size: 1.05rem; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>⚡ Chaos Controller</h1>
+  <a href="/">Panel</a><a href="/experiments">Deney geçmişi</a><a href="/swagger-ui.html">API</a>
+</header>
+<main>
+  <section>
+    <h2>Canlı durum</h2>
+    <div class="row">
+      <span>Deney: <code id="expId">-</code></span>
+      <span>Faz: <span class="phase" id="phase">-</span></span>
+      <span>Durum: <span id="state">-</span></span>
+      <button class="danger" onclick="stopAll()">STOP-ALL (tüm yükü durdur + cleanup)</button>
+    </div>
+    <p class="muted" id="phases"></p>
+    <table id="live">
+      <thead><tr><th>Kaynak</th><th>Uygulama</th><th>Mod</th><th>Aktif</th><th>Uçuşta</th>
+        <th>Hedeflenen</th><th>Gönderilen</th><th>Tamamlanan</th><th>Hata/timeout</th><th>Gönderilemeyen (dropped)</th>
+        <th>Veri yok</th><th>Gerçekleşen RPS (faz)</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="muted">Sayaçlar mevcut faza aittir. "Gönderilemeyen": RPS modunda maxInFlight dolduğu için kuyruğa alınmadan düşürülen istekler.
+      Hata = 5xx + timeout + bağlantı hatası (409 iş çakışmaları ayrı sayılır, deney kaydında görünür).</p>
+  </section>
+
+  <section>
+    <h2>Yeni deney</h2>
+    <div class="row">
+      <label>Hazır reçete <select id="preset" onchange="loadPreset()"><option value="">(seç)</option></select></label>
+      <label>Ad <input id="name" size="40"></label>
+      <label>Senaryo etiketi <input id="scenario" size="28"></label>
+    </div>
+    <div class="row" style="margin-top:.4rem">
+      <label>Warm-up sn <input type="number" id="warmupSec" value="30" min="0"></label>
+      <label>Baseline sn <input type="number" id="baselineSec" value="120" min="0"></label>
+      <label>Yük sn <input type="number" id="loadSec" value="180" min="0"></label>
+      <label>Recovery sn <input type="number" id="recoverySec" value="120" min="0"></label>
+      <label>Arka plan RPS/uygulama <input type="number" id="bgRps" value="1" step="0.1" min="0" max="5"></label>
+      <label>Arka plan açık <input type="checkbox" id="bgEnabled" checked></label>
+    </div>
+    <p class="muted">Normal arka plan trafiği tüm fazlarda dört uygulamaya da gider. Stres hedefleri yalnız yük fazında,
+      "probe" hedefleri (activePhases=ALL) tüm fazlarda çalışır. Tek, iki veya dört uygulamayı seçebilirsiniz.</p>
+    <div id="targets"></div>
+    <div class="row" style="margin-top:.6rem">
+      <button onclick="startExp()">Deneyi başlat</button>
+      <span class="muted">clientRequestId: <code id="crid"></code> (tekrar tıklama aynı deneyi döndürür)</span>
+      <button onclick="newCrid()" style="background:#666">Yeni kimlik</button>
+    </div>
+    <p id="result"></p>
+    <details><summary>Gönderilecek JSON</summary><textarea id="json" rows="14" readonly></textarea></details>
+  </section>
+
+  <section>
+    <h2>Operasyon kataloğu</h2>
+    <div id="catalog" class="muted"></div>
+  </section>
+</main>
+<script>
+const APPS = ['reservation', 'checkin', 'flightops', 'baggage'];
+let catalog = {};
+
+function newCrid() { document.getElementById('crid').textContent = 'ui-' + crypto.randomUUID(); }
+
+function targetHtml(app) {
+  const ops = (catalog[app]?.operations || []).map(o => o.name + '(' + o.kind[0] + ')').join(', ');
+  return `<fieldset id="fs-${app}" class="off"><legend><label><input type="checkbox" id="${app}-on" onchange="toggle('${app}')"> ${app}</label></legend>
+  <div class="row">
+   <label>Rol <select id="${app}-role"><option>stress</option><option>probe</option></select></label>
+   <label>Aktif fazlar <select id="${app}-activePhases"><option>LOAD</option><option>ALL</option></select></label>
+   <label>Mod <select id="${app}-mode"><option>RPS</option><option>CONCURRENCY</option></select></label>
+   <label>RPS <input type="number" id="${app}-rps" value="20" step="0.5" min="0"></label>
+   <label>Concurrency <input type="number" id="${app}-concurrency" value="4" min="1"></label>
+   <label>Ramp-up sn <input type="number" id="${app}-rampUpSec" value="10" min="0"></label>
+   <label>Max in-flight <input type="number" id="${app}-maxInFlight" value="64" min="1"></label>
+   <label>Timeout ms <input type="number" id="${app}-timeoutMs" value="5000" min="100"></label>
+   <label>Veri büyüklüğü <input type="number" id="${app}-dataSize" value="1" min="1" max="100"></label>
+   <label>Okuma oranı <input type="number" id="${app}-readWriteRatio" step="0.05" min="0" max="1" placeholder="(mix)"></label>
+   <label>Hot-row <input type="checkbox" id="${app}-hotRow"></label>
+   <label>Hold ms <input type="number" id="${app}-holdMs" value="0" min="0"></label>
+  </div>
+  <label>Operasyon karışımı (op=ağırlık, virgülle; boşsa normal karışım + okuma oranı)
+   <input id="${app}-mix" style="width:100%" placeholder="ör. create_booking=60,search_flights=40"></label>
+  <div class="muted">Operasyonlar: ${ops}</div></fieldset>`;
+}
+
+function toggle(app) {
+  document.getElementById('fs-' + app).className = document.getElementById(app + '-on').checked ? '' : 'off';
+  buildJson();
+}
+
+function val(id) { return document.getElementById(id).value; }
+
+function spec() {
+  const targets = [];
+  for (const app of APPS) {
+    if (!document.getElementById(app + '-on').checked) continue;
+    const mix = {};
+    val(app + '-mix').split(',').map(s => s.trim()).filter(Boolean).forEach(kv => {
+      const [k, w] = kv.split('='); mix[k.trim()] = parseInt(w || '1');
+    });
+    const rw = val(app + '-readWriteRatio');
+    targets.push({
+      app, role: val(app + '-role'), mode: val(app + '-mode'), rps: parseFloat(val(app + '-rps')),
+      concurrency: parseInt(val(app + '-concurrency')), rampUpSec: parseInt(val(app + '-rampUpSec')),
+      maxInFlight: parseInt(val(app + '-maxInFlight')), timeoutMs: parseInt(val(app + '-timeoutMs')),
+      mix, dataSize: parseInt(val(app + '-dataSize')), readWriteRatio: rw === '' ? null : parseFloat(rw),
+      hotRow: document.getElementById(app + '-hotRow').checked, holdMs: parseInt(val(app + '-holdMs')),
+      activePhases: val(app + '-activePhases')
+    });
+  }
+  return {
+    clientRequestId: document.getElementById('crid').textContent, name: val('name'), scenario: val('scenario'),
+    warmupSec: parseInt(val('warmupSec')), baselineSec: parseInt(val('baselineSec')),
+    loadSec: parseInt(val('loadSec')), recoverySec: parseInt(val('recoverySec')),
+    background: { enabled: document.getElementById('bgEnabled').checked, rpsPerApp: parseFloat(val('bgRps')), apps: null },
+    targets
+  };
+}
+
+function buildJson() { document.getElementById('json').value = JSON.stringify(spec(), null, 2); }
+
+async function loadPreset() {
+  const n = val('preset'); if (!n) return;
+  const p = await (await fetch('/api/presets/' + n)).json();
+  for (const k of ['name', 'scenario', 'warmupSec', 'baselineSec', 'loadSec', 'recoverySec']) document.getElementById(k).value = p[k] ?? '';
+  document.getElementById('bgRps').value = p.background?.rpsPerApp ?? 1;
+  document.getElementById('bgEnabled').checked = p.background?.enabled ?? true;
+  for (const app of APPS) { document.getElementById(app + '-on').checked = false; toggle(app); }
+  for (const t of p.targets) {
+    const a = t.app;
+    document.getElementById(a + '-on').checked = true; toggle(a);
+    for (const k of ['role', 'activePhases', 'mode', 'rps', 'concurrency', 'rampUpSec', 'maxInFlight', 'timeoutMs', 'dataSize', 'holdMs'])
+      document.getElementById(a + '-' + k).value = t[k];
+    document.getElementById(a + '-readWriteRatio').value = t.readWriteRatio ?? '';
+    document.getElementById(a + '-hotRow').checked = !!t.hotRow;
+    document.getElementById(a + '-mix').value = Object.entries(t.mix || {}).map(([k, v]) => k + '=' + v).join(',');
+  }
+  newCrid(); buildJson();
+}
+
+async function startExp() {
+  buildJson();
+  const r = await fetch('/api/experiments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec()) });
+  const b = await r.json();
+  const el = document.getElementById('result');
+  if (r.status === 201) { el.className = 'msg'; el.textContent = 'Başlatıldı: ' + b.experimentId; }
+  else if (r.status === 200) { el.className = 'msg'; el.textContent = 'Aynı istek tekrarı — mevcut deney: ' + b.experimentId; }
+  else { el.className = 'err'; el.textContent = 'Reddedildi (' + r.status + '): ' + (b.errors || []).join(' | '); }
+}
+
+async function stopAll() {
+  if (!confirm('Tüm yük durdurulsun ve sunucu tarafı cleanup çalıştırılsın mı?')) return;
+  const r = await fetch('/api/experiments/stop-all', { method: 'POST' });
+  document.getElementById('result').textContent = 'stop-all: ' + (await r.json()).result;
+}
+
+async function poll() {
+  try {
+    const s = await (await fetch('/api/status')).json();
+    document.getElementById('expId').textContent = s.experimentId || '-';
+    document.getElementById('phase').textContent = s.phase || '-';
+    document.getElementById('state').textContent = s.state || '-';
+    document.getElementById('phases').textContent = s.phases ? Object.entries(s.phases).map(([k, v]) => k + ': ' + v[0] + ' → ' + (v[1] || '…')).join('   ') : '';
+    const tb = document.querySelector('#live tbody'); tb.innerHTML = '';
+    for (const r of (s.live || [])) {
+      const tr = document.createElement('tr');
+      for (const k of ['source', 'app', 'mode', 'active', 'inFlight', 'intended', 'sent', 'completed', 'errors', 'dropped', 'noData', 'achievedRps']) {
+        const td = document.createElement('td'); td.textContent = r[k]; tr.appendChild(td);
+      }
+      tb.appendChild(tr);
+    }
+  } catch (e) { /* bağlantı yok */ }
+}
+
+async function init() {
+  catalog = await (await fetch('/api/catalog')).json();
+  document.getElementById('targets').innerHTML = APPS.map(targetHtml).join('');
+  document.getElementById('catalog').innerHTML = APPS.map(a => '<b>' + a + '</b>: ' +
+      catalog[a].operations.map(o => '<code>' + o.name + '</code> [' + o.kind + '] ' + o.description).join('<br>')).join('<hr>');
+  const ps = await (await fetch('/api/presets')).json();
+  const sel = document.getElementById('preset');
+  ps.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; sel.appendChild(o); });
+  document.querySelector('main').addEventListener('change', buildJson);
+  newCrid(); buildJson(); poll(); setInterval(poll, 2000);
+}
+init();
+</script>
+</body>
+</html>

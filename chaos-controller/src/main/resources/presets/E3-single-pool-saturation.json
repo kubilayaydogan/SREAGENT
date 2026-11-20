@@ -1,0 +1,33 @@
+{
+  "name": "Tek Hikari pool doygunluğu (Reservation)",
+  "scenario": "E3-single-pool-saturation",
+  "warmupSec": 30,
+  "baselineSec": 120,
+  "loadSec": 180,
+  "recoverySec": 120,
+  "background": {
+    "enabled": true,
+    "rpsPerApp": 1.0,
+    "apps": null
+  },
+  "targets": [
+    {
+      "app": "reservation",
+      "role": "stress",
+      "mode": "CONCURRENCY",
+      "rps": 0,
+      "concurrency": 16,
+      "rampUpSec": 10,
+      "maxInFlight": 64,
+      "timeoutMs": 10000,
+      "mix": {
+        "lab_hold_connection": 100
+      },
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 1500,
+      "activePhases": "LOAD"
+    }
+  ]
+}

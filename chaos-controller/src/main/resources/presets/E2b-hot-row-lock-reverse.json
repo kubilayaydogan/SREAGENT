@@ -1,0 +1,51 @@
+{
+  "name": "Ortak satır kilidi ters yön: Check-in → Reservation",
+  "scenario": "E2b-hot-row-lock-reverse",
+  "warmupSec": 30,
+  "baselineSec": 120,
+  "loadSec": 180,
+  "recoverySec": 120,
+  "background": {
+    "enabled": true,
+    "rpsPerApp": 1.0,
+    "apps": null
+  },
+  "targets": [
+    {
+      "app": "checkin",
+      "role": "stress",
+      "mode": "CONCURRENCY",
+      "rps": 0,
+      "concurrency": 4,
+      "rampUpSec": 5,
+      "maxInFlight": 64,
+      "timeoutMs": 15000,
+      "mix": {
+        "lab_hold_checkin": 100
+      },
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 2000,
+      "activePhases": "LOAD"
+    },
+    {
+      "app": "reservation",
+      "role": "probe",
+      "mode": "RPS",
+      "rps": 3,
+      "concurrency": 0,
+      "rampUpSec": 0,
+      "maxInFlight": 64,
+      "timeoutMs": 15000,
+      "mix": {
+        "create_booking": 100
+      },
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": true,
+      "holdMs": 0,
+      "activePhases": "ALL"
+    }
+  ]
+}

@@ -1,0 +1,349 @@
+openapi: 3.1.0
+info:
+  title: OpenAPI definition
+  version: v0
+servers:
+- url: http://127.0.0.1:8084
+  description: Generated server url
+paths:
+  /lab/hold-connection:
+    post:
+      tags:
+      - lab-controller
+      operationId: holdConnection
+      parameters:
+      - name: holdMs
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: pool
+        in: query
+        required: false
+        schema:
+          type: string
+          default: main
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /lab/cleanup:
+    post:
+      tags:
+      - lab-controller
+      operationId: cleanup
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/bags:
+    post:
+      tags:
+      - baggage-api-controller
+      operationId: register
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterBag"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Result"
+  /api/bags/{tag}/events:
+    post:
+      tags:
+      - baggage-api-controller
+      operationId: event
+      parameters:
+      - name: tag
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddEvent"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Result"
+  /lab/status:
+    get:
+      tags:
+      - lab-controller
+      operationId: status
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/reports/bag-history:
+    get:
+      tags:
+      - baggage-api-controller
+      operationId: history
+      parameters:
+      - name: flightId
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 30
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HistoryRow"
+  /api/flights/{flightId}/bags:
+    get:
+      tags:
+      - baggage-api-controller
+      operationId: byFlight
+      parameters:
+      - name: flightId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Bag"
+  /api/bookings/{pnr}/bags:
+    get:
+      tags:
+      - baggage-api-controller
+      operationId: byPnr
+      parameters:
+      - name: pnr
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Bag"
+  /api/bags/{tag}:
+    get:
+      tags:
+      - baggage-api-controller
+      operationId: status_1
+      parameters:
+      - name: tag
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/BagDetail"
+  /api/bags/sample:
+    get:
+      tags:
+      - baggage-api-controller
+      operationId: sample
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  type: string
+  /api/bags/candidates:
+    get:
+      tags:
+      - baggage-api-controller
+      operationId: candidates
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  type: string
+components:
+  schemas:
+    RegisterBag:
+      type: object
+      properties:
+        pnr:
+          type: string
+          minLength: 1
+          pattern: "[A-Za-z0-9]{6,8}"
+        weightKg:
+          type: number
+          maximum: 50.0
+          minimum: 0.5
+      required:
+      - pnr
+      - weightKg
+    Bag:
+      type: object
+      properties:
+        bagId:
+          type: integer
+          format: int64
+        tag:
+          type: string
+        pnr:
+          type: string
+        bookingId:
+          type: integer
+          format: int64
+        flightId:
+          type: integer
+          format: int64
+        weightKg:
+          type: number
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    BagDetail:
+      type: object
+      properties:
+        bag:
+          $ref: "#/components/schemas/Bag"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/BagEvent"
+    BagEvent:
+      type: object
+      properties:
+        eventId:
+          type: integer
+          format: int64
+        eventType:
+          type: string
+        location:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    Result:
+      type: object
+      properties:
+        detail:
+          $ref: "#/components/schemas/BagDetail"
+        replayed:
+          type: boolean
+    AddEvent:
+      type: object
+      properties:
+        eventType:
+          type: string
+          minLength: 1
+          pattern: LOADED|IN_TRANSIT|ARRIVED|DELIVERED|MISHANDLED
+        location:
+          type: string
+          minLength: 1
+          pattern: "[A-Z0-9-]{2,16}"
+      required:
+      - eventType
+      - location
+    HistoryRow:
+      type: object
+      properties:
+        eventType:
+          type: string
+        location:
+          type: string
+        events:
+          type: integer
+          format: int64
+        firstAt:
+          type: string
+          format: date-time
+        lastAt:
+          type: string
+          format: date-time
+        avgNoteBytes:
+          type: number
