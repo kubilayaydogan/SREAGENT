@@ -8,7 +8,7 @@ Son güncelleme: 2026-11-21 · Aşama: **1 (kod tamam, hedef VM + Dynatrace doğ
 |---|---|---|
 | Kaynak kod tamamlandı | derleniyor, testler geçiyor | 4 iş servisi, chaos-controller, db-migrator, lab-common, pg-lock-collector, VM betikleri, belgeler |
 | Yerelde uçtan uca doğrulandı | Docker Desktop: PG17 container + 5 Java container | smoke 31/31, E1–E8 tek koşu, lock zinciri, stop-all cleanup |
-| İki VM üzerinde doğrulandı | Rocky 9 APP_VM + DB_VM (systemd PG17) | **HAYIR** — VM erişimi yok |
+| İki VM üzerinde doğrulandı | Rocky 10.3 APP_VM + DB_VM (systemd PG17) | **HAYIR** — kullanıcı `docs/deploy-plan.md` ile kuracak |
 | Gerçek Dynatrace + MCP üzerinde doğrulandı | tenant UI / DQL / MCP aracı | **HAYIR** — tenant/MCP erişimi yok |
 
 ## Derleme ve test (gerçekten çalıştırıldı)
