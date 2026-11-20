@@ -1,6 +1,6 @@
 # Aşama 1 kabul kapısı
 
-Bu ortam için sıralı kurulum ve kanıt dosyaları: `docs/deploy-plan.md` (APP_VM 192.168.1.1, DB_VM 192.168.1.2, Rocky 10.3).
+Bu ortam için sıralı kurulum ve kanıt dosyaları: `docs/deploy-plan.md` (APP_VM 192.168.1.3, DB_VM 192.168.1.2, Rocky 10.1).
 
 Durum değerleri: **YEREL** = bu repoda yerel Docker ortamında çalıştırılarak doğrulandı ·
 **KOD** = kod/yapılandırma hazır, çalıştırılmadı · **VM** = kullanıcının VM'lerinde doğrulanmalı ·

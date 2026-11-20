@@ -30,7 +30,7 @@ var_free_gb=$(df -BG --output=avail /var 2>/dev/null | tail -1 | tr -dc 0-9)
 echo "   vCPU=$cpus RAM=${mem_mb}MB  boş: /=${root_free_gb}G /opt=${opt_free_gb}G /var=${var_free_gb}G"
 if [[ "$ROLE" == "app" ]]; then
   # 4×640m app + 512m chaos + 128m collector + ActiveGate 2–4 GB + OneAgent + işletim sistemi
-  (( mem_mb >= 7600 )) && ok "RAM ≥ 8 GB" || { (( mem_mb >= 5600 )) && warn "RAM < 8 GB: ActiveGate + 5 JVM için sıkışık" || bad "RAM < 6 GB: ActiveGate ile birlikte yetersiz"; }
+  (( mem_mb >= 7400 )) && ok "RAM ≈ 8 GB" || { (( mem_mb >= 5600 )) && warn "RAM < 8 GB: ActiveGate + 5 JVM için sıkışık" || bad "RAM < 6 GB: ActiveGate ile birlikte yetersiz"; }
   (( cpus >= 4 )) && ok "vCPU ≥ 4" || warn "vCPU < 4: yük üreticisi ve ActiveGate APP_VM ölçümlerini bozabilir"
   (( opt_free_gb >= 12 )) && ok "/opt ≥ 12 GB (ActiveGate + extensions + OneAgent)" || warn "/opt boş alan ${opt_free_gb}G (ActiveGate için ≥ 12 GB önerilir)"
   (( var_free_gb >= 15 )) && ok "/var ≥ 15 GB (Docker imajları + loglar)" || warn "/var boş alan ${var_free_gb}G"
@@ -59,7 +59,7 @@ for h in download.postgresql.org download.docker.com; do
   [[ "$code" != "000" ]] && ok "HTTPS çıkışı $h" || warn "HTTPS çıkışı yok: $h"
 done
 
-# 192.168.1.1 çoğu ağda varsayılan ağ geçididir; APP_VM bu IP'de ise çakışma yok mu?
+# Host'un kendi IP'si varsayılan ağ geçidiyle çakışıyor mu?
 gw=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
 myips=$(hostname -I 2>/dev/null)
 [[ -n "$gw" ]] && grep -qw "$gw" <<<"$myips" && bad "bu host varsayılan ağ geçidi IP'sine ($gw) sahip — IP planını kontrol edin"

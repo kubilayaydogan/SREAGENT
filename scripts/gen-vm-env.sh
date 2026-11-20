@@ -3,7 +3,7 @@
 # Parolalar ekrana yazılmaz; çıktı dizini .gitignore'dadır (deploy/out/).
 #
 # Kullanım:
-#   scripts/gen-vm-env.sh --app-ip 192.168.1.1 --db-ip 192.168.1.2 --dt-env <environment-id> [--out deploy/out] [--force]
+#   scripts/gen-vm-env.sh --app-ip 192.168.1.3 --db-ip 192.168.1.2 --dt-env <environment-id> [--out deploy/out] [--force]
 #
 # Üretilen:
 #   deploy/out/app-vm.env   → APP_VM: airlab/app-vm/.env      (chmod 600)

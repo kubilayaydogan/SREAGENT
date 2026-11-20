@@ -8,8 +8,8 @@ Son güncelleme: 2026-11-21 · Aşama: **1 (kod tamam, hedef VM + Dynatrace doğ
 |---|---|---|
 | Kaynak kod tamamlandı | derleniyor, testler geçiyor | 4 iş servisi, chaos-controller, db-migrator, lab-common, pg-lock-collector, VM betikleri, belgeler |
 | Yerelde uçtan uca doğrulandı | Docker Desktop: PG17 container + 5 Java container | smoke 31/31, E1–E8 tek koşu, lock zinciri, stop-all cleanup |
-| İki VM üzerinde doğrulandı | Rocky 10.3 APP_VM + DB_VM (systemd PG17) | **HAYIR** — kullanıcı `docs/deploy-plan.md` ile kuracak |
-| Gerçek Dynatrace + MCP üzerinde doğrulandı | tenant UI / DQL / MCP aracı | **HAYIR** — tenant/MCP erişimi yok |
+| İki VM üzerinde doğrulandı | Rocky 10.1 APP_VM + DB_VM (systemd PG17) | **HAYIR** — kullanıcı `docs/deploy-plan.md` ile kuracak |
+| Gerçek Dynatrace + MCP üzerinde doğrulandı | tenant UI / DQL / MCP aracı | **KISMEN** — MCP bağlantısı ve DQL sözdizimi gerçek tenant'ta ✅; veri okuma izin eksikliğinden ❌; telemetri henüz yok |
 
 ## Derleme ve test (gerçekten çalıştırıldı)
 
@@ -45,12 +45,21 @@ Ayrıntılı tablo: `docs/acceptance-gate.md`. Kısa durum:
 
 | | Değer |
 |---|---|
-| APP_VM | 192.168.1.1, Rocky Linux 10.3 |
-| DB_VM | 192.168.1.2, Rocky Linux 10.3 |
-| Dynatrace | SaaS (güncel platform); OneAgent iki VM'e kurulacak; PostgreSQL extension kurulu değil |
-| ActiveGate | Karar: **APP_VM** (DB_VM ölçülen kaynak). ⚠ Rocky 10.3 ActiveGate destek listesinde yok (10.1/10.2 var) → sorun çıkarsa ayrı Rocky 9.8/10.2 VM |
-| MCP | Remote MCP, `https://<env>.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp`, platform token (Bearer) |
-| VM / CPU / RAM | **bilinmiyor** — `scripts/vm-precheck.sh` ölçer (APP_VM ≥ 8 GB / 4 vCPU önerilir) |
+| APP_VM | 192.168.1.3, Rocky Linux 10.1, 8 GB RAM / 4 vCPU |
+| DB_VM | 192.168.1.2, Rocky Linux 10.1 |
+| Dynatrace | SaaS, environment `mfi74785`; OneAgent iki VM'e; PostgreSQL extension kurulacak |
+| ActiveGate | **APP_VM** (kullanıcı onayladı). Rocky 10.1 ActiveGate ve OneAgent destek tablolarında var |
+| MCP | `https://mfi74785.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp` |
+
+### Tenant'ta gerçekten çalıştırılanlar (2026-11-21)
+
+| Kontrol | Sonuç |
+|---|---|
+| OneAgent / ActiveGate kurulum token'ları | ✅ installer metainfo + indirme 200 (OneAgent 1.349.123, ActiveGate 1.349.93) |
+| Ingest token | ❌ 403: `openpipeline:metrics:ingest` / `openpipeline:logs:ingest` kapsamı yok → **yeniden üretilmeli** |
+| Remote MCP | ✅ initialize + tools/list: `dynatrace-mcp 1.0`, 21 araç, DQL aracı `execute-dql` (`deploy/evidence/mcp-list-*.json`) |
+| Kapı DQL'leri (13) | sözdizimi ✅; veri ❌ `storage:smartscape:read` kapsamı yok + token sahibinde Grail bucket izni yok (`deploy/evidence/mcp-gate-*.json`) |
+| Bulgu | Tenant **Smartscape on Grail**: `dt.entity.*` / `entityName()` yok → probe sorguları `smartscapeNodes` / `getNodeName` ile güncellendi. **Aşama 2 bunu dikkate almalı** |
 
 Bu ortam için hazırlananlar (kod; VM'de çalıştırılmadı):
 - `db-vm/install-postgres17.sh`, `app-vm/install-docker.sh`: EL-10 desteği (PGDG EL-10 deposu, Docker Rocky deposu, EL10'da modül yok).
@@ -62,7 +71,7 @@ Bu ortam için hazırlananlar (kod; VM'de çalıştırılmadı):
 
 ## Sıradaki adım (kullanıcı ortamında)
 
-`docs/deploy-plan.md` §2–§8'i uygulayın ve `deploy/evidence/` çıktılarını iletin. Ardından kabul kapısı ve bu belge
+Önce ingest ve MCP token'larını §1'e göre yeniden üretin (bucket izni dahil); sonra `docs/deploy-plan.md` §2–§8'i uygulayın ve `deploy/evidence/` çıktılarını iletin. Ardından kabul kapısı ve bu belge
 gerçek sonuçlarla güncellenir. **Kapı dolmadan Aşama 2'ye başlanmayacak.**
 
 ## Aşama 2

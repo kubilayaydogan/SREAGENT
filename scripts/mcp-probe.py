@@ -35,16 +35,19 @@ MCP_PATH = "/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp"
 # Kabul kapısı (docs/acceptance-gate.md "Telemetri / MCP kapısı") satırları → DQL.
 # {since} yerine --since değeri konur. Sorgular salt-okur ve limitlidir.
 GATE_QUERIES: list[tuple[str, str]] = [
+    # Tenant "Smartscape on Grail" kullanıyor: dt.entity.* ve entityName() YOK (2026-11-21 mfi74785'te doğrulandı).
     ("4 servis (OneAgent) — servis listesi",
-     'fetch dt.entity.service | filter contains(entity.name, "reservation") or contains(entity.name, "checkin") '
-     'or contains(entity.name, "flightops") or contains(entity.name, "baggage") or contains(entity.name, "chaos") '
-     '| fields id, entity.name | limit 50'),
+     'smartscapeNodes "SERVICE" | filter contains(name, "reservation") or contains(name, "checkin") '
+     'or contains(name, "flightops") or contains(name, "baggage") or contains(name, "chaos") '
+     '| fields id, name | limit 50'),
+    ("İki host (APP_VM, DB_VM)",
+     'smartscapeNodes "HOST" | fields id, name | limit 20'),
     ("4 servis — yanıt süresi/istek sayısı",
      'timeseries {{ rt = avg(dt.service.request.response_time), n = sum(dt.service.request.count) }}, '
-     'by: {{ dt.entity.service }}, from: now()-{since} | fieldsAdd svc = entityName(dt.entity.service) | limit 20'),
+     'by: {{ dt.smartscape.service }}, from: now()-{since} | fieldsAdd svc = getNodeName(dt.smartscape.service) | limit 20'),
     ("APP_VM ve DB_VM host CPU/RAM",
-     'timeseries {{ cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage) }}, by: {{ dt.entity.host }}, '
-     'from: now()-{since} | fieldsAdd host = entityName(dt.entity.host)'),
+     'timeseries {{ cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage) }}, by: {{ dt.smartscape.host }}, '
+     'from: now()-{since} | fieldsAdd host = getNodeName(dt.smartscape.host)'),
     ("Container CPU",
      'timeseries cpu = avg(dt.containers.cpu.usage_percent), by: {{ dt.entity.container_group_instance }}, '
      'from: now()-{since} | limit 20'),
@@ -188,7 +191,7 @@ class McpClient:
 def pick_dql_tool(tools: list[dict]) -> tuple[str, str]:
     """DQL çalıştıran aracı ve sorgu parametresinin adını şemadan bulur."""
     cands = [t for t in tools if "dql" in t["name"].lower()
-             and not re.search(r"verify|generate|explain|nl2|natural", t["name"], re.I)]
+             and not re.search(r"verify|generate|explain|create|nl2|natural", t["name"], re.I)]
     cands.sort(key=lambda t: (0 if re.search(r"exec|run|query", t["name"], re.I) else 1, t["name"]))
     if not cands:
         raise McpError("DQL çalıştıran araç bulunamadı; 'list' çıktısından adı seçip 'call' kullanın. Araçlar: "
@@ -219,10 +222,12 @@ def summarize_result(res) -> dict:
 
 def classify(summary: dict) -> str:
     """Boş sonuç / hata / veri var ayrımı (gerçek sıfır ile 'kayıt yok' aynı şey değildir)."""
+    head = (summary.get("text_head", "") + summary.get("structured_head", "")).lower()
+    if re.search(r"missing oauth scope|missing required scope|access denied|missing_bucket_permissions|no bucket permissions", head):
+        return "IZIN_HATASI"
     if summary.get("isError"):
         return "HATA"
-    head = (summary.get("text_head", "") + summary.get("structured_head", "")).lower()
-    if re.search(r"permission|forbidden|not authorized|missing scope|unauthori", head):
+    if re.search(r"permission|forbidden|not authorized|missing scope|missing oauth scope|access denied|unauthori", head):
         return "IZIN_HATASI"
     if re.search(r"\b0 records\b|no records|\"records\":\s*\[\]|returned 0|empty result", head):
         return "BOS"

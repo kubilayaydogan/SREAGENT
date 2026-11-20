@@ -1,0 +1,140 @@
+{
+  "probe": "airlab-mcp-probe/1.0",
+  "utc": "2026-11-20T23:02:35+00:00",
+  "url": "https://mfi74785.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp",
+  "command": "list",
+  "steps": [],
+  "server": {
+    "info": {
+      "name": "dynatrace-mcp",
+      "version": "1.0"
+    },
+    "protocolVersion": "2025-06-18",
+    "capabilities": [
+      "resources",
+      "tools"
+    ],
+    "session": true,
+    "ms": 3699
+  },
+  "tools": [
+    {
+      "name": "adaptive-anomaly-detector",
+      "required": [
+        "timeSeriesData",
+        "numberOfSignalFluctuations"
+      ]
+    },
+    {
+      "name": "ask-dynatrace-docs",
+      "required": [
+        "prompt"
+      ]
+    },
+    {
+      "name": "create-dql",
+      "required": [
+        "request"
+      ]
+    },
+    {
+      "name": "execute-dql",
+      "required": [
+        "dqlQueryString"
+      ]
+    },
+    {
+      "name": "explain-dql",
+      "required": [
+        "dql"
+      ]
+    },
+    {
+      "name": "find-documents",
+      "required": [
+        "searchString"
+      ]
+    },
+    {
+      "name": "find-troubleshooting-guides",
+      "required": [
+        "searchStrings"
+      ]
+    },
+    {
+      "name": "get-dynatrace-compliance-findings",
+      "required": []
+    },
+    {
+      "name": "get-dynatrace-vulnerabilities",
+      "required": []
+    },
+    {
+      "name": "get-entity-id",
+      "required": [
+        "entityNameFilter"
+      ]
+    },
+    {
+      "name": "get-entity-name",
+      "required": [
+        "entityId"
+      ]
+    },
+    {
+      "name": "get-events-for-kubernetes-cluster",
+      "required": []
+    },
+    {
+      "name": "get-problem-by-id",
+      "required": [
+        "problemId"
+      ]
+    },
+    {
+      "name": "get-security-event-details",
+      "required": []
+    },
+    {
+      "name": "get-security-events-summary",
+      "required": []
+    },
+    {
+      "name": "log-pattern-extractor",
+      "required": [
+        "logQuery"
+      ]
+    },
+    {
+      "name": "query-problems",
+      "required": []
+    },
+    {
+      "name": "seasonal-baseline-anomaly-detector",
+      "required": [
+        "timeSeriesData",
+        "tolerance"
+      ]
+    },
+    {
+      "name": "static-threshold-analyzer",
+      "required": [
+        "timeSeriesData",
+        "threshold"
+      ]
+    },
+    {
+      "name": "timeseries-forecast",
+      "required": [
+        "query"
+      ]
+    },
+    {
+      "name": "timeseries-novelty-detection",
+      "required": [
+        "timeSeriesData",
+        "detectionMode"
+      ]
+    }
+  ]
+}

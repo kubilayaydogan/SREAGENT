@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # DB_VM (Rocky Linux 9 veya 10, x86_64) — PostgreSQL 17 (PGDG) systemd kurulumu.
-# EL sürümü /etc/os-release'ten okunur (Rocky 10.3 → EL-10 PGDG deposu).
+# EL sürümü /etc/os-release'ten okunur (Rocky 10.x → EL-10 PGDG deposu).
 # Kullanım:  sudo ./install-postgres17.sh ./db-vm.env
 # İdempotenttir: tekrar çalıştırıldığında konfigürasyonu yeniler, veriyi silmez.
 # SELinux ve firewalld KAPATILMAZ; yalnız APP_VM (ve varsa ActiveGate) IP'sine 5432 açılır.

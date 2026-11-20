@@ -1,22 +1,21 @@
-# Kurulum planı — bu ortam (APP_VM 192.168.1.1 · DB_VM 192.168.1.2 · Rocky 10.3 · Dynatrace SaaS)
+# Kurulum planı — bu ortam (APP_VM 192.168.1.3 · DB_VM 192.168.1.2 · Rocky 10.1 · Dynatrace SaaS)
 
 Bu belge `docs/runbook.md`'nin bu ortama özel, sıralı hâlidir. Her adımın **kabul** satırı
-`docs/acceptance-gate.md` tablosuna işlenir. `<env>` = Dynatrace environment id (ör. `abc12345`;
-`https://<env>.apps.dynatrace.com` adresindeki ilk parça).
+`docs/acceptance-gate.md` tablosuna işlenir. Dynatrace environment id: `mfi74785`
+(`https://mfi74785.apps.dynatrace.com`, ingest/kurulum API'leri `https://mfi74785.live.dynatrace.com`).
 
 ## 0. Kararlar
 
 | Konu | Karar | Gerekçe |
 |---|---|---|
-| ActiveGate yeri | **APP_VM (192.168.1.1)**, Environment ActiveGate, Linux host kurulumu | DB_VM, E5 (DB CPU) ve E6 (I/O) deneylerinin **ölçülen kaynağı**; ActiveGate JVM'i oraya konursa DB host CPU/RAM'i kirlenir ve "DB kaynaklı" bulgu bozulur. APP_VM'deki tüketim OneAgent'ta ayrı process group olarak görünür ve raporda ayrıca gösterilir. pg_hba/firewall zaten APP_VM IP'sine açık → ek kural gerekmez |
-| ⚠ Destek durumu | Dynatrace ActiveGate destek tablosu Rocky Linux için **8.10, 9.7, 9.8, 10.1, 10.2** listeler; **10.3 listede yok** (doküman 2026-11). OneAgent tablosu "Rocky Linux 8, 9, 10" der (ana sürüm, alt sürümler dahil) → OneAgent 10.3'te destekli | ActiveGate 10.3'te kurulur ama **resmî destek dışı** sayılır. Kurulum reddedilir veya Extension Execution Controller sağlıksız olursa → **B planı**: ayrı küçük VM (Rocky **9.8** veya **10.2**, 2 vCPU / 4 GB / 20 GB), IP'si `db-vm.env` → `ACTIVEGATE_IP`, sonra DB_VM'de `install-postgres17.sh` yeniden çalıştırılır |
+| ActiveGate yeri | **APP_VM (192.168.1.3)**, Environment ActiveGate, Linux host kurulumu | DB_VM, E5 (DB CPU) ve E6 (I/O) deneylerinin **ölçülen kaynağı**; ActiveGate JVM'i oraya konursa DB host CPU/RAM'i kirlenir ve "DB kaynaklı" bulgu bozulur. APP_VM'deki tüketim OneAgent'ta ayrı process group olarak görünür ve raporda ayrıca gösterilir. pg_hba/firewall zaten APP_VM IP'sine açık → ek kural gerekmez |
+| Destek durumu | Rocky **10.1**: ActiveGate destek tablosunda var (8.10, 9.7, 9.8, 10.1, 10.2); OneAgent "Rocky 8, 9, 10" → **ikisi de destekli** (doküman 2026-11). Kullanıcı kararı: 2026-11-21 | Kurulum yine de sağlıksız olursa yedek: ayrı küçük VM (2 vCPU / 4 GB), IP'si `db-vm.env` → `ACTIVEGATE_IP` |
 | OneAgent modu | APP_VM **full-stack**, DB_VM **infrastructure** | APP_VM'de Java code module (servis, JDBC, JVM) gerekli; DB_VM'de host metrikleri yeterli, PostgreSQL iç metrikleri extension + collector'dan gelir |
 | Micrometer yolu | **A: SaaS Metrics API v2** | OneAgent yerel ingest ucunun container'dan erişimi doğrulanmadı; A yolu yalnız HTTPS çıkışı ister |
 | PostgreSQL extension | `com.dynatrace.extension.postgres` (Hub: "PostgreSQL"), ActiveGate grubu `airlab`, endpoint `192.168.1.2:5432` | Resmî gereksinim: `pg_monitor`, `pg_stat_statements`, `dynatrace` şeması — `create-roles.sql`/`postgresql.lab.conf` bunları zaten yapıyor |
-| MCP | Remote MCP, `https://<env>.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp`, `Authorization: Bearer <platform token>` | Resmî doküman (2026-11-09). Araç adları sabitlenmez, `tools/list` ile okunur |
+| MCP | Remote MCP, `https://mfi74785.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp`, `Authorization: Bearer <platform token>` | Resmî doküman (2026-11-09). Araç adları sabitlenmez, `tools/list` ile okunur |
 
-> **IP notu:** 192.168.1.1 birçok ağda varsayılan ağ geçidinin adresidir. `vm-precheck.sh` bu çakışmayı kontrol eder.
-> APP_VM gerçekten bu IP'deyse sorun yok.
+> **IP planı:** APP_VM 192.168.1.3, DB_VM 192.168.1.2 (192.168.1.1 ağ geçidi olabileceği için kullanılmadı).
 
 > **Rocky 10 notu:** RHEL/Rocky 10 **x86-64-v3** CPU ister (AVX2/BMI2/FMA/MOVBE). Hipervizörde CPU tipi `host`
 > (veya v3 uyumlu) değilse işletim sistemi açılsa bile bazı paketler çalışmaz; ön kontrol bunu yakalar.
@@ -30,7 +29,7 @@ Bu belge `docs/runbook.md`'nin bu ortama özel, sıralı hâlidir. Her adımın 
 | pg-lock-collector | 128 MB | 0.25 |
 | Environment ActiveGate + Extensions | 2 GB (4 GB önerilen) | 1 dual-core |
 | OneAgent full-stack | ~0,5 GB | düşük |
-| **Önerilen APP_VM** | **≥ 8 GB** | **≥ 4 vCPU**, /opt ≥ 12 GB, /var ≥ 15 GB |
+| **APP_VM (karar: 8 GB / 4 vCPU)** | toplam limit ≈ 3,2 GB container + 2–4 GB ActiveGate + ~0,5 GB OneAgent → **sıkı**; `free -m` ile izleyin, gerekirse `APP_MEM_LIMIT=512m` | 4 vCPU; /opt ≥ 12 GB, /var ≥ 15 GB |
 
 DB_VM: ≥ 2 vCPU / 4 GB (`db-vm.env` varsayılanları: `shared_buffers=1GB`, `effective_cache_size=3GB`).
 
@@ -42,12 +41,30 @@ Hepsini kendi ortamınızda saklayın; sohbete/repoya yazmayın.
 |---|---|---|---|---|
 | T1 | OneAgent kurulum | *Deploy OneAgent → Linux* (UI token üretir) | UI varsayılanı (InstallerDownload) | iki VM, yalnız kurulum anı |
 | T2 | ActiveGate kurulum | *Deploy ActiveGate → Linux → Environment ActiveGate* | UI varsayılanı | APP_VM, yalnız kurulum anı |
-| T3 | Ingest (classic API token) | *Access tokens → Generate* | `metrics.ingest`, `logs.ingest` | `.env`: `DT_INGEST_TOKEN`, `DT_METRICS_TOKEN` (aynı token olabilir) |
-| T4 | MCP (platform token) | *Account Management → Identity & access management → Platform tokens* | `mcp-gateway:servers:invoke`, `mcp-gateway:servers:read`, `storage:metrics:read`, `storage:logs:read`, `storage:entities:read`, `storage:events:read`, `storage:buckets:read`, `storage:smartscape:read`, `storage:spans:read` | `scripts/mcp-probe.py` (ve Aşama 2) |
+| T3 | Ingest (platform token, `dt0s16.`) | *Platform tokens* | **`openpipeline:metrics:ingest`, `openpipeline:logs:ingest`** (tenant'ın 403 yanıtı bunları istiyor; okuma kapsamları ingest için işe yaramaz) | `.env`: `DT_INGEST_TOKEN`, `DT_METRICS_TOKEN` |
+| T4 | MCP (platform token) | *Account Management → Identity & access management → Platform tokens* | `mcp-gateway:servers:invoke`, `mcp-gateway:servers:read`, `storage:buckets:read`, `storage:metrics:read`, `storage:logs:read`, `storage:spans:read`, `storage:events:read`, `storage:entities:read`, `storage:system:read`, **`storage:smartscape:read`** | `scripts/mcp-probe.py` (ve Aşama 2) |
 
-T4: token yalnız sahibinin kullanıcı izinleri kadar okuyabilir; kullanıcının da aynı izinlere sahip olması gerekir.
-`mcp-gateway:*` kapsamları eksikse MCP çağrısı **403** döner; `storage:logs:read` eksikse log sorguları boş gelir
-(boş ≠ veri yok — probe bunları ayrı sınıflar).
+### Tenant'ta doğrulananlar (2026-11-21, `mfi74785`)
+
+| Kontrol | Sonuç |
+|---|---|
+| T1 OneAgent installer metainfo | ✅ 200 — `latestAgentVersion 1.349.123` |
+| T2 ActiveGate installer metainfo | ✅ 200 — `latestGatewayVersion 1.349.93` |
+| T3 ile `POST /api/v2/metrics/ingest`, `/logs/ingest` | ❌ 403 — `openpipeline:metrics:ingest` / `openpipeline:logs:ingest` eksik |
+| T4 Remote MCP initialize + tools/list | ✅ `dynatrace-mcp 1.0`, protokol 2025-06-18, 21 araç, DQL aracı `execute-dql(dqlQueryString)` |
+| T4 kapı DQL'leri | Sözdizimi ✅ (13/13). Veri okuma ❌: `smartscapeNodes` → *Missing OAuth scope storage:smartscape:read*; metrics/logs → *MISSING_BUCKET_PERMISSIONS* |
+| Tenant modeli | **Smartscape on Grail**: `dt.entity.*` ve `entityName()` yok → `smartscapeNodes`, `dt.smartscape.*`, `getNodeName()` |
+
+**Bucket izni:** platform token, sahibi kullanıcının IAM izinleriyle sınırlıdır. Token kapsamı doğru olsa da kullanıcı/grup
+politikasında Grail okuma izni yoksa sorgu boş döner (`MISSING_BUCKET_PERMISSIONS`). Token sahibinin grubuna şu politikayı
+(veya eşdeğeri yerleşik "okuma" politikalarını) atayın:
+```
+ALLOW storage:buckets:read;
+ALLOW storage:metrics:read, storage:logs:read, storage:spans:read, storage:events:read,
+      storage:entities:read, storage:system:read, storage:smartscape:read;
+```
+Kapsam/izin eklendikten sonra yeni token gerekir (mevcut token'ın kapsamı değiştirilemez):
+`python3 scripts/mcp-probe.py --env mfi74785 gate --since 1h` → `IZIN_HATASI` kalmamalı (veri yokken `BOS` normal).
 
 Tenant ayarı: *Settings → Log Monitoring* açık olmalı (PostgreSQL extension top queries log olarak gelir;
 container stdout logları OneAgent ile alınır — *Log ingest rules* altında `airlab-*` container'larının
@@ -57,10 +74,14 @@ dahil olduğunu kontrol edin).
 
 ```bash
 # Git Bash / Linux; openssl gerekir
-scripts/gen-vm-env.sh --app-ip 192.168.1.1 --db-ip 192.168.1.2 --dt-env <env>
+scripts/gen-vm-env.sh --app-ip 192.168.1.3 --db-ip 192.168.1.2 --dt-env mfi74785
 scp deploy/out/db-vm.env  root@192.168.1.2:/opt/airlab/db-vm/db-vm.env
-scp deploy/out/app-vm.env root@192.168.1.1:/opt/airlab/app-vm/.env
+scp deploy/out/app-vm.env root@192.168.1.3:/opt/airlab/app-vm/.env
+scp deploy/out/db-vm-oneagent.sh root@192.168.1.2:/root/
+scp deploy/out/app-vm-oneagent.sh deploy/out/app-vm-activegate.sh root@192.168.1.3:/root/
 ```
+`deploy/out/*.sh` kurulum token'larını içerir (git dışı): installer'ı tenant'tan indirir, Dynatrace imzasını
+`openssl cms -verify` ile doğrular, kurar, kendini silmeniz için uyarır. Kurulumdan sonra `shred -u /root/*-oneagent.sh /root/*-activegate.sh`.
 Parolalar rastgele ve iki dosyada aynıdır; `deploy/out/` git dışıdır. DB_VM RAM'i 4 GB değilse
 `PG_SHARED_BUFFERS`/`PG_EFFECTIVE_CACHE_SIZE`'ı (RAM/4, RAM×3/4) düzeltin.
 
@@ -69,8 +90,8 @@ Parolalar rastgele ve iki dosyada aynıdır; `deploy/out/` git dışıdır. DB_V
 ```bash
 sudo dnf install -y git && sudo git clone <repo-url> /opt/airlab     # veya: scp/rsync ile kopyalayın
 cd /opt/airlab && mkdir -p deploy/evidence
-./scripts/vm-precheck.sh db  <env>     # DB_VM'de
-./scripts/vm-precheck.sh app <env>     # APP_VM'de
+./scripts/vm-precheck.sh db  mfi74785     # DB_VM'de
+./scripts/vm-precheck.sh app mfi74785     # APP_VM'de
 ```
 **Kabul:** iki VM'de de `SONUÇ: kuruluma geçilebilir`. Çıktıyı `deploy/evidence/precheck-{app,db}.txt` olarak saklayın.
 
@@ -78,19 +99,19 @@ cd /opt/airlab && mkdir -p deploy/evidence
 
 ```bash
 cd /opt/airlab/db-vm && chmod 600 db-vm.env
-sudo ./install-postgres17.sh ./db-vm.env     # PGDG EL-10, initdb, conf.d, pg_hba (yalnız 192.168.1.1), firewalld, systemd
+sudo ./install-postgres17.sh ./db-vm.env     # PGDG EL-10, initdb, conf.d, pg_hba (yalnız 192.168.1.3), firewalld, systemd
 sudo ./bootstrap-db.sh ./db-vm.env           # roller, airlab DB, pg_stat_statements, dynatrace şeması
 sudo ./verify-db-vm.sh ./db-vm.env | tee ../deploy/evidence/verify-db-vm.txt
 ```
 **Kabul (kriter 1, DB tarafı):** `postgresql-17` active; `systemd-detect-virt --container` → none;
-yalnız 192.168.1.1 için 5432 rich rule; SELinux Enforcing; `shared_preload_libraries=pg_stat_statements`.
+yalnız 192.168.1.3 için 5432 rich rule; SELinux Enforcing; `shared_preload_libraries=pg_stat_statements`.
 
-OneAgent (infrastructure modu) — UI'daki T1 komutu, sonuna şu parametrelerle:
+OneAgent (infrastructure modu, host grubu `airlab`):
 ```bash
-sudo /bin/sh Dynatrace-OneAgent-Linux-*.sh --set-monitoring-mode=infra-only --set-host-group=airlab
+sudo bash /root/db-vm-oneagent.sh      # log: /root/db-vm-oneagent.log
 ```
 
-## 5. APP_VM (192.168.1.1)
+## 5. APP_VM (192.168.1.3)
 
 ```bash
 cd /opt/airlab
@@ -104,7 +125,7 @@ docker compose --profile tools run --rm db-migrator check     # tüm satırlar 0
 
 ### 5.1 OneAgent (full-stack) — container'lar başlamadan ÖNCE
 ```bash
-sudo /bin/sh Dynatrace-OneAgent-Linux-*.sh --set-monitoring-mode=fullstack --set-host-group=airlab
+sudo bash /root/app-vm-oneagent.sh     # fullstack, host grubu airlab; log: /root/app-vm-oneagent.log
 ```
 Ardından uygulamaları başlatın (OneAgent'tan sonra başlayan süreçler enjekte edilir):
 ```bash
@@ -113,15 +134,13 @@ docker compose --profile observability up -d pg-lock-collector
 ```
 
 ### 5.2 ActiveGate (Environment, APP_VM)
-UI: *Deploy ActiveGate → Linux → Environment ActiveGate*, ActiveGate grubu **`airlab`**; T2 ile
-indirme komutunu çalıştırın:
+Environment ActiveGate, grup **`airlab`**:
 ```bash
-sudo /bin/bash Dynatrace-ActiveGate-Linux-x86-*.sh --set-group=airlab
+sudo bash /root/app-vm-activegate.sh   # log: /root/app-vm-activegate.log
 systemctl list-units --type=service | grep -Ei 'dynatrace|extension'
 ```
-Rocky 10.3 destek listesinde olmadığı için kurulum çıktısını `deploy/evidence/activegate-install.txt`
-olarak saklayın. Kabul: UI'da *Deployment status → ActiveGates* altında `airlab` grubunda **Extensions**
-modülü etkin ve bağlı. Değilse §0 B planına geçin.
+Log dosyalarını `deploy/evidence/` altına kopyalayın. Kabul: UI'da *Deployment status → ActiveGates* altında `airlab` grubunda **Extensions**
+modülü etkin ve bağlı.
 
 ### 5.3 PostgreSQL extension
 UI → *Hub → PostgreSQL → Add to environment* → *Add monitoring configuration*:
@@ -161,17 +180,17 @@ cat > ~/.pgpass <<EOF
 192.168.1.2:5432:airlab:lab_monitor:<MONITOR_DB_PASSWORD>
 EOF
 chmod 600 ~/.pgpass; sudo dnf install -y postgresql   # yalnız psql istemcisi
-BASE_HOST=192.168.1.1 PSQL="psql 'host=192.168.1.2 dbname=airlab user=lab_owner' -Atc" scripts/smoke.sh | tee deploy/evidence/smoke.txt
+BASE_HOST=192.168.1.3 PSQL="psql 'host=192.168.1.2 dbname=airlab user=lab_owner' -Atc" scripts/smoke.sh | tee deploy/evidence/smoke.txt
 PSQL="psql 'host=192.168.1.2 dbname=airlab user=lab_owner' -Atc" scripts/verify-db.sh | tee deploy/evidence/verify-db.txt
 set -a; . app-vm/.env; set +a
-BASE_HOST=192.168.1.1 PSQL="psql 'host=192.168.1.2 dbname=airlab user=lab_monitor' -Atc" scripts/lock-chain-demo.sh | tee deploy/evidence/lock-chain.txt
+BASE_HOST=192.168.1.3 PSQL="psql 'host=192.168.1.2 dbname=airlab user=lab_monitor' -Atc" scripts/lock-chain-demo.sh | tee deploy/evidence/lock-chain.txt
 ```
 **Kabul:** smoke 31/31 (kriter 2–4 VM'de), lock zinciri waiter=checkin-service / blocker=reservation-service (kriter 10).
 
 ## 7. Deneyler (E0 → E2 → E1×3)
 
 ```bash
-export CHAOS_URL=http://192.168.1.1:8080 CHAOS_USER=chaos CHAOS_PASSWORD=<app-vm.env'deki>
+export CHAOS_URL=http://192.168.1.3:8080 CHAOS_USER=chaos CHAOS_PASSWORD=<app-vm.env'deki>
 python3 scripts/run-experiment.py E0-normal-baseline --baseline 300 --json-out deploy/evidence/E0.json
 python3 scripts/run-experiment.py E2-hot-row-lock    --baseline 300 --load 300 --recovery 300 --json-out deploy/evidence/E2.json
 for i in 1 2 3; do python3 scripts/run-experiment.py E1-independent-baggage-read --baseline 300 --load 300 --recovery 300 --json-out deploy/evidence/E1-$i.json; done
@@ -183,8 +202,8 @@ Deney kayıtlarındaki UTC faz zamanlarını not edin.
 
 ```bash
 export DT_PLATFORM_TOKEN=<T4>      # komut satırına yazmayın; read -s ile girin
-python3 scripts/mcp-probe.py --env <env> list                 # araçlar + sunucu bilgisi
-python3 scripts/mcp-probe.py --env <env> gate --since 2h      # kapı sorgularının tamamı (E2 dahil pencere)
+python3 scripts/mcp-probe.py --env mfi74785 list                 # araçlar + sunucu bilgisi
+python3 scripts/mcp-probe.py --env mfi74785 gate --since 2h      # kapı sorgularının tamamı (E2 dahil pencere)
 ```
 Probe her sinyal için `VERI_VAR / BOS / HATA / IZIN_HATASI` yazar ve token'sız kanıt dosyasını
 `deploy/evidence/mcp-*.json` altına kaydeder. `docs/acceptance-gate.md` "Telemetri / MCP kapısı" tablosunu

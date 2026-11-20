@@ -1,0 +1,306 @@
+{
+  "probe": "airlab-mcp-probe/1.0",
+  "utc": "2026-11-20T23:05:13+00:00",
+  "url": "https://mfi74785.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp",
+  "command": "gate",
+  "steps": [
+    {
+      "signal": "4 servis (OneAgent) — servis listesi",
+      "tool": "execute-dql",
+      "dql": "smartscapeNodes \"SERVICE\" | filter contains(name, \"reservation\") or contains(name, \"checkin\") or contains(name, \"flightops\") or contains(name, \"baggage\") or contains(name, \"chaos\") | fields id, name | limit 50",
+      "status": "IZIN_HATASI",
+      "ms": 1371,
+      "result": {
+        "isError": true,
+        "text_chars": 176,
+        "text_head": "Tool error: Access Denied: Missing OAuth scope 'storage:smartscape:read' on table 'smartscape.nodes'. Please contact your administrator/the app creator or reach out to support."
+      }
+    },
+    {
+      "signal": "İki host (APP_VM, DB_VM)",
+      "tool": "execute-dql",
+      "dql": "smartscapeNodes \"HOST\" | fields id, name | limit 20",
+      "status": "IZIN_HATASI",
+      "ms": 1248,
+      "result": {
+        "isError": true,
+        "text_chars": 176,
+        "text_head": "Tool error: Access Denied: Missing OAuth scope 'storage:smartscape:read' on table 'smartscape.nodes'. Please contact your administrator/the app creator or reach out to support."
+      }
+    },
+    {
+      "signal": "4 servis — yanıt süresi/istek sayısı",
+      "tool": "execute-dql",
+      "dql": "timeseries { rt = avg(dt.service.request.response_time), n = sum(dt.service.request.count) }, by: { dt.smartscape.service }, from: now()-1h | fieldsAdd svc = getNodeName(dt.smartscape.service) | limit 20",
+      "status": "IZIN_HATASI",
+      "ms": 1589,
+      "result": {
+        "isError": true,
+        "text_chars": 176,
+        "text_head": "Tool error: Access Denied: Missing OAuth scope 'storage:smartscape:read' on table 'smartscape.nodes'. Please contact your administrator/the app creator or reach out to support."
+      }
+    },
+    {
+      "signal": "APP_VM ve DB_VM host CPU/RAM",
+      "tool": "execute-dql",
+      "dql": "timeseries { cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage) }, by: { dt.smartscape.host }, from: now()-1h | fieldsAdd host = getNodeName(dt.smartscape.host)",
+      "status": "IZIN_HATASI",
+      "ms": 1217,
+      "result": {
+        "isError": true,
+        "text_chars": 176,
+        "text_head": "Tool error: Access Denied: Missing OAuth scope 'storage:smartscape:read' on table 'smartscape.nodes'. Please contact your administrator/the app creator or reach out to support."
+      }
+    },
+    {
+      "signal": "Container CPU",
+      "tool": "execute-dql",
+      "dql": "timeseries cpu = avg(dt.containers.cpu.usage_percent), by: { dt.entity.container_group_instance }, from: now()-1h | limit 20",
+      "status": "IZIN_HATASI",
+      "ms": 1261,
+      "result": {
+        "isError": false,
+        "text_chars": 1230,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{dt.entity.container_group_instance}, cpu = avg(dt.containers.cpu.usage_percent)\\n| limit 20\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries cpu = avg(dt.containers.cpu.usage_percent), by: { dt.entity.container_group_instance }, from: now()-1h | limit 20\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-20T22:05:00Z\",\n      \"end\" : \"2026-11-20T23:06:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 20,\n    \"notifications\" : [ {\n      \"severity\" : \"WARNING\",\n      \"messageFormat\" : \"No bucket permissions for table %1$s.\",\n      \"messageFormatSpecifierTypes\" : [ \"TABLE_NAME\" ],\n      \"arguments\" : [ \"metrics\" ],\n      \"notificationType\" : \"MISSING_BUCKET_PERMISSIONS\",\n      \"message\" : \"No bucket permissions for table metrics.\"\n    } ],\n    \"queryId\" : \"01a1fb35-18a5-7b8c-a09a-b3f56939ff7a\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"dt.containers.cpu.usage_percent\",\n    \"fieldName\" : \"cpu\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, by:{dt.entity.container_group_instance}, cpu = avg(dt.containers.cpu.usage_percent)\\n| limit 20\", \"timezone\": \"Z\", \"query\": \"timeseries cpu = avg(dt.containers.cpu.usage_percent), by: { dt.entity.container_group_instance }, from: now()-1h | limit 20\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795212300.0, \"end\": 1795215960.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 20, \"notifications\": [{\"severity\": \"WARNING\", \"messageFormat\": \"No bucket permissions for table %1$s.\", \"messageFormatSpecifierTypes\": [\"TABLE_NAME\"], \"arguments\": [\"metrics\"], \"notificationType\": \"MISSING_BUCKET_PERMISSIONS\", \"message\": \"No bucket permissions for table metrics.\"}], \"queryId\": \"01a1fb35-18a5-7b8c-a09a-b3f56939ff7a\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"dt.containers.cpu.usage_percent\", \"fieldName\": \"cpu\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "Hikari (Micrometer)",
+      "tool": "execute-dql",
+      "dql": "timeseries { active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending) }, by: { service, pool }, from: now()-1h",
+      "status": "IZIN_HATASI",
+      "ms": 1774,
+      "result": {
+        "isError": false,
+        "text_chars": 1410,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{service, pool}, {active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending)}\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending) }, by: { service, pool }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-20T22:05:00Z\",\n      \"end\" : \"2026-11-20T23:06:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 16,\n    \"notifications\" : [ {\n      \"severity\" : \"WARNING\",\n      \"messageFormat\" : \"No bucket permissions for table %1$s.\",\n      \"messageFormatSpecifierTypes\" : [ \"TABLE_NAME\" ],\n      \"arguments\" : [ \"metrics\" ],\n      \"notificationType\" : \"MISSING_BUCKET_PERMISSIONS\",\n      \"message\" : \"No bucket permissions for table metrics.\"\n    } ],\n    \"queryId\" : \"01a1fb35-1e29-7dea-853c-039c8e65a6af\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"airlab.app.hikaricp.connections.active\",\n    \"fieldName\" : \"active\"\n  }, {\n    \"metric.key\" : \"airlab.app.hikaricp.connections.pending\",\n    \"fieldName\" : \"pending\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, by:{service, pool}, {active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending)}\", \"timezone\": \"Z\", \"query\": \"timeseries { active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending) }, by: { service, pool }, from: now()-1h\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795212300.0, \"end\": 1795215960.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 16, \"notifications\": [{\"severity\": \"WARNING\", \"messageFormat\": \"No bucket permissions for table %1$s.\", \"messageFormatSpecifierTypes\": [\"TABLE_NAME\"], \"arguments\": [\"metrics\"], \"notificationType\": \"MISSING_BUCKET_PERMISSIONS\", \"message\": \"No bucket permissions for table metrics.\"}], \"queryId\": \"01a1fb35-1e29-7dea-853c-039c8e65a6af\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"airlab.app.hikaricp.connections.active\", \"fieldName\": \"active\"}, {\"metric.key\": \"airlab.app.hikaricp.connections.pending\", \"fieldName\": \"pending\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "HTTP istekleri (Micrometer)",
+      "tool": "execute-dql",
+      "dql": "timeseries n = sum(airlab.app.http.server.requests.count), by: { service }, from: now()-1h",
+      "status": "IZIN_HATASI",
+      "ms": 1204,
+      "result": {
+        "isError": false,
+        "text_chars": 1165,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{service}, n = sum(airlab.app.http.server.requests.count)\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries n = sum(airlab.app.http.server.requests.count), by: { service }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-20T22:05:00Z\",\n      \"end\" : \"2026-11-20T23:06:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 14,\n    \"notifications\" : [ {\n      \"severity\" : \"WARNING\",\n      \"messageFormat\" : \"No bucket permissions for table %1$s.\",\n      \"messageFormatSpecifierTypes\" : [ \"TABLE_NAME\" ],\n      \"arguments\" : [ \"metrics\" ],\n      \"notificationType\" : \"MISSING_BUCKET_PERMISSIONS\",\n      \"message\" : \"No bucket permissions for table metrics.\"\n    } ],\n    \"queryId\" : \"01a1fb35-245f-77c3-b5bc-530194f5ae80\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"airlab.app.http.server.requests.count\",\n    \"fieldName\" : \"n\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, by:{service}, n = sum(airlab.app.http.server.requests.count)\", \"timezone\": \"Z\", \"query\": \"timeseries n = sum(airlab.app.http.server.requests.count), by: { service }, from: now()-1h\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795212300.0, \"end\": 1795215960.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 14, \"notifications\": [{\"severity\": \"WARNING\", \"messageFormat\": \"No bucket permissions for table %1$s.\", \"messageFormatSpecifierTypes\": [\"TABLE_NAME\"], \"arguments\": [\"metrics\"], \"notificationType\": \"MISSING_BUCKET_PERMISSIONS\", \"message\": \"No bucket permissions for table metrics.\"}], \"queryId\": \"01a1fb35-245f-77c3-b5bc-530194f5ae80\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"airlab.app.http.server.requests.count\", \"fieldName\": \"n\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "PostgreSQL extension",
+      "tool": "execute-dql",
+      "dql": "timeseries { backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks) }, from: now()-1h",
+      "status": "IZIN_HATASI",
+      "ms": 1217,
+      "result": {
+        "isError": false,
+        "text_chars": 1426,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, {backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks)}\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks) }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-20T22:05:00Z\",\n      \"end\" : \"2026-11-20T23:06:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 13,\n    \"notifications\" : [ {\n      \"severity\" : \"WARNING\",\n      \"messageFormat\" : \"No bucket permissions for table %1$s.\",\n      \"messageFormatSpecifierTypes\" : [ \"TABLE_NAME\" ],\n      \"arguments\" : [ \"metrics\" ],\n      \"notificationType\" : \"MISSING_BUCKET_PERMISSIONS\",\n      \"message\" : \"No bucket permissions for table metrics.\"\n    } ],\n    \"queryId\" : \"01a1fb35-2914-7c84-a9c9-5cfa6986ee3c\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"postgres.numbackends\",\n    \"fieldName\" : \"backends\"\n  }, {\n    \"metric.key\" : \"postgres.activity.active_waiting\",\n    \"fieldName\" : \"waiting\"\n  }, {\n    \"metric.key\" : \"postgres.locks\",\n    \"fieldName\" : \"locks\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, {backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks)}\", \"timezone\": \"Z\", \"query\": \"timeseries { backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks) }, from: now()-1h\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795212300.0, \"end\": 1795215960.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 13, \"notifications\": [{\"severity\": \"WARNING\", \"messageFormat\": \"No bucket permissions for table %1$s.\", \"messageFormatSpecifierTypes\": [\"TABLE_NAME\"], \"arguments\": [\"metrics\"], \"notificationType\": \"MISSING_BUCKET_PERMISSIONS\", \"message\": \"No bucket permissions for table metrics.\"}], \"queryId\": \"01a1fb35-2914-7c84-a9c9-5cfa6986ee3c\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"postgres.numbackends\", \"fieldName\": \"backends\"}, {\"metric.key\": \"postgres.activity.active_waiting\", \"fieldName\": \"waiting\"}, {\"metric.key\": \"postgres.locks\", \"fieldName\": \"locks\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "airlab.pg.* (collector)",
+      "tool": "execute-dql",
+      "dql": "timeseries { waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal) }, from: now()-1h",
+      "status": "IZIN_HATASI",
+      "ms": 1253,
+      "result": {
+        "isError": false,
+        "text_chars": 1331,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, {waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal)}\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal) }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-20T22:05:00Z\",\n      \"end\" : \"2026-11-20T23:06:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 12,\n    \"notifications\" : [ {\n      \"severity\" : \"WARNING\",\n      \"messageFormat\" : \"No bucket permissions for table %1$s.\",\n      \"messageFormatSpecifierTypes\" : [ \"TABLE_NAME\" ],\n      \"arguments\" : [ \"metrics\" ],\n      \"notificationType\" : \"MISSING_BUCKET_PERMISSIONS\",\n      \"message\" : \"No bucket permissions for table metrics.\"\n    } ],\n    \"queryId\" : \"01a1fb35-2df9-7257-ac12-425725cf6d8c\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"airlab.pg.lock.waiters_total\",\n    \"fieldName\" : \"waiters\"\n  }, {\n    \"metric.key\" : \"airlab.pg.connections.used_ratio_normal\",\n    \"fieldName\" : \"used\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, {waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal)}\", \"timezone\": \"Z\", \"query\": \"timeseries { waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal) }, from: now()-1h\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795212300.0, \"end\": 1795215960.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 12, \"notifications\": [{\"severity\": \"WARNING\", \"messageFormat\": \"No bucket permissions for table %1$s.\", \"messageFormatSpecifierTypes\": [\"TABLE_NAME\"], \"arguments\": [\"metrics\"], \"notificationType\": \"MISSING_BUCKET_PERMISSIONS\", \"message\": \"No bucket permissions for table metrics.\"}], \"queryId\": \"01a1fb35-2df9-7257-ac12-425725cf6d8c\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"airlab.pg.lock.waiters_total\", \"fieldName\": \"waiters\"}, {\"metric.key\": \"airlab.pg.connections.used_ratio_normal\", \"fieldName\": \"used\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "airlab.pg.blocking_edge logları",
+      "tool": "execute-dql",
+      "dql": "fetch logs, from: now()-1h | filter event.type == \"airlab.pg.blocking_edge\" | sort timestamp desc | limit 5",
+      "status": "IZIN_HATASI",
+      "ms": 1213,
+      "result": {
+        "isError": false,
+        "text_chars": 1135,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter event.type == \\\"airlab.pg.blocking_edge\\\"\\n| sort timestamp desc\\n| limit 5\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter event.type == \\\"airlab.pg.blocking_edge\\\" | sort timestamp desc | limit 5\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-20T22:05:30.058737353Z\",\n      \"end\" : \"2026-11-20T23:05:30.058737353Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 18,\n    \"notifications\" : [ {\n      \"severity\" : \"WARNING\",\n      \"messageFormat\" : \"No bucket permissions for table %1$s.\",\n      \"messageFormatSpecifierTypes\" : [ \"TABLE_NAME\" ],\n      \"arguments\" : [ \"logs\" ],\n      \"notificationType\" : \"MISSING_BUCKET_PERMISSIONS\",\n      \"message\" : \"No bucket permissions for table logs.\"\n    } ],\n    \"queryId\" : \"01a1fb35-32c0-7fd5-802d-5ed2f42b73f1\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"fetch logs, from:now() - 1h\\n| filter event.type == \\\"airlab.pg.blocking_edge\\\"\\n| sort timestamp desc\\n| limit 5\", \"timezone\": \"Z\", \"query\": \"fetch logs, from: now()-1h | filter event.type == \\\"airlab.pg.blocking_edge\\\" | sort timestamp desc | limit 5\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795212330.0587373, \"end\": 1795215930.0587373}, \"locale\": \"und\", \"executionTimeMilliseconds\": 18, \"notifications\": [{\"severity\": \"WARNING\", \"messageFormat\": \"No bucket permissions for table %1$s.\", \"messageFormatSpecifierTypes\": [\"TABLE_NAME\"], \"arguments\": [\"logs\"], \"notificationType\": \"MISSING_BUCKET_PERMISSIONS\", \"message\": \"No bucket permissions for table logs.\"}], \"queryId\": \"01a1fb35-32c0-7fd5-802d-5ed2f42b73f1\", \"sampled\": false}, \"metrics\": []}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "Uygulama ECS logları (request_id / experiment_id)",
+      "tool": "execute-dql",
+      "dql": "fetch logs, from: now()-1h | filter isNotNull(request_id) or isNotNull(experiment_id) | fields timestamp, service.name, request_id, experiment_id, dt.trace_id | limit 5",
+      "status": "IZIN_HATASI",
+      "ms": 1249,
+      "result": {
+        "isError": false,
+        "text_chars": 1253,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter isNotNull(request_id) OR isNotNull(experiment_id)\\n| fields timestamp, service.name, request_id, experiment_id, dt.trace_id\\n| limit 5\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter isNotNull(request_id) or isNotNull(experiment_id) | fields timestamp, service.name, request_id, experiment_id, dt.trace_id | limit 5\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-20T22:05:31.293222721Z\",\n      \"end\" : \"2026-11-20T23:05:31.293222721Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 19,\n    \"notifications\" : [ {\n      \"severity\" : \"WARNING\",\n      \"messageFormat\" : \"No bucket permissions for table %1$s.\",\n      \"messageFormatSpecifierTypes\" : [ \"TABLE_NAME\" ],\n      \"arguments\" : [ \"logs\" ],\n      \"notificationType\" : \"MISSING_BUCKET_PERMISSIONS\",\n      \"message\" : \"No bucket permissions for table logs.\"\n    } ],\n    \"queryId\" : \"01a1fb35-3794-7357-b5b1-53edd1a8547b\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"fetch logs, from:now() - 1h\\n| filter isNotNull(request_id) OR isNotNull(experiment_id)\\n| fields timestamp, service.name, request_id, experiment_id, dt.trace_id\\n| limit 5\", \"timezone\": \"Z\", \"query\": \"fetch logs, from: now()-1h | filter isNotNull(request_id) or isNotNull(experiment_id) | fields timestamp, service.name, request_id, experiment_id, dt.trace_id | limit 5\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795212331.2932227, \"end\": 1795215931.2932227}, \"locale\": \"und\", \"executionTimeMilliseconds\": 19, \"notifications\": [{\"severity\": \"WARNING\", \"messageFormat\": \"No bucket permissions for table %1$s.\", \"messageFormatSpecifierTypes\": [\"TABLE_NAME\"], \"arguments\": [\"logs\"], \"notificationType\": \"MISSING_BUCKET_PERMISSIONS\", \"message\": \"No bucket permissions for table logs.\"}], \"queryId\": \"01a1fb35-3794-7357-b5b1-53edd1a8547b\", \"sampled\": false}, \"metrics\": []}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "PostgreSQL extension top queries logları",
+      "tool": "execute-dql",
+      "dql": "fetch logs, from: now()-1h | filter dt.extension.name == \"com.dynatrace.extension.postgres\" | summarize n = count(), by: { event.group }",
+      "status": "IZIN_HATASI",
+      "ms": 1211,
+      "result": {
+        "isError": false,
+        "text_chars": 1185,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter dt.extension.name == \\\"com.dynatrace.extension.postgres\\\"\\n| summarize by:{event.group}, n = count()\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter dt.extension.name == \\\"com.dynatrace.extension.postgres\\\" | summarize n = count(), by: { event.group }\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-20T22:05:32.5118661Z\",\n      \"end\" : \"2026-11-20T23:05:32.5118661Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 18,\n    \"notifications\" : [ {\n      \"severity\" : \"WARNING\",\n      \"messageFormat\" : \"No bucket permissions for table %1$s.\",\n      \"messageFormatSpecifierTypes\" : [ \"TABLE_NAME\" ],\n      \"arguments\" : [ \"logs\" ],\n      \"notificationType\" : \"MISSING_BUCKET_PERMISSIONS\",\n      \"message\" : \"No bucket permissions for table logs.\"\n    } ],\n    \"queryId\" : \"01a1fb35-3c56-7053-be4f-84b0b620bc54\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"fetch logs, from:now() - 1h\\n| filter dt.extension.name == \\\"com.dynatrace.extension.postgres\\\"\\n| summarize by:{event.group}, n = count()\", \"timezone\": \"Z\", \"query\": \"fetch logs, from: now()-1h | filter dt.extension.name == \\\"com.dynatrace.extension.postgres\\\" | summarize n = count(), by: { event.group }\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795212332.511866, \"end\": 1795215932.511866}, \"locale\": \"und\", \"executionTimeMilliseconds\": 18, \"notifications\": [{\"severity\": \"WARNING\", \"messageFormat\": \"No bucket permissions for table %1$s.\", \"messageFormatSpecifierTypes\": [\"TABLE_NAME\"], \"arguments\": [\"logs\"], \"notificationType\": \"MISSING_BUCKET_PERMISSIONS\", \"message\": \"No bucket permissions for table logs.\"}], \"queryId\": \"01a1fb35-3c56-7053-be4f-84b0b620bc54\", \"sampled\": false}, \"metrics\": []}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "Ingest gecikmesi (log zaman damgası vs. şimdi)",
+      "tool": "execute-dql",
+      "dql": "fetch logs, from: now()-1h | filter in(service.name, array(\"reservation-service\", \"checkin-service\", \"flightops-service\", \"baggage-service\", \"chaos-controller\")) | summarize last = max(timestamp), by: { service.name } | fieldsAdd lag = now() - last",
+      "status": "IZIN_HATASI",
+      "ms": 1259,
+      "result": {
+        "isError": false,
+        "text_chars": 1430,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter in(service.name, array(\\\"reservation-service\\\", \\\"checkin-service\\\", \\\"flightops-service\\\", \\\"baggage-service\\\", \\\"chaos-controller\\\"))\\n| summarize by:{service.name}, last = max(timestamp)\\n| fieldsAdd lag = now() - last\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter in(service.name, array(\\\"reservation-service\\\", \\\"checkin-service\\\", \\\"flightops-service\\\", \\\"baggage-service\\\", \\\"chaos-controller\\\")) | summarize last = max(timestamp), by: { service.name } | fieldsAdd lag = now() - last\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-20T22:05:33.772327139Z\",\n      \"end\" : \"2026-11-20T23:05:33.772327139Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 20,\n    \"notifications\" : [ {\n      \"severity\" : \"WARNING\",\n      \"messageFormat\" : \"No bucket permissions for table %1$s.\",\n      \"messageFormatSpecifierTypes\" : [ \"TABLE_NAME\" ],\n      \"arguments\" : [ \"logs\" ],\n      \"notificationType\" : \"MISSING_BUCKET_PERMISSIONS\",\n      \"message\" : \"No bucket permissions for table logs.\"\n    } ],\n    \"queryId\" : \"01a1fb35-4142-7ec0-aa32-86fbb179cda1\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"fetch logs, from:now() - 1h\\n| filter in(service.name, array(\\\"reservation-service\\\", \\\"checkin-service\\\", \\\"flightops-service\\\", \\\"baggage-service\\\", \\\"chaos-controller\\\"))\\n| summarize by:{service.name}, last = max(timestamp)\\n| fieldsAdd lag = now() - last\", \"timezone\": \"Z\", \"query\": \"fetch logs, from: now()-1h | filter in(service.name, array(\\\"reservation-service\\\", \\\"checkin-service\\\", \\\"flightops-service\\\", \\\"baggage-service\\\", \\\"chaos-controller\\\")) | summarize last = max(timestamp), by: { service.name } | fieldsAdd lag = now() - last\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795212333.7723272, \"end\": 1795215933.7723272}, \"locale\": \"und\", \"executionTimeMilliseconds\": 20, \"notifications\": [{\"severity\": \"WARNING\", \"messageFormat\": \"No bucket permissions for table %1$s.\", \"messageFormatSpecifierTypes\": [\"TABLE_NAME\"], \"arguments\": [\"logs\"], \"notificationType\": \"MISSING_BUCKET_PERMISSIONS\", \"message\": \"No bucket permissions for table logs.\"}], \"queryId\": \"01a1fb35-4142-7ec0-aa32-86fbb179cda1\", \"sampled\": false}, \"metrics\": []}, \"types\": []}"
+      }
+    }
+  ],
+  "server": {
+    "info": {
+      "name": "dynatrace-mcp",
+      "version": "1.0"
+    },
+    "protocolVersion": "2025-06-18",
+    "capabilities": [
+      "resources",
+      "tools"
+    ],
+    "session": true,
+    "ms": 2380
+  },
+  "tools": [
+    {
+      "name": "adaptive-anomaly-detector",
+      "required": [
+        "timeSeriesData",
+        "numberOfSignalFluctuations"
+      ]
+    },
+    {
+      "name": "ask-dynatrace-docs",
+      "required": [
+        "prompt"
+      ]
+    },
+    {
+      "name": "create-dql",
+      "required": [
+        "request"
+      ]
+    },
+    {
+      "name": "execute-dql",
+      "required": [
+        "dqlQueryString"
+      ]
+    },
+    {
+      "name": "explain-dql",
+      "required": [
+        "dql"
+      ]
+    },
+    {
+      "name": "find-documents",
+      "required": [
+        "searchString"
+      ]
+    },
+    {
+      "name": "find-troubleshooting-guides",
+      "required": [
+        "searchStrings"
+      ]
+    },
+    {
+      "name": "get-dynatrace-compliance-findings",
+      "required": []
+    },
+    {
+      "name": "get-dynatrace-vulnerabilities",
+      "required": []
+    },
+    {
+      "name": "get-entity-id",
+      "required": [
+        "entityNameFilter"
+      ]
+    },
+    {
+      "name": "get-entity-name",
+      "required": [
+        "entityId"
+      ]
+    },
+    {
+      "name": "get-events-for-kubernetes-cluster",
+      "required": []
+    },
+    {
+      "name": "get-problem-by-id",
+      "required": [
+        "problemId"
+      ]
+    },
+    {
+      "name": "get-security-event-details",
+      "required": []
+    },
+    {
+      "name": "get-security-events-summary",
+      "required": []
+    },
+    {
+      "name": "log-pattern-extractor",
+      "required": [
+        "logQuery"
+      ]
+    },
+    {
+      "name": "query-problems",
+      "required": []
+    },
+    {
+      "name": "seasonal-baseline-anomaly-detector",
+      "required": [
+        "timeSeriesData",
+        "tolerance"
+      ]
+    },
+    {
+      "name": "static-threshold-analyzer",
+      "required": [
+        "timeSeriesData",
+        "threshold"
+      ]
+    },
+    {
+      "name": "timeseries-forecast",
+      "required": [
+        "query"
+      ]
+    },
+    {
+      "name": "timeseries-novelty-detection",
+      "required": [
+        "timeSeriesData",
+        "detectionMode"
+      ]
+    }
+  ]
+}
