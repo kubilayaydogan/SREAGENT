@@ -17,7 +17,8 @@
       <tr><th>Cleanup</th><td><div th:each="c : ${r.cleanup}" th:text="${c.key} + ': ' + ${c.value}"></div></td></tr>
       <tr><th>Not</th><td th:text="${r.notes}"></td></tr>
     </table>
-    <p><a th:href="@{/api/experiments/{id}(id=${r.experimentId})}">JSON kaydı</a></p>
+    <p><a th:href="@{/experiments/{id}/watch(id=${r.experimentId})}">▶ İzleme sayfası (grafikler, olay günlüğü)</a> ·
+       <a th:href="@{/api/experiments/{id}(id=${r.experimentId})}">JSON kaydı</a></p>
   </section>
   <section>
     <h2>Sonuçlar (faz × kaynak × uygulama × operasyon)</h2>

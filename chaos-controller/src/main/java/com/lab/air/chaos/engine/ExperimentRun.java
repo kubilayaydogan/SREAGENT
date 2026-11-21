@@ -78,6 +78,17 @@ public final class ExperimentRun {
     private int threadsMax;
     private int samples;
 
+    // İzleme sayfası: olay günlüğü + 5 sn'lik zaman serisi (kayıtla birlikte saklanır; boyutları sınırlı)
+    private static final int MAX_EVENTS = 1000;
+    private static final int MAX_TIMELINE = 1440;          // 5 sn × 1440 = 2 saat
+    private static final long TIMELINE_STEP_MS = 5000;
+    private static final long ERROR_EVENT_EVERY_MS = 30_000;
+    private final List<Map<String, Object>> events = new ArrayList<>();
+    private final List<Map<String, Object>> timeline = new ArrayList<>();
+    private final Map<String, long[]> prevTotals = new LinkedHashMap<>();   // kaynak/app → completed, errors, dropped
+    private final Map<String, long[]> pendingErr = new LinkedHashMap<>();   // kaynak/app → bildirilmemiş hata, düşen, son olay ms
+    private long prevSampleMs;
+
     public ExperimentRun(String id, ExperimentSpec spec, String specHash, Catalog catalog, DataPools pools,
                          Sender sender, Stats stats, HttpClient http, Map<String, String> baseUrls, String labToken,
                          Consumer<ExperimentRecord> persister) {
@@ -138,6 +149,8 @@ public final class ExperimentRun {
         try {
             pools.refresh();
             log.info("deney {} başladı; veri havuzları: {}", id, pools.summary());
+            event("start", planSummary());
+            event("data", "Veri havuzları yenilendi: " + pools.summary());
             Instant t0 = Instant.now();
             Instant warmEnd = t0.plusSeconds(spec.warmupSec());
             Instant baseEnd = warmEnd.plusSeconds(spec.baselineSec());
@@ -145,8 +158,17 @@ public final class ExperimentRun {
             Instant end = loadEnd.plusSeconds(spec.recoverySec());
             enter(Phase.WARMUP, t0);
             background.forEach(Generator::start);
+            if (!background.isEmpty()) {
+                event("load", "Arka plan trafiği başladı: " + background.size() + " uygulama × "
+                        + spec.background().rpsPerApp() + " RPS (tüm fazlarda)");
+            }
             probes.forEach(Generator::start);
+            if (!probes.isEmpty()) {
+                event("load", "Tüm fazlarda aktif hedefler başladı: " + describe(probes));
+            }
             long lastSample = 0;
+            long lastTimeline = 0;
+            prevSampleMs = System.currentTimeMillis();
             long lastPersist = System.currentTimeMillis();
             long lastRefresh = System.currentTimeMillis();
             while (!stopRequested) {
@@ -158,9 +180,15 @@ public final class ExperimentRun {
                     enter(want, now);
                     if (want == Phase.LOAD) {
                         stress.forEach(Generator::start);
+                        if (!stress.isEmpty()) {
+                            event("load", "Yük başladı: " + describe(stress));
+                        }
                     }
                     if (old == Phase.LOAD) {
                         stress.forEach(Generator::stop);
+                        if (!stress.isEmpty()) {
+                            event("load", "Yük durduruldu (yeni istek üretilmiyor; uçuştakiler timeout ile sınırlı)");
+                        }
                     }
                     if (want == Phase.DONE) {
                         break;
@@ -170,6 +198,10 @@ public final class ExperimentRun {
                 if (ms - lastSample >= 1000) {
                     sampleProducer();
                     lastSample = ms;
+                }
+                if (ms - lastTimeline >= TIMELINE_STEP_MS) {
+                    sampleTimeline(ms);
+                    lastTimeline = ms;
                 }
                 if (ms - lastRefresh >= 20_000) {
                     executor.execute(pools::refresh);
@@ -201,6 +233,11 @@ public final class ExperimentRun {
             phaseStart.put(p, at);
         }
         log.info("deney {} faz={} utc={}", id, p, at);
+        if (p == Phase.DONE) {
+            event("phase", "Tüm fazlar tamamlandı");
+        } else {
+            event("phase", p.name() + " fazı başladı (planlanan " + plannedSeconds(p) + " sn)");
+        }
     }
 
     private void finish() {
@@ -214,6 +251,7 @@ public final class ExperimentRun {
         background.forEach(Generator::stop);
         stress.forEach(Generator::stop);
         probes.forEach(Generator::stop);
+        event("drain", "Tüm üreticiler durduruldu; uçuştaki isteklerin bitmesi bekleniyor");
         // Uçuştaki istekler timeout ile sınırlı; en uzun timeout + 2 sn bekle
         int maxTimeout = spec.targets().stream().mapToInt(TargetSpec::timeoutMs).max().orElse(5000);
         executor.shutdown();
@@ -224,11 +262,15 @@ public final class ExperimentRun {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        sampleTimeline(System.currentTimeMillis());
+        flushErrorEvents(true);
         callCleanup();
+        cleanup.forEach((app, res) -> event("cleanup", "Cleanup " + app + ": " + res));
         endedAt = Instant.now();
         if (state == State.STOPPING) {
             state = stopRequested ? State.STOPPED : State.COMPLETED;
         }
+        event("end", "Deney bitti: " + state + (stopReason == null ? "" : " (" + stopReason + ")"));
         persister.accept(record());
         log.info("deney {} bitti: {} {}", id, state, stopReason == null ? "" : stopReason);
     }
@@ -272,6 +314,7 @@ public final class ExperimentRun {
             stopReason = reason;
             stopRequested = true;
             state = State.STOPPING;
+            event("stop", "Durdurma istendi: " + reason);
         }
     }
 
@@ -366,6 +409,125 @@ public final class ExperimentRun {
         return new ExperimentRecord(id, spec.clientRequestId(), specHash, state.name(), createdAt.toString(),
                 startedAt == null ? null : startedAt.toString(), endedAt == null ? null : endedAt.toString(),
                 phase.name(), stopReason, spec, phases, stats.rows(phaseSeconds()), prod, new LinkedHashMap<>(cleanup),
-                notes);
+                notes, new ArrayList<>(events), new ArrayList<>(timeline));
+    }
+
+    // ---------------------------------------------------------------- izleme: olay günlüğü + zaman serisi
+    private synchronized void event(String kind, String message) {
+        Map<String, Object> e = new LinkedHashMap<>();
+        e.put("t", Instant.now().toString());
+        e.put("phase", phase.name());
+        e.put("kind", kind);
+        e.put("message", message);
+        events.add(e);
+        if (events.size() > MAX_EVENTS) {
+            events.remove(0);
+        }
+    }
+
+    private long plannedSeconds(Phase p) {
+        return switch (p) {
+            case WARMUP -> spec.warmupSec();
+            case BASELINE -> spec.baselineSec();
+            case LOAD -> spec.loadSec();
+            case RECOVERY -> spec.recoverySec();
+            default -> 0;
+        };
+    }
+
+    private String planSummary() {
+        StringBuilder b = new StringBuilder("Deney başladı. Plan: warm-up ").append(spec.warmupSec())
+                .append(" sn, baseline ").append(spec.baselineSec()).append(" sn, yük ").append(spec.loadSec())
+                .append(" sn, recovery ").append(spec.recoverySec()).append(" sn");
+        if (spec.targets().isEmpty()) {
+            b.append("; hedef yok (yalnız arka plan)");
+        } else {
+            List<String> ts = new ArrayList<>();
+            for (TargetSpec t : spec.targets()) {
+                ts.add(t.app() + " (" + t.role() + ", " + (t.mode() == Mode.RPS ? t.rps() + " RPS" : t.concurrency()
+                        + " eşzamanlı") + (t.holdMs() > 0 ? ", hold " + t.holdMs() + " ms" : "")
+                        + (t.hotRow() ? ", hot-row" : "") + ", " + t.activePhases() + ")");
+            }
+            b.append("; hedefler: ").append(String.join(", ", ts));
+        }
+        return b.toString();
+    }
+
+    private static String describe(List<Generator> gs) {
+        List<String> out = new ArrayList<>();
+        for (Generator g : gs) {
+            out.add(g.app() + " " + (g instanceof Generator.Rps r ? r.targetRps() + " RPS"
+                    : ((Generator.Concurrency) g).workers() + " eşzamanlı"));
+        }
+        return String.join(", ", out);
+    }
+
+    /** 5 sn'de bir: kaynak/uygulama başına gerçekleşen RPS, hata, düşen istek, uçuştaki istek. */
+    private void sampleTimeline(long nowMs) {
+        double dt = Math.max(0.001, (nowMs - prevSampleMs) / 1000.0);
+        prevSampleMs = nowMs;
+        Map<String, Map<String, Object>> series = new LinkedHashMap<>();
+        Map<String, Integer> inflight = new LinkedHashMap<>();
+        List<Generator> all = new ArrayList<>(background);
+        all.addAll(probes);
+        all.addAll(stress);
+        for (Generator g : all) {
+            inflight.merge(g.source() + "/" + g.app(), g.inFlight(), Integer::sum);
+        }
+        for (String key : inflight.keySet()) {
+            String[] sa = key.split("/", 2);
+            long[] cur = new long[3];
+            for (Phase p : Phase.values()) {
+                long[] t = stats.totals(p, sa[0], sa[1]);
+                cur[0] += t[2];
+                cur[1] += t[3];
+                cur[2] += t[4];
+            }
+            long[] prev = prevTotals.getOrDefault(key, new long[3]);
+            long dc = cur[0] - prev[0];
+            long de = cur[1] - prev[1];
+            long dd = cur[2] - prev[2];
+            prevTotals.put(key, cur);
+            Map<String, Object> v = new LinkedHashMap<>();
+            v.put("rps", Math.round(dc / dt * 10) / 10.0);
+            v.put("errors", de);
+            v.put("dropped", dd);
+            v.put("inFlight", inflight.get(key));
+            series.put(key, v);
+            long[] pe = pendingErr.computeIfAbsent(key, k -> new long[3]);
+            pe[0] += de;
+            pe[1] += dd;
+        }
+        Map<String, Object> point = new LinkedHashMap<>();
+        point.put("t", Instant.ofEpochMilli(nowMs).toString());
+        point.put("phase", phase.name());
+        point.put("series", series);
+        synchronized (this) {
+            timeline.add(point);
+            if (timeline.size() > MAX_TIMELINE) {
+                timeline.remove(0);
+            }
+        }
+        flushErrorEvents(false);
+    }
+
+    /** Hata/düşen istekleri olay günlüğüne özetler (anahtar başına en fazla 30 sn'de bir). */
+    private void flushErrorEvents(boolean force) {
+        long now = System.currentTimeMillis();
+        pendingErr.forEach((key, pe) -> {
+            if ((pe[0] > 0 || pe[1] > 0) && (force || now - pe[2] >= ERROR_EVENT_EVERY_MS)) {
+                List<String> parts = new ArrayList<>();
+                if (pe[0] > 0) {
+                    parts.add(pe[0] + " hata (5xx/timeout/IO)");
+                }
+                if (pe[1] > 0) {
+                    parts.add(pe[1] + " düşürülen istek (üretici yetişemedi / max in-flight)");
+                }
+                event("errors", key + ": " + String.join(", ", parts));
+                pe[0] = 0;
+                pe[1] = 0;
+                pe[2] = now;
+            }
+        });
     }
 }

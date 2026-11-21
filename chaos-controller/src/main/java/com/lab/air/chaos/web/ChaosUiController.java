@@ -26,6 +26,13 @@ public class ChaosUiController {
         return "experiments";
     }
 
+    /** Canlı izleme sayfası: veri tarayıcıda /api/experiments/{id} ve /api/status'tan 3 sn'de bir çekilir. */
+    @GetMapping("/experiments/{id}/watch")
+    public String watch(@PathVariable String id, Model m) {
+        m.addAttribute("id", id);
+        return "watch";
+    }
+
     @GetMapping("/experiments/{id}")
     public String detail(@PathVariable String id, Model m) {
         service.get(id).ifPresent(r -> m.addAttribute("r", r));

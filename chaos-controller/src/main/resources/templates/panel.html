@@ -22,7 +22,7 @@
   <section>
     <h2>Canlı durum</h2>
     <div class="row">
-      <span>Deney: <code id="expId">-</code></span>
+      <span>Deney: <code id="expId">-</code> <a id="watchLink" href="#" style="display:none">▶ Canlı izle</a></span>
       <span>Faz: <span class="phase" id="phase">-</span></span>
       <span>Durum: <span id="state">-</span></span>
       <button class="danger" onclick="stopAll()">STOP-ALL (tüm yükü durdur + cleanup)</button>
@@ -74,7 +74,24 @@
 const APPS = ['reservation', 'checkin', 'flightops', 'baggage'];
 let catalog = {};
 
-function newCrid() { document.getElementById('crid').textContent = 'ui-' + crypto.randomUUID(); }
+// clientRequestId: 8-64 karakter [A-Za-z0-9._:-]. crypto.randomUUID yalnız güvenli bağlamda (HTTPS/localhost) var;
+// panel http://<VM-IP>:8080 üzerinden açıldığında da çalışması için getRandomValues (her bağlamda var) ve son çare
+// Math.random yedekleri kullanılır.
+const CRID_RE = /^[A-Za-z0-9._:-]{8,64}$/;
+function randomHex(bytes) {
+  const a = new Uint8Array(bytes);
+  if (window.crypto && typeof crypto.getRandomValues === 'function') crypto.getRandomValues(a);
+  else for (let i = 0; i < bytes; i++) a[i] = Math.floor(Math.random() * 256);
+  return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+}
+function makeCrid() {
+  if (window.crypto && typeof crypto.randomUUID === 'function') {
+    try { return 'ui-' + crypto.randomUUID(); } catch (e) { /* güvenli bağlam değil */ }
+  }
+  return 'ui-' + Date.now().toString(36) + '-' + randomHex(12);
+}
+function newCrid() { document.getElementById('crid').textContent = makeCrid(); }
+function ensureCrid() { if (!CRID_RE.test(document.getElementById('crid').textContent)) newCrid(); }
 
 function targetHtml(app) {
   const ops = (catalog[app]?.operations || []).map(o => o.name + '(' + o.kind[0] + ')').join(', ');
@@ -154,12 +171,14 @@ async function loadPreset() {
 }
 
 async function startExp() {
+  ensureCrid();
   buildJson();
   const r = await fetch('/api/experiments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec()) });
   const b = await r.json();
   const el = document.getElementById('result');
-  if (r.status === 201) { el.className = 'msg'; el.textContent = 'Başlatıldı: ' + b.experimentId; }
-  else if (r.status === 200) { el.className = 'msg'; el.textContent = 'Aynı istek tekrarı — mevcut deney: ' + b.experimentId; }
+  const link = id => ' — <a href="/experiments/' + encodeURIComponent(id) + '/watch">canlı izle</a>';
+  if (r.status === 201) { el.className = 'msg'; el.textContent = 'Başlatıldı: ' + b.experimentId; el.insertAdjacentHTML('beforeend', link(b.experimentId)); }
+  else if (r.status === 200) { el.className = 'msg'; el.textContent = 'Aynı istek tekrarı — mevcut deney: ' + b.experimentId; el.insertAdjacentHTML('beforeend', link(b.experimentId)); }
   else { el.className = 'err'; el.textContent = 'Reddedildi (' + r.status + '): ' + (b.errors || []).join(' | '); }
 }
 
@@ -173,6 +192,8 @@ async function poll() {
   try {
     const s = await (await fetch('/api/status')).json();
     document.getElementById('expId').textContent = s.experimentId || '-';
+    const wl = document.getElementById('watchLink');
+    if (s.experimentId) { wl.href = '/experiments/' + s.experimentId + '/watch'; wl.style.display = ''; } else { wl.style.display = 'none'; }
     document.getElementById('phase').textContent = s.phase || '-';
     document.getElementById('state').textContent = s.state || '-';
     document.getElementById('phases').textContent = s.phases ? Object.entries(s.phases).map(([k, v]) => k + ': ' + v[0] + ' → ' + (v[1] || '…')).join('   ') : '';

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <title>Deney izleme</title>
+  <link rel="stylesheet" href="/lab.css">
+  <style>
+    :root {
+      --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --grid: #e6e5e0;
+      --s-reservation: #2a78d6; --s-checkin: #eb6834; --s-flightops: #1baf7a; --s-baggage: #eda100;
+      --st-good: #0ca30c; --st-warn: #fab219; --st-serious: #ec835a; --st-crit: #d03b3b;
+    }
+    .kpis { display: flex; gap: 1.6rem; flex-wrap: wrap; align-items: baseline; }
+    .kpi .v { font-size: 1.35rem; font-weight: 700; color: var(--ink); }
+    .kpi .l { font-size: .78rem; color: var(--ink2); }
+    .state { padding: .1rem .5rem; border-radius: 3px; font-weight: 700; font-size: .85rem; background: #e4e9f5; }
+    .state.RUNNING { background: #d9ecff; } .state.COMPLETED { background: #d6f2df; }
+    .state.STOPPED, .state.STOPPING { background: #fff1cc; } .state.FAILED { background: #fbd5da; }
+    .phasebar { display: flex; height: 30px; border-radius: 4px; overflow: hidden; gap: 2px; background: var(--surface); position: relative; }
+    .phasebar .seg { position: relative; background: #eceae4; display: flex; align-items: center; justify-content: center;
+                     font-size: .78rem; color: var(--ink2); overflow: hidden; white-space: nowrap; }
+    .phasebar .seg .fill { position: absolute; left: 0; top: 0; bottom: 0; background: #b7d3f6; }
+    .phasebar .seg.LOAD .fill { background: #f5c3ad; }
+    .phasebar .seg span { position: relative; z-index: 1; padding: 0 .3rem; }
+    .phasebar .seg.cur { outline: 2px solid var(--c); outline-offset: -2px; }
+    .phaselabels { display: flex; gap: 2px; font-size: .74rem; color: var(--ink2); margin-top: .2rem; }
+    .phaselabels div { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .chart { position: relative; }
+    .chart svg { display: block; width: 100%; background: var(--surface); border-radius: 4px; }
+    .legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .8rem; color: var(--ink2); margin: .2rem 0 .3rem; }
+    .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: .35rem; }
+    .tip { position: absolute; pointer-events: none; background: #fff; border: 1px solid #d5d9e2; border-radius: 4px;
+           padding: .35rem .5rem; font-size: .78rem; box-shadow: 0 2px 6px rgba(0,0,0,.12); display: none; white-space: nowrap; z-index: 5; }
+    .tip i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: .3rem; }
+    .ratio-bad { font-weight: 700; } .ratio-bad::before { content: "▲ "; color: var(--st-crit); }
+    .ratio-warn::before { content: "△ "; color: var(--st-serious); }
+    #events td:first-child { white-space: nowrap; }
+    .kind { font-size: .72rem; padding: 0 .35rem; border-radius: 3px; background: #eef2fa; }
+    .kind.errors, .kind.stop { background: #fbd5da; } .kind.load { background: #ffe8d6; } .kind.phase { background: #d9ecff; }
+    .kind.end, .kind.cleanup { background: #d6f2df; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; } @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>⚡ Chaos Controller</h1>
+  <a href="/">Panel</a><a href="/experiments">Deney geçmişi</a>
+  <a th:href="@{/experiments/{id}(id=${id})}">Ayrıntılı kayıt</a>
+</header>
+<main th:attr="data-id=${id}" id="root">
+  <section>
+    <h2 id="title">Deney izleme</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="v"><span class="state" id="state">…</span></div><div class="l">Durum</div></div>
+      <div class="kpi"><div class="v" id="phase">-</div><div class="l">Faz</div></div>
+      <div class="kpi"><div class="v" id="elapsed">-</div><div class="l">Geçen / planlanan</div></div>
+      <div class="kpi"><div class="v" id="remaining">-</div><div class="l">Kalan</div></div>
+      <div class="kpi"><div class="v" id="totalRps">-</div><div class="l">Toplam gerçekleşen RPS (son 5 sn)</div></div>
+      <div class="kpi"><div class="v" id="totalErr">-</div><div class="l">Toplam hata / düşen</div></div>
+      <div style="margin-left:auto"><button class="danger" id="stopBtn" style="display:none" onclick="stopExp()">Bu deneyi durdur</button></div>
+    </div>
+    <p class="muted" id="plan"></p>
+    <div class="phasebar" id="phasebar"></div>
+    <div class="phaselabels" id="phaselabels"></div>
+    <p id="msg"></p>
+  </section>
+
+  <div class="two">
+    <section>
+      <h2>Gerçekleşen RPS — uygulama başına (tüm kaynaklar)</h2>
+      <div class="legend" id="lg-rps"></div>
+      <div class="chart" id="ch-rps"></div>
+    </section>
+    <section>
+      <h2>Hata + düşen istek — 5 sn'lik aralık başına</h2>
+      <div class="legend" id="lg-err"></div>
+      <div class="chart" id="ch-err"></div>
+    </section>
+  </div>
+
+  <section id="liveSec">
+    <h2>Canlı üreticiler (mevcut faz)</h2>
+    <table id="live"><thead><tr><th>Kaynak</th><th>Uygulama</th><th>Mod</th><th>Aktif</th><th class="num">Uçuşta</th>
+      <th class="num">Hedeflenen</th><th class="num">Gönderilen</th><th class="num">Yanıt</th><th class="num">Hata</th>
+      <th class="num">Düşen</th><th class="num">Veri yok</th><th class="num">RPS</th></tr></thead><tbody></tbody></table>
+    <p class="muted" id="liveNote"></p>
+  </section>
+
+  <section>
+    <h2>Faz karşılaştırması — operasyon başına p95 (ms)</h2>
+    <table id="cmp"><thead></thead><tbody></tbody></table>
+    <p class="muted">Oran = yük p95 / baseline p95. ▲ ≥ 2×, △ ≥ 1.5×. Her satırın p95'i kendi örneklerinden hesaplanır.
+      Hatalar = 5xx + timeout + IO. Bu sayfa yük üreticisinin (istemci) gözünden ölçer; sunucu tarafı nedenleri
+      Dynatrace / SRE Agent gösterir.</p>
+  </section>
+
+  <section>
+    <h2>Olay günlüğü — neler yapıldı</h2>
+    <table id="events"><thead><tr><th>Saat (TSİ)</th><th>Faz</th><th>Tür</th><th>Olay</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section>
+    <details><summary>Zaman serisi tablo görünümü (son 60 örnek)</summary><table id="tstable"></table></details>
+    <p class="muted" id="producer"></p>
+  </section>
+</main>
+<script>
+const ID = document.getElementById('root').dataset.id;
+const APPS = ['reservation', 'checkin', 'flightops', 'baggage'];
+const COLOR = Object.fromEntries(APPS.map(a => [a, getComputedStyle(document.documentElement).getPropertyValue('--s-' + a).trim()]));
+const PHASES = ['WARMUP', 'BASELINE', 'LOAD', 'RECOVERY'];
+const PHASE_TR = { WARMUP: 'Warm-up', BASELINE: 'Baseline', LOAD: 'Yük', RECOVERY: 'Recovery', DONE: 'Bitti' };
+const ACTIVE = new Set(['RUNNING', 'STOPPING']);
+let rec = null, timer = null, hover = {};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const tr = t => t ? new Date(t).toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul' }) : '-';
+const mmss = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const plannedOf = (sp, p) => ({ WARMUP: sp.warmupSec, BASELINE: sp.baselineSec, LOAD: sp.loadSec, RECOVERY: sp.recoverySec })[p] || 0;
+
+async function load() {
+  try {
+    const r = await fetch('/api/experiments/' + encodeURIComponent(ID));
+    if (r.status === 404) { $('msg').className = 'err'; $('msg').textContent = 'Deney bulunamadı: ' + ID; stopPolling(); return; }
+    rec = await r.json();
+    render();
+    if (ACTIVE.has(rec.state)) {
+      const s = await (await fetch('/api/status')).json();
+      renderLive(s.experimentId === ID ? s.live : null);
+    } else {
+      renderLive(null);
+      stopPolling();
+    }
+  } catch (e) { $('msg').className = 'err'; $('msg').textContent = 'Bağlantı hatası: ' + e; }
+}
+function stopPolling() { if (timer) { clearInterval(timer); timer = null; } }
+
+function render() {
+  const sp = rec.spec, active = ACTIVE.has(rec.state);
+  $('title').textContent = (sp.name || '(adsız deney)') + ' — ' + rec.experimentId + (sp.scenario ? '  [' + sp.scenario + ']' : '');
+  $('state').textContent = rec.state; $('state').className = 'state ' + rec.state;
+  $('phase').textContent = PHASE_TR[rec.currentPhase] || rec.currentPhase;
+  const total = PHASES.reduce((a, p) => a + plannedOf(sp, p), 0);
+  const start = rec.startedAt ? new Date(rec.startedAt) : null;
+  const end = rec.endedAt ? new Date(rec.endedAt) : new Date();
+  const el = start ? (end - start) / 1000 : 0;
+  $('elapsed').textContent = mmss(el) + ' / ' + mmss(total);
+  $('remaining').textContent = active ? mmss(total - el) : '—';
+  $('stopBtn').style.display = rec.state === 'RUNNING' ? '' : 'none';
+  $('plan').textContent = 'Başlangıç ' + tr(rec.startedAt) + (rec.endedAt ? ' · bitiş ' + tr(rec.endedAt) : '') +
+    ' · hedefler: ' + (sp.targets.length ? sp.targets.map(t => t.app + ' ' + (t.mode === 'RPS' ? t.rps + ' RPS' : t.concurrency + ' eşzamanlı') +
+      (t.holdMs ? ' hold ' + t.holdMs + 'ms' : '') + (t.hotRow ? ' hot-row' : '') + ' (' + t.activePhases + ')').join(', ') : 'yok') +
+    ' · arka plan: ' + (sp.background.enabled ? sp.background.rpsPerApp + ' RPS/uygulama' : 'kapalı') +
+    (rec.stopReason ? ' · durdurma nedeni: ' + rec.stopReason : '');
+  renderPhaseBar(sp, total);
+  const tl = rec.timeline || [];
+  const last = tl[tl.length - 1];
+  if (last) {
+    const vals = Object.values(last.series);
+    $('totalRps').textContent = vals.reduce((a, v) => a + v.rps, 0).toFixed(1);
+  }
+  const errs = tl.reduce((a, p) => a + Object.values(p.series).reduce((b, v) => b + v.errors, 0), 0);
+  const drops = tl.reduce((a, p) => a + Object.values(p.series).reduce((b, v) => b + v.dropped, 0), 0);
+  $('totalErr').textContent = errs + ' / ' + drops;
+  const byApp = (field) => tl.map(p => { const o = { t: new Date(p.t), phase: p.phase };
+    for (const a of APPS) o[a] = 0;
+    for (const [k, v] of Object.entries(p.series)) { const a = k.split('/')[1]; if (a in o) o[a] += field(v); }
+    return o; });
+  const appsPresent = APPS.filter(a => tl.some(p => Object.keys(p.series).some(k => k.endsWith('/' + a))));
+  lineChart('ch-rps', 'lg-rps', byApp(v => v.rps), appsPresent, 'RPS', 1);
+  lineChart('ch-err', 'lg-err', byApp(v => v.errors + v.dropped), appsPresent, 'adet', 0);
+  renderCompare();
+  renderEvents();
+  renderTsTable(tl);
+  const pr = rec.producer || {};
+  $('producer').textContent = 'Yük üreticisi (chaos-controller JVM): CPU ort. %' + (pr.processCpuAvgPct ?? '-') + ', maks. %' +
+    (pr.processCpuMaxPct ?? '-') + ', heap maks. ' + (pr.heapMaxMb ?? '-') + ' MB, thread maks. ' + (pr.threadsMax ?? '-') +
+    ' — üretici doyarsa (yüksek CPU, düşen istek) ölçülen gecikme sunucuyu değil üreticiyi yansıtır.';
+}
+
+function renderPhaseBar(sp, total) {
+  const now = new Date();
+  let bar = '', lab = '';
+  for (const p of PHASES) {
+    const plan = plannedOf(sp, p); if (!plan) continue;
+    const ph = (rec.phases || {})[p];
+    let pct = 0;
+    if (ph) { const s = new Date(ph[0]), e = ph[1] ? new Date(ph[1]) : (ACTIVE.has(rec.state) ? now : new Date(rec.endedAt || now));
+      pct = Math.min(100, (e - s) / 1000 / plan * 100); }
+    const cur = rec.currentPhase === p && ACTIVE.has(rec.state);
+    bar += `<div class="seg ${p}${cur ? ' cur' : ''}" style="flex:${plan}" title="${PHASE_TR[p]}: planlanan ${plan} sn">` +
+           `<div class="fill" style="width:${pct.toFixed(1)}%"></div><span>${PHASE_TR[p]} ${Math.round(pct)}%</span></div>`;
+    lab += `<div style="flex:${plan}">${ph ? tr(ph[0]) : 'bekliyor'} · ${plan} sn</div>`;
+  }
+  $('phasebar').innerHTML = bar; $('phaselabels').innerHTML = lab;
+}
+
+// ---- grafik: tek eksen, sabit renk (uygulama), faz bantları, çizgi sonu etiketi, crosshair tooltip
+function lineChart(boxId, legendId, pts, apps, unit, dec) {
+  const box = $(boxId), W = Math.max(320, box.clientWidth || 560), H = 230, m = { l: 44, r: 96, t: 10, b: 26 };
+  $(legendId).innerHTML = apps.map(a => `<span><i style="background:${COLOR[a]}"></i>${a}</span>`).join('');
+  if (pts.length < 2) { box.innerHTML = '<p class="muted">Veri bekleniyor (5 sn\'de bir örnek alınır)…</p>'; return; }
+  const x0 = pts[0].t, x1 = pts[pts.length - 1].t;
+  const ymaxRaw = Math.max(1, ...pts.flatMap(p => apps.map(a => p[a])));
+  const step = niceStep(ymaxRaw / 4), ymax = Math.ceil(ymaxRaw / step) * step;
+  const X = t => m.l + (t - x0) / Math.max(1, x1 - x0) * (W - m.l - m.r);
+  const Y = v => H - m.b - v / ymax * (H - m.t - m.b);
+  let s = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${esc(unit)} zaman serisi">`;
+  // faz bantları
+  for (const p of PHASES) {
+    const ph = (rec.phases || {})[p]; if (!ph) continue;
+    const a = Math.max(x0, new Date(ph[0])), b = Math.min(x1, ph[1] ? new Date(ph[1]) : x1);
+    if (b <= a) continue;
+    s += `<rect x="${X(a)}" y="${m.t}" width="${Math.max(0, X(b) - X(a))}" height="${H - m.t - m.b}" fill="${p === 'LOAD' ? '#fbe3d8' : (p === 'BASELINE' ? '#eef4fc' : '#f4f3ef')}"/>`;
+    s += `<text x="${X(a) + 4}" y="${m.t + 12}" font-size="10" fill="#52514e">${PHASE_TR[p]}</text>`;
+  }
+  for (let v = 0; v <= ymax + 1e-9; v += step) {
+    s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e6e5e0" stroke-width="1"/>` +
+         `<text x="${m.l - 6}" y="${Y(v) + 4}" font-size="10" text-anchor="end" fill="#52514e">${fmt(v, dec)}</text>`;
+  }
+  const ticks = 5;
+  for (let i = 0; i <= ticks; i++) {
+    const t = new Date(+x0 + (x1 - x0) * i / ticks);
+    s += `<text x="${X(t)}" y="${H - 8}" font-size="10" text-anchor="middle" fill="#52514e">${tr(t).slice(0, 5)}</text>`;
+  }
+  // çizgiler + sonda doğrudan etiket (≤4 seri)
+  const labels = [];
+  for (const a of apps) {
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Y(p[a]).toFixed(1)).join(' ');
+    s += `<path d="${d}" fill="none" stroke="${COLOR[a]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    labels.push({ a, y: Y(pts[pts.length - 1][a]), v: pts[pts.length - 1][a] });
+  }
+  labels.sort((p, q) => p.y - q.y);
+  for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 12) labels[i].y = labels[i - 1].y + 12;
+  for (const l of labels) {
+    s += `<circle cx="${W - m.r + 6}" cy="${l.y}" r="4" fill="${COLOR[l.a]}" stroke="#fcfcfb" stroke-width="2"/>` +
+         `<text x="${W - m.r + 14}" y="${l.y + 4}" font-size="11" fill="#0b0b0b">${l.a} ${fmt(l.v, dec)}</text>`;
+  }
+  s += `<line id="${boxId}-x" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="#52514e" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>`;
+  s += `<rect x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent" id="${boxId}-hit"/></svg>` +
+       `<div class="tip" id="${boxId}-tip"></div>`;
+  box.innerHTML = s;
+  const hit = $(boxId + '-hit'), line = $(boxId + '-x'), tip = $(boxId + '-tip'), svg = box.querySelector('svg');
+  const show = (clientX) => {
+    const r = svg.getBoundingClientRect(), sx = (clientX - r.left) * W / r.width;
+    const t = +x0 + (sx - m.l) / (W - m.l - m.r) * (x1 - x0);
+    let i = 0, best = Infinity;
+    pts.forEach((p, k) => { const d = Math.abs(p.t - t); if (d < best) { best = d; i = k; } });
+    const p = pts[i], px = X(p.t);
+    line.setAttribute('x1', px); line.setAttribute('x2', px); line.setAttribute('visibility', 'visible');
+    tip.innerHTML = `<b>${tr(p.t)}</b> · ${PHASE_TR[p.phase] || p.phase}<br>` +
+      apps.map(a => `<i style="background:${COLOR[a]}"></i>${a}: <b>${fmt(p[a], dec)}</b> ${unit}`).join('<br>');
+    tip.style.display = 'block';
+    const left = px * r.width / W;
+    tip.style.left = (left + 12 + 190 > r.width ? left - 200 : left + 12) + 'px'; tip.style.top = '8px';
+    hover[boxId] = clientX;
+  };
+  hit.addEventListener('mousemove', e => show(e.clientX));
+  hit.addEventListener('mouseleave', () => { line.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; delete hover[boxId]; });
+  if (hover[boxId] !== undefined) show(hover[boxId]);
+}
+function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(Math.max(x, 1e-9)))), f = x / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+function fmt(v, dec) { return Number(v).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: dec }); }
+
+function renderLive(live) {
+  const tb = document.querySelector('#live tbody');
+  if (!live) { tb.innerHTML = ''; $('liveNote').textContent = ACTIVE.has(rec?.state) ? 'Canlı veri alınamadı.' : 'Deney aktif değil; özet aşağıdaki tablolarda.'; return; }
+  $('liveNote').textContent = 'Sayaçlar mevcut faz içindir; 3 sn\'de bir yenilenir.';
+  tb.innerHTML = live.map(r => `<tr><td>${esc(r.source)}</td><td>${esc(r.app)}</td><td>${esc(r.mode)}</td><td>${r.active ? 'evet' : 'hayır'}</td>` +
+    ['inFlight', 'intended', 'sent', 'completed', 'errors', 'dropped', 'noData', 'achievedRps'].map(k => `<td class="num">${r[k]}</td>`).join('') + '</tr>').join('');
+}
+
+function renderCompare() {
+  const rows = rec.results || [];
+  const key = r => r.source + '|' + r.app + '|' + r.op;
+  const g = {};
+  for (const r of rows) { (g[key(r)] ??= { source: r.source, app: r.app, op: r.op })[r.phase] = r; }
+  const ph = PHASES.filter(p => p !== 'WARMUP');
+  $('cmp').querySelector('thead').innerHTML = '<tr><th>Kaynak</th><th>Uygulama</th><th>Operasyon</th>' +
+    ph.map(p => `<th class="num">${PHASE_TR[p]} p95</th>`).join('') + '<th class="num">Oran</th>' +
+    ph.map(p => `<th class="num">${PHASE_TR[p]} hata</th>`).join('') + '</tr>';
+  const list = Object.values(g).sort((a, b) => (a.source === 'background') - (b.source === 'background') || a.app.localeCompare(b.app) || a.op.localeCompare(b.op));
+  $('cmp').querySelector('tbody').innerHTML = list.map(x => {
+    const b = x.BASELINE?.p95Ms, l = x.LOAD?.p95Ms, ratio = b && l ? l / b : null;
+    const cls = ratio >= 2 ? 'ratio-bad' : ratio >= 1.5 ? 'ratio-warn' : '';
+    return `<tr><td>${esc(x.source)}</td><td><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLOR[x.app] || '#999'};margin-right:.3rem"></i>${esc(x.app)}</td><td>${esc(x.op)}</td>` +
+      ph.map(p => `<td class="num">${x[p] ? fmt(x[p].p95Ms, 1) : '—'}</td>`).join('') +
+      `<td class="num ${cls}">${ratio ? fmt(ratio, 2) + '×' : '—'}</td>` +
+      ph.map(p => { const r = x[p]; if (!r) return '<td class="num">—</td>'; const e = r.serverError + r.timeout + r.ioError;
+        return `<td class="num">${e}${r.dropped ? ' (+' + r.dropped + ' düşen)' : ''}</td>`; }).join('') + '</tr>';
+  }).join('') || '<tr><td colspan="9" class="muted">Henüz sonuç yok</td></tr>';
+}
+
+function renderEvents() {
+  const ev = rec.events;
+  const tb = document.querySelector('#events tbody');
+  if (!ev) { tb.innerHTML = '<tr><td colspan="4" class="muted">Bu kayıt olay günlüğü özelliğinden önce oluşturuldu.</td></tr>'; return; }
+  tb.innerHTML = ev.slice().reverse().map(e => `<tr><td title="${esc(e.t)} UTC">${tr(e.t)}</td><td>${esc(PHASE_TR[e.phase] || e.phase)}</td>` +
+    `<td><span class="kind ${esc(e.kind)}">${esc(e.kind)}</span></td><td>${esc(e.message)}</td></tr>`).join('');
+}
+
+function renderTsTable(tl) {
+  const keys = [...new Set(tl.flatMap(p => Object.keys(p.series)))];
+  const last = tl.slice(-60);
+  $('tstable').innerHTML = '<tr><th>Saat</th><th>Faz</th>' + keys.map(k => `<th class="num">${esc(k)} RPS</th><th class="num">hata</th><th class="num">uçuşta</th>`).join('') + '</tr>' +
+    last.slice().reverse().map(p => `<tr><td>${tr(p.t)}</td><td>${PHASE_TR[p.phase] || p.phase}</td>` + keys.map(k => { const v = p.series[k];
+      return v ? `<td class="num">${fmt(v.rps, 1)}</td><td class="num">${v.errors + v.dropped}</td><td class="num">${v.inFlight}</td>` : '<td></td><td></td><td></td>'; }).join('') + '</tr>').join('');
+}
+
+async function stopExp() {
+  if (!confirm('Bu deney durdurulsun mu? Yük durur, sunucu tarafı cleanup çalışır.')) return;
+  const r = await fetch('/api/experiments/' + encodeURIComponent(ID) + '/stop', { method: 'POST' });
+  $('msg').className = r.ok ? 'msg' : 'err';
+  $('msg').textContent = r.ok ? 'Durdurma istendi.' : 'Durdurulamadı (' + r.status + ')';
+  load();
+}
+
+window.addEventListener('resize', () => rec && render());
+load();
+timer = setInterval(load, 3000);
+</script>
+</body>
+</html>
