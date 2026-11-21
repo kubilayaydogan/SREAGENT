@@ -1,0 +1,6 @@
+lab_monitor|pg-lock-collector|idle|1
+lab_monitor|psql|active|1
+svc_baggage|baggage-service|idle|3
+svc_checkin|checkin-service|idle|3
+svc_flightops|flightops-service|idle|3
+svc_reservation|reservation-service|idle|3

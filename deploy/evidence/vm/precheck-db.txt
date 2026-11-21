@@ -1,0 +1,17 @@
+== db-vm — Rocky Linux 10.1 (Red Quartz) — rol: db
+OK     işletim sistemi rocky 10.1
+OK     mimari x86_64
+OK     x86-64-v3 CPU bayrakları
+   vCPU=6 RAM=5614MB  boş: /=63G /opt=63G /var=63G
+OK     RAM ≥ 4 GB
+OK     vCPU ≥ 2
+OK     /var ≥ 10 GB (PGDATA)
+OK     SELinux Enforcing
+OK     firewalld aktif
+OK     saat sapması 0.000233452s
+OK     HTTPS çıkışı mfi74785.live.dynatrace.com (HTTP 200)
+OK     HTTPS çıkışı mfi74785.apps.dynatrace.com (HTTP 401)
+OK     HTTPS çıkışı download.postgresql.org
+OK     HTTPS çıkışı download.docker.com
+   IP'ler: 172.20.233.108   varsayılan ağ geçidi: 172.20.224.1
+SONUÇ: kuruluma geçilebilir

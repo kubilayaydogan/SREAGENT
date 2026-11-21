@@ -1,0 +1,37 @@
+--- systemd
+active
+--- container DEĞİL
+none
+(container değil)
+--- dinleme
+LISTEN 0      200    172.20.233.108:5432      0.0.0.0:*    users:(("postgres",pid=4706,fd=7))
+--- firewalld
+rule family="ipv4" source address="172.20.229.26/32" port port="5432" protocol="tcp" accept
+--- SELinux
+Enforcing
+--- saat
+System time     : 0.000409691 seconds slow of NTP time
+Leap status     : Normal
+--- ayarlar
+compute_query_id=on
+log_lock_waits=on
+max_connections=100
+reserved_connections=3
+shared_preload_libraries=pg_stat_statements
+superuser_reserved_connections=3
+track_io_timing=on
+--- extension
+plpgsql 1.0
+pg_stat_statements 1.11
+--- roller
+dynatrace|5|search_path=dynatrace, public
+lab_monitor|5|statement_timeout=5s,default_transaction_read_only=on
+lab_owner|5|statement_timeout=0
+svc_baggage|40|statement_timeout=15s,lock_timeout=8s,idle_in_transaction_session_timeout=30s
+svc_checkin|40|statement_timeout=15s,lock_timeout=8s,idle_in_transaction_session_timeout=30s
+svc_flightops|40|statement_timeout=15s,lock_timeout=8s,idle_in_transaction_session_timeout=30s
+svc_reservation|40|statement_timeout=15s,lock_timeout=8s,idle_in_transaction_session_timeout=30s
+--- servis bağlantıları (rol/application_name)
+postgres|psql|active|1
+--- veri tutarlılığı
+(migration henüz yok)

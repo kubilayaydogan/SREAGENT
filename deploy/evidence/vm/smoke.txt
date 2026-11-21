@@ -1,0 +1,41 @@
+== 0. Sağlık
+  [OK]   http://172.20.229.26:8081 health (UP)
+  [OK]   http://172.20.229.26:8082 health (UP)
+  [OK]   http://172.20.229.26:8083 health (UP)
+  [OK]   http://172.20.229.26:8084 health (UP)
+== 1. Reservation UI: rezervasyon oluştur (idempotent form)
+  [OK]   UI yönlendirme → http://172.20.229.26:8081/ui/bookings/5PZP55
+  [OK]   aynı form tekrar gönderimi aynı PNR (5PZP55)
+  [OK]   API booking durumu (CONFIRMED)
+  [OK]   DB booking durumu (CONFIRMED)
+  [OK]   DB tek kayıt (idempotency) (1)
+  [OK]   DB envanter sold+1 (84)
+  [OK]   UI rezervasyon sayfası PNR gösteriyor
+== 2. Check-in UI: check-in + koltuk
+  [OK]   DB check-in tek kayıt (1)
+  [OK]   DB envanter checked_in+1 (tekrar sayılmadı) (84)
+  [OK]   DB koltuk atandı (31A)
+  [OK]   API koltuk (31A)
+== 3. Reservation UI: check-in sonrası iptal reddedilmeli
+  [OK]   check-in yapılmış rezervasyon iptal edilmedi (CONFIRMED)
+== 4. Baggage UI: bagaj kaydı + olay
+  [OK]   bagaj UI yönlendirme → B0LPKXCJ39
+  [OK]   DB bagaj CHECKED (CHECKED)
+  [OK]   DB bagaj LOADED (LOADED)
+  [OK]   DB bagaj olay sayısı (2)
+  [OK]   API bagaj durumu (LOADED)
+== 5. Reservation UI: ikinci rezervasyon + iptal
+  [OK]   DB iptal (CANCELLED)
+  [OK]   DB envanter sold-1 (84)
+== 6. FlightOps UI: durum ve kapasite
+  [OK]   DB uçuş durumu (DELAYED/C7/35)
+  [OK]   satılanın altına kapasite reddedildi (239)
+  [OK]   DB kapasite güncellendi (244)
+== 7. Veri bütünlüğü ve servis eşlemesi
+  [OK]   lab.integrity_check ihlal yok (0)
+  [OK]   DB oturumu svc_baggage=baggage-service
+  [OK]   DB oturumu svc_checkin=checkin-service
+  [OK]   DB oturumu svc_flightops=flightops-service
+  [OK]   DB oturumu svc_reservation=reservation-service
+
+SONUÇ: 31 başarılı, 0 başarısız

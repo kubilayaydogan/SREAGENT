@@ -1,0 +1,18 @@
+[main] INFO org.flywaydb.core.internal.command.DbMigrate - Migrating schema "lab" to version "3 - grants"
+[main] INFO org.flywaydb.core.internal.command.DbMigrate - Migrating schema "lab" to version "4 - seed functions"
+[main] INFO org.flywaydb.core.internal.command.DbMigrate - Successfully applied 4 migrations to schema "lab", now at version v4 (execution time 00:00.091s)
+migrate: 4 migration uygulandı, hedef sürüm=4
+--- seed
+ Container airlab-db-migrator-run-2102a23de51d Creating 
+ Container airlab-db-migrator-run-2102a23de51d Created 
+Picked up JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Duser.timezone=UTC -Dfile.encoding=UTF-8
+seed tamam (1.2s): {"bags": 6701, "scale": 1, "seats": 9564, "db_size": "33 MB", "flights": 204, "bookings": 28000, "checkins": 9564, "bag_events": 33505, "hot_flights": 4, "events_per_bag": 5}
+--- check
+ Container airlab-db-migrator-run-4f7901ee613d Creating 
+ Container airlab-db-migrator-run-4f7901ee613d Created 
+Picked up JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Duser.timezone=UTC -Dfile.encoding=UTF-8
+overbooked_flights               0
+inventory_checkedin_mismatch     0
+bag_without_checkin              0
+inventory_sold_mismatch          0
+checkin_on_cancelled_booking     0

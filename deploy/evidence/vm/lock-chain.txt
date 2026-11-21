@@ -1,0 +1,5 @@
+sıcak uçuş=201 check-in PNR=S000G6X experiment_id=demo-1795262366 hold=4000ms
+--- blocking zinciri (waiter ← blocker):
+checkin-service(svc_checkin) pid 9385 Lock/transactionid  ←  reservation-service(svc_reservation) pid 9381 xact_age=1.47s
+reservation hold → HTTP 200 4.075926s
+checkin        → HTTP 201 3.427661s (bekleme dahil)
