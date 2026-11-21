@@ -40,7 +40,8 @@ sudo sh -c 'cd /root/ag-pkg && env LANG=C LC_ALL=C /bin/bash ./Dynatrace-Remote-
 systemctl is-active dynatracegateway extensionsmodule
 ```
 Bilinen sorun (2026-11-21): PostgreSQL extension 2.9.8 / 3.0.10 / 3.1.0 / 3.2.10 bu ActiveGate'te (1.349, sqlPostgres 1.349.20261013)
-`INVALID_CONFIG_ERROR` veriyor (`blocking_statements` log grubu, "Invalid attribute type string"); Locks'u kapatmak çözmüyor.
+`INVALID_CONFIG_ERROR` veriyor ("Invalid attribute type string", `SqlGroup.validateLogIngest`): veri kaynağı tüm `ingest: log`
+gruplarını reddediyor. Locks kapatılınca hata `host_configurations` (featureSet `default`, kapatılamaz) grubuna geçiyor.
 Yapmayın: aynı installer'ı güncelleme kipinde yeniden çalıştırmak — indirilmiş bileşeni silip yeniden indirir.
 
 ### Gerçek kurulumda karşılaşılanlar (2026-11-21) ve çözümleri

@@ -58,8 +58,9 @@ Docker 29'un kaynak IP'yi koruması (lab uçları 403 → `LAB_ALLOWED_CIDRS`), 
 
 1. **PostgreSQL extension çalışmıyor (Dynatrace tarafı uyumsuzluk).** `com.dynatrace.extension.postgres` 3.2.10, 3.1.0, 3.0.10 ve 2.9.8
    ActiveGate 1.349 / sqlPostgres veri kaynağı `1.349.20261013` üzerinde `INVALID_CONFIG_ERROR` (kod 32) veriyor:
-   `Verification failed! Invalid attribute type string` — `blocking_statements` (Locks, `ingest: log`) grubu. Denetim tanımın
-   tamamına uygulandığı için Locks özellik setini kapatmak sonucu değiştirmiyor; DB'ye hiç bağlanılmıyor. Kanıt (APP_VM):
+   `Verification failed! Invalid attribute type string` (`SqlGroup.validateLogIngest`). İlk takılan grup `blocking_statements`
+   (Locks); Locks kapatılınca hata `host_configurations` (`pg_settings`, **featureSet `default`**, kapatılamaz) grubuna geçiyor →
+   veri kaynağı **tüm `ingest: log` gruplarını** reddediyor; hiçbir özellik seçimiyle çalışmaz, DB'ye hiç bağlanılmıyor. Kanıt (APP_VM):
    `/var/lib/dynatrace/remotepluginmodule/log/extensions/datasources/com.dynatrace.extension.postgres/dynatracesourcesql.jar_fastcheck.log`.
    Etki: `postgres.*` metrikleri ve extension top-queries yok. DB sinyalleri collector (`airlab.pg.*`, `blocking_edge`, `pg_stat_statements` özeti),
    PostgreSQL sunucu logları ve OneAgent DB çağrılarıyla karşılanıyor. ActiveGate/extension güncellenince yeniden denenebilir.
