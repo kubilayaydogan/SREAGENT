@@ -9,7 +9,7 @@ Son güncelleme: 2026-11-21 · Aşama: **1 — VM'lere kuruldu; deneyler ve Post
 | Kaynak kod tamamlandı | 4 iş servisi, chaos-controller, db-migrator, lab-common, pg-lock-collector, VM betikleri, belgeler | ✅ derleme + 29 test |
 | Yerelde uçtan uca doğrulandı | Docker Desktop: PG17 + 5 Java container | ✅ smoke 31/31, E1–E8 tek koşu |
 | İki VM üzerinde kuruldu ve doğrulandı | `app-vm` 172.20.229.26 + `db-vm` 172.20.233.108 (Hyper-V, Rocky 10.1) | ✅ PG17 systemd, Docker, 5 servis + collector, smoke 31/31, gerçek kilit zinciri |
-| Gerçek Dynatrace + MCP | tenant `mfi74785`, Remote MCP `execute-dql` | ✅ 13/15 kapı sinyali veriyle okundu; ⏳ PostgreSQL extension (ActiveGate hazır, UI yapılandırması bekliyor) |
+| Gerçek Dynatrace + MCP | tenant `mfi74785`, Remote MCP `execute-dql` | ✅ 13/15 kapı sinyali veriyle okundu; ❌ PostgreSQL extension (ActiveGate hazır; extension 3.x bu ActiveGate'te INVALID_CONFIG_ERROR) |
 | VM'de kontrollü deneyler | E0 → E2 → E1×3 | **AÇIK** |
 
 Ayrıntı ve kanıt: `docs/acceptance-gate.md`, `deploy/evidence/vm/`, `deploy/evidence/mcp-gate-*.json`.
@@ -56,7 +56,13 @@ Docker 29'un kaynak IP'yi koruması (lab uçları 403 → `LAB_ALLOWED_CIDRS`), 
 
 ## Açık maddeler
 
-1. **PostgreSQL extension:** ActiveGate + Extensions Module hazır; extension'ın Dynatrace UI'da yapılandırılması ve `postgres.*` metriklerinin MCP ile doğrulanması bekliyor.
+1. **PostgreSQL extension çalışmıyor (Dynatrace tarafı uyumsuzluk).** `com.dynatrace.extension.postgres` 3.2.10, 3.1.0 ve 3.0.10
+   ActiveGate 1.349 / sqlPostgres veri kaynağı `1.349.20261013` üzerinde `INVALID_CONFIG_ERROR` (kod 32) veriyor:
+   `Verification failed! Invalid attribute type string` — `blocking_statements` (Locks, `ingest: log`) grubu. Denetim tanımın
+   tamamına uygulandığı için Locks özellik setini kapatmak sonucu değiştirmiyor; DB'ye hiç bağlanılmıyor. Kanıt (APP_VM):
+   `/var/lib/dynatrace/remotepluginmodule/log/extensions/datasources/com.dynatrace.extension.postgres/dynatracesourcesql.jar_fastcheck.log`.
+   Etki: `postgres.*` metrikleri ve extension top-queries yok. DB sinyalleri collector (`airlab.pg.*`, `blocking_edge`, `pg_stat_statements` özeti),
+   PostgreSQL sunucu logları ve OneAgent DB çağrılarıyla karşılanıyor. ActiveGate/extension güncellenince yeniden denenebilir.
 2. **VM'de deneyler:** E0 → E2 → E1×3 (kriter 5–9, 11'in VM kanıtı).
 3. JVM heap/GC sorgusu ve `dt.trace_id` ile trace ↔ log korelasyonu doğrulanmadı.
 4. Default Switch IP'leri Windows yeniden başlayınca değişebilir.
