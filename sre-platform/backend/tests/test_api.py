@@ -227,6 +227,9 @@ def test_dashboard_reports_missing_data_honestly(api_settings, tmp_path):
         a = (await c.get("/api/applications/checkin-service/metrics?range=1h", headers=h)).json()
         assert a["status"] == "unknown" and a["metrics"]["p95_ms"] is None and a["series"] == []
         assert (await c.get("/api/dashboard/summary?range=7d", headers=h)).status_code == 422
+        one = (await c.get("/api/dashboard/summary?application_id=checkin-service", headers=h)).json()
+        assert set(one["overall"]) == set(d["overall"]) and one["overall"]["p95_ms_worst"] is None  # aynı sözleşme
+        assert one["monitored_applications"] == 1
     def empty(on_event=None):
         from synth import FakeGateway
         return FakeGateway({})

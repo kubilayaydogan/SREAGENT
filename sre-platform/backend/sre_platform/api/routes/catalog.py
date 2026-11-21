@@ -57,6 +57,17 @@ async def app_metrics(app_id: str, request: Request, range: RangeKey = "1h", _: 
     return _app_view(snap, app_id, True)
 
 
+def _single_overall(a: dict | None, snap: dict) -> dict:
+    """Tek uygulama filtresinde genel görünümle AYNI anahtarlar (p95_ms_worst = o uygulamanın p95'i)."""
+    if not snap.get("available"):
+        return {}
+    a = a or {}
+    db = snap.get("db") or {}
+    return {"throughput_rpm": a.get("throughput_rpm"), "error_rate": a.get("error_rate"), "mean_ms": a.get("mean_ms"),
+            "p95_ms_worst": a.get("p95_ms"), "p99_ms_worst": a.get("p99_ms"),
+            "db_connection_ratio": db.get("last_ratio"), "db_connection_ratio_max": db.get("max_ratio")}
+
+
 @router.get("/dashboard/summary")
 async def dashboard(request: Request, range: RangeKey = "1h", application_id: str | None = None,
                     _: User = Depends(current_user), s: AsyncSession = Depends(db)):
@@ -84,9 +95,7 @@ async def dashboard(request: Request, range: RangeKey = "1h", application_id: st
         "status_counts": counts,
         "active_incidents": inc_open.total,
         "open_investigations": inv_open.total,
-        "overall": snap.get("overall") if not application_id else
-        {k: (apps.get(application_id) or {}).get(k) for k in ("throughput_rpm", "error_rate", "mean_ms", "p95_ms",
-                                                              "p99_ms")} | {"db_connection_ratio": (snap.get("db") or {}).get("last_ratio")},
+        "overall": snap.get("overall") if not application_id else _single_overall(apps.get(application_id), snap),
         "db": snap.get("db"), "db_series": snap.get("db_series", []),
         "applications": {k: {"status": v["status"], "reasons": v["reasons"],
                              **{m: v.get(m) for m in ("throughput_rpm", "error_rate", "mean_ms", "p95_ms", "p99_ms",

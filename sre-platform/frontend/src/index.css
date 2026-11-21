@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/* Koyu tema tasarım belirteçleri. Grafik renkleri dataviz referans paletinin KOYU adımlarıdır (doğrulandı);
+   durum renkleri ayrılmıştır ve hiçbir zaman seri rengi olarak kullanılmaz (daima ikon + etiketle). */
+@theme {
+  --color-page: #0d0d0d;
+  --color-surface: #1a1a19;
+  --color-surface-2: #222220;
+  --color-surface-3: #2c2c2a;
+  --color-line: #2c2c2a;
+  --color-line-strong: #383835;
+  --color-ink: #f0efec;
+  --color-ink-2: #c3c2b7;
+  --color-muted: #898781;
+  --color-accent: #3987e5;
+  --color-accent-ink: #ffffff;
+
+  --color-st-good: #0ca30c;
+  --color-st-warning: #fab219;
+  --color-st-serious: #ec835a;
+  --color-st-critical: #d03b3b;
+  --color-st-unknown: #898781;
+
+  --color-app-reservation: #3987e5;
+  --color-app-checkin: #d95926;
+  --color-app-flightops: #199e70;
+  --color-app-baggage: #c98500;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  @apply bg-page text-ink antialiased;
+  font-feature-settings: "tnum" 1;
+}
+* {
+  scrollbar-color: #383835 transparent;
+  scrollbar-width: thin;
+}
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Markdown (ajan yanıtları, RCA) */
+.prose-sre {
+  @apply text-sm leading-relaxed text-ink-2;
+}
+.prose-sre h1 { @apply mt-4 mb-2 text-lg font-semibold text-ink; }
+.prose-sre h2 { @apply mt-4 mb-2 text-base font-semibold text-ink; }
+.prose-sre h3 { @apply mt-3 mb-1 text-sm font-semibold text-ink; }
+.prose-sre p { @apply my-2; }
+.prose-sre ul { @apply my-2 list-disc pl-5; }
+.prose-sre ol { @apply my-2 list-decimal pl-5; }
+.prose-sre li { @apply my-0.5; }
+.prose-sre strong { @apply text-ink; }
+.prose-sre a { @apply text-accent underline underline-offset-2; }
+.prose-sre code { @apply rounded bg-surface-3 px-1 py-0.5 font-mono text-[0.8em] text-ink; }
+.prose-sre pre { @apply my-2 overflow-x-auto rounded-md bg-page p-3; }
+.prose-sre pre code { @apply bg-transparent p-0; }
+.prose-sre blockquote { @apply my-2 border-l-2 border-st-warning bg-surface-2 px-3 py-1.5 text-ink; }
+.prose-sre table { @apply my-2 w-full border-collapse text-xs; }
+.prose-sre th { @apply border-b border-line-strong px-2 py-1 text-left font-medium text-ink; }
+.prose-sre td { @apply border-b border-line px-2 py-1; }
+.prose-sre hr { @apply my-3 border-line; }
+
+@keyframes blink { 50% { opacity: 0; } }
+.caret::after {
+  content: "▍";
+  margin-left: 1px;
+  animation: blink 1s step-end infinite;
+  color: var(--color-accent);
+}
