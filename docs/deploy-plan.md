@@ -232,6 +232,10 @@ export CHAOS_URL=http://172.20.229.26:8080 CHAOS_USER=chaos CHAOS_PASSWORD=<app-
 python3 scripts/run-experiment.py E0-normal-baseline --baseline 300 --json-out deploy/evidence/E0.json
 python3 scripts/run-experiment.py E2-hot-row-lock    --baseline 300 --load 300 --recovery 300 --json-out deploy/evidence/E2.json
 for i in 1 2 3; do python3 scripts/run-experiment.py E1-independent-baggage-read --baseline 300 --load 300 --recovery 300 --json-out deploy/evidence/E1-$i.json; done
+# Durdurma testi (kriter 11): yük fazında stop-all, DB'de saniyelik oturum örneklemesiyle
+python3 scripts/run-experiment.py E2-hot-row-lock --warmup 10 --baseline 30 --load 120 --recovery 30 --stop-after 75 --json-out deploy/evidence/E-stop.json
+# Deney pencerelerini Dynatrace'te MCP ile sorgula (Windows/yerel, DT_PLATFORM_TOKEN ortamda)
+python3 scripts/mcp-windows.py --env <env-id> deploy/evidence/E0.json deploy/evidence/E2.json deploy/evidence/E1-*.json --json-out deploy/evidence/mcp-experiment-windows.json
 ```
 5 dakikalık pencereler: extension 1 dk örnekler (≥ 5 örnek/pencere), top queries 5 dk'da bir gelir.
 Deney kayıtlarındaki UTC faz zamanlarını not edin.

@@ -1,0 +1,736 @@
+{
+ "generated": "2026-11-21T16:12:20.379778+00:00",
+ "tool": "execute-dql",
+ "results": {
+  "E0/BASELINE": {
+   "from": "2026-11-21T14:36:49.410701911Z",
+   "to": "2026-11-21T14:41:49.346772237Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "329",
+     "p95_ms": "26"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "298",
+     "p95_ms": "9"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "314",
+     "p95_ms": "31"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "314",
+     "p95_ms": "24"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "342",
+     "p95_ms": "31"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E0/LOAD": {
+   "from": "2026-11-21T14:41:49.346772237Z",
+   "to": "2026-11-21T14:43:49.331812422Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "132",
+     "p95_ms": "21"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "122",
+     "p95_ms": "10"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "126",
+     "p95_ms": "28"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "126",
+     "p95_ms": "13"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "138",
+     "p95_ms": "29"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E0/RECOVERY": {
+   "from": "2026-11-21T14:43:49.331812422Z",
+   "to": "2026-11-21T14:45:49.381576787Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "132",
+     "p95_ms": "25"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "118",
+     "p95_ms": "13"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "126",
+     "p95_ms": "30"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "126",
+     "p95_ms": "14"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "138",
+     "p95_ms": "28"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E2/BASELINE": {
+   "from": "2026-11-21T14:46:19.824852433Z",
+   "to": "2026-11-21T14:51:19.814636999Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "330",
+     "p95_ms": "25"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "302",
+     "p95_ms": "10"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "1217",
+     "p95_ms": "30"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "315",
+     "p95_ms": "14"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "358",
+     "p95_ms": "33"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 10.0
+    }
+   ]
+  },
+  "E2/LOAD": {
+   "from": "2026-11-21T14:51:19.814636999Z",
+   "to": "2026-11-21T14:56:19.827455789Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "330",
+     "p95_ms": "25"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "298",
+     "p95_ms": "12"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "1217",
+     "p95_ms": "4702"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "315",
+     "p95_ms": "15"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "345",
+     "p95_ms": "28"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "363"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "1200"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 20.0
+    }
+   ]
+  },
+  "E2/RECOVERY": {
+   "from": "2026-11-21T14:56:19.827455789Z",
+   "to": "2026-11-21T15:01:19.822422581Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "329",
+     "p95_ms": "28"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "296",
+     "p95_ms": "12"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "1216",
+     "p95_ms": "28"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "314",
+     "p95_ms": "23"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "344",
+     "p95_ms": "20"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "3"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "8"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 9.0
+    }
+   ]
+  },
+  "E1-1/BASELINE": {
+   "from": "2026-11-21T15:01:50.691213870Z",
+   "to": "2026-11-21T15:06:50.629747669Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "329",
+     "p95_ms": "30"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "298",
+     "p95_ms": "8"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "314",
+     "p95_ms": "30"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "314",
+     "p95_ms": "18"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "344",
+     "p95_ms": "25"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E1-1/LOAD": {
+   "from": "2026-11-21T15:06:50.629747669Z",
+   "to": "2026-11-21T15:11:50.633936324Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "4301",
+     "p95_ms": "5"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "296",
+     "p95_ms": "9"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "158",
+     "p95_ms": "28"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "178",
+     "p95_ms": "13"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "199",
+     "p95_ms": "16"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E1-1/RECOVERY": {
+   "from": "2026-11-21T15:11:50.633936324Z",
+   "to": "2026-11-21T15:16:50.659748663Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "281",
+     "p95_ms": "28"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "298",
+     "p95_ms": "13"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "267",
+     "p95_ms": "25"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "291",
+     "p95_ms": "13"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "328",
+     "p95_ms": "28"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E1-2/BASELINE": {
+   "from": "2026-11-21T15:17:22.095555262Z",
+   "to": "2026-11-21T15:22:22.112324145Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "329",
+     "p95_ms": "30"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "298",
+     "p95_ms": "8"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "314",
+     "p95_ms": "28"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "317",
+     "p95_ms": "25"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "344",
+     "p95_ms": "28"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E1-2/LOAD": {
+   "from": "2026-11-21T15:22:22.112324145Z",
+   "to": "2026-11-21T15:27:22.053200516Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "12127",
+     "p95_ms": "4"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "296",
+     "p95_ms": "10"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "315",
+     "p95_ms": "23"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "315",
+     "p95_ms": "23"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "345",
+     "p95_ms": "23"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E1-2/RECOVERY": {
+   "from": "2026-11-21T15:27:22.053200516Z",
+   "to": "2026-11-21T15:32:22.060602408Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "329",
+     "p95_ms": "26"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "298",
+     "p95_ms": "12"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "314",
+     "p95_ms": "28"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "314",
+     "p95_ms": "25"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "344",
+     "p95_ms": "28"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E1-3/BASELINE": {
+   "from": "2026-11-21T15:32:53.606785524Z",
+   "to": "2026-11-21T15:37:53.574993062Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "329",
+     "p95_ms": "30"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "298",
+     "p95_ms": "8"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "314",
+     "p95_ms": "28"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "314",
+     "p95_ms": "23"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "344",
+     "p95_ms": "25"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E1-3/LOAD": {
+   "from": "2026-11-21T15:37:53.574993062Z",
+   "to": "2026-11-21T15:42:53.614269326Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "12131",
+     "p95_ms": "5"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "296",
+     "p95_ms": "10"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "315",
+     "p95_ms": "25"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "315",
+     "p95_ms": "23"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "345",
+     "p95_ms": "23"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E1-3/RECOVERY": {
+   "from": "2026-11-21T15:42:53.614269326Z",
+   "to": "2026-11-21T15:47:53.551210444Z",
+   "spans": [
+    {
+     "svc": "baggage-service",
+     "n": "85",
+     "p95_ms": "28"
+    },
+    {
+     "svc": "chaos-controller",
+     "n": "70",
+     "p95_ms": "23"
+    },
+    {
+     "svc": "checkin-service",
+     "n": "79",
+     "p95_ms": "30"
+    },
+    {
+     "svc": "flightops-service",
+     "n": "79",
+     "p95_ms": "24"
+    },
+    {
+     "svc": "reservation-service",
+     "n": "75",
+     "p95_ms": "9"
+    }
+   ],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 0.0
+    }
+   ]
+  },
+  "E-stop/BASELINE": {
+   "from": "2026-11-21T16:00:57.257789613Z",
+   "to": "2026-11-21T16:01:27.318610007Z",
+   "spans": [],
+   "blocking_edges": [
+    {
+     "kenar": "0"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "0"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 15.0
+    }
+   ]
+  },
+  "E-stop/LOAD": {
+   "from": "2026-11-21T16:01:27.318610007Z",
+   "to": "2026-11-21T16:02:03.711228675Z",
+   "spans": [],
+   "blocking_edges": [
+    {
+     "kenar": "43"
+    }
+   ],
+   "pg_lock_wait_logs": [
+    {
+     "lock_wait_log": "161"
+    }
+   ],
+   "collector_waiters_max": [
+    {
+     "maks": 15.0
+    }
+   ]
+  }
+ }
+}

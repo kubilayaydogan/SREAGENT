@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-Son güncelleme: 2026-11-21 · Aşama: **1 — VM'lere kuruldu; deneyler ve PostgreSQL extension açık** · Aşama 2: **başlanmadı**
+Son güncelleme: 2026-11-21 · Aşama: **1 — VM'de kuruldu, deneyler ve MCP kapısı tamam; Aşama 2 kullanıcı onayı bekliyor** · Aşama 2: **başlanmadı**
 
 ## Özet
 
@@ -10,7 +10,7 @@ Son güncelleme: 2026-11-21 · Aşama: **1 — VM'lere kuruldu; deneyler ve Post
 | Yerelde uçtan uca doğrulandı | Docker Desktop: PG17 + 5 Java container | ✅ smoke 31/31, E1–E8 tek koşu |
 | İki VM üzerinde kuruldu ve doğrulandı | `app-vm` 172.20.229.26 + `db-vm` 172.20.233.108 (Hyper-V, Rocky 10.1) | ✅ PG17 systemd, Docker, 5 servis + collector, smoke 31/31, gerçek kilit zinciri |
 | Gerçek Dynatrace + MCP | tenant `mfi74785`, Remote MCP `execute-dql` | ✅ 13/15 kapı sinyali veriyle okundu; ❌ PostgreSQL extension (ActiveGate hazır; extension 3.x bu ActiveGate'te INVALID_CONFIG_ERROR) |
-| VM'de kontrollü deneyler | E0 → E2 → E1×3 | **AÇIK** |
+| VM'de kontrollü deneyler | E0 → E2 → E1×3 + durdurma testi | ✅ hepsi COMPLETED, 5xx/timeout/drop 0, integrity 0; Dynatrace'te E2 etkisi var, E1'de yok |
 
 Ayrıntı ve kanıt: `docs/acceptance-gate.md`, `deploy/evidence/vm/`, `deploy/evidence/mcp-gate-*.json`.
 
@@ -19,12 +19,12 @@ Ayrıntı ve kanıt: `docs/acceptance-gate.md`, `deploy/evidence/vm/`, `deploy/e
 | # | Kontrol | Durum |
 |---|---|---|
 | 1–4 | Yerleşim, ortak DB (rol + application_name), işlevsellik, veri bütünlüğü | **VM ✅** |
-| 5–8 | Yük seçimi, ölçüm, normal trafik, deney pencereleri | YEREL ✅; VM'de **AÇIK** |
-| 9 | Etkisiz yük | YEREL tek koşu; VM E1×3 **AÇIK** |
+| 5–8 | Yük seçimi, ölçüm, normal trafik, deney pencereleri | **VM ✅** (dört hedefli deney yalnız YEREL) |
+| 9 | Etkisiz yük | **VM ✅ + TENANT ✅** E1×3 |
 | 10 | Kilit kanıtı | **VM ✅ + TENANT ✅** (collector kenarı + PG `log_lock_waits` Dynatrace'te) |
-| 11 | Durdurma | YEREL ✅; VM **AÇIK** |
+| 11 | Durdurma | **VM ✅** stop-all → 1 sn içinde aktif sorgu/kilit bekleyen 0 |
 | 12 | Telemetri | **TENANT ✅**: servisler, p95, hostlar, container, Hikari, HTTP, collector, loglar. ❌ `postgres.*` extension |
-| 13 | MCP veri yolu | **TENANT ✅** 13/15 |
+| 13 | MCP veri yolu | **TENANT ✅** kapı sorguları + deney pencereleri (`mcp-experiment-windows.json`) |
 | 14 | Eksikler | aşağıda |
 
 ## Kurulu durum (2026-11-21)
@@ -64,8 +64,9 @@ Docker 29'un kaynak IP'yi koruması (lab uçları 403 → `LAB_ALLOWED_CIDRS`), 
    `/var/lib/dynatrace/remotepluginmodule/log/extensions/datasources/com.dynatrace.extension.postgres/dynatracesourcesql.jar_fastcheck.log`.
    Etki: `postgres.*` metrikleri ve extension top-queries yok. DB sinyalleri collector (`airlab.pg.*`, `blocking_edge`, `pg_stat_statements` özeti),
    PostgreSQL sunucu logları ve OneAgent DB çağrılarıyla karşılanıyor. ActiveGate/extension güncellenince yeniden denenebilir.
-2. **VM'de deneyler:** E0 → E2 → E1×3 (kriter 5–9, 11'in VM kanıtı).
-3. JVM heap/GC sorgusu ve `dt.trace_id` ile trace ↔ log korelasyonu doğrulanmadı.
+2. **Trace ↔ log korelasyonu yok:** container loglarında trace/span kimliği yok (OneAgent log zenginleştirme kapalı).
+   Aşama 2'de korelasyon `request_id`/`experiment_id` + zaman penceresiyle yapılır ya da zenginleştirme açılır.
+3. **Span verisi seyrek gelebiliyor** (ATM/trial sınırları); agent metrik + log ile çapraz kontrol etmeli.
 4. Default Switch IP'leri Windows yeniden başlayınca değişebilir.
 
 ## Bilinen bulgular / kalibrasyon notları (yerel)

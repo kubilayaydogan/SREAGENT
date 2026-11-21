@@ -221,6 +221,9 @@ etiketlerinin yerine geçer; çelişki varsa **bu bölüm geçerlidir**.
 | Uygulama logları | `log.source == "Container Output"`, `container.name` → `parse content, "JSON:j"` → `j[request_id]`, `j[experiment_id]`, `j[service][name]` | ✅ ECS JSON **ayrıştırılmadan** gelir; alanlar sorguda parse edilir |
 | PostgreSQL sunucu logları | `host.name == "db-vm"` ve `log.source` `/var/lib/pgsql/17/data/log/...` | ✅ `log_lock_waits` satırları (ek kilit kanıtı) |
 | PostgreSQL extension (`postgres.*`) | — | ⏳ ActiveGate + extension yapılandırması bekliyor |
+| Server span'ları | `fetch spans \| filter span.kind == "server"`, servis adı **`spring.application.name`** (`service.name` yok), `duration` ns, `url.path`, `container.name` | ✅ faz bazlı p95 (`scripts/mcp-windows.py`). Span sayısı ATM/trial sınırlarıyla seyrekleşebiliyor |
+| JVM | Micrometer `airlab.app.jvm.memory.used`, `.memory.max`, `.gc.pause`, `.gc.overhead`, `.threads.live`, … `by:{service}`; OneAgent `dt.process.memory.usage` | ✅ |
+| Trace ↔ log | container loglarında trace/span kimliği **yok** | ❌ OneAgent log zenginleştirme kapalı; korelasyon `request_id`/`experiment_id` + zaman penceresiyle |
 | Ingest → okuma gecikmesi | test kaydı ≤ ~1 dk içinde okunabildi | kaba ölçüm; kesin değer Aşama 2'de pencere başına ölçülecek |
 
 Uygulama notu (Aşama 2): skor hesaplamasında p95 servis başına OneAgent `percentile()` ile alınır; farklı servislerin

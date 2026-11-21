@@ -1,0 +1,20 @@
+--- lab.integrity_check (hepsi 0 olmalı)
+overbooked_flights = 0
+inventory_checkedin_mismatch = 0
+bag_without_checkin = 0
+inventory_sold_mismatch = 0
+checkin_on_cancelled_booking = 0
+--- rol | application_name | durum | adet
+lab_monitor | pg-lock-collector | idle | 1
+lab_monitor | psql | active | 1
+svc_baggage | baggage-service | idle | 2
+svc_checkin | checkin-service | idle | 2
+svc_flightops | flightops-service | idle | 2
+svc_reservation | reservation-service | idle | 2
+--- kapasite
+kullanılan=10 max=100 superuser_reserved=3 reserved=3
+--- rol bazlı pg_stat_statements (kümülatif)
+svc_baggage calls=75874 exec_ms=5241
+svc_checkin calls=21855 exec_ms=1140608
+svc_flightops calls=8499 exec_ms=548
+svc_reservation calls=12122 exec_ms=1203490
