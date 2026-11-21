@@ -4,7 +4,7 @@
 #  2) Aynı anda Check-in, aynı uçuştaki bir yolcuyu check-in eder (checked_in+1 → bekler)
 #  3) pg_stat_activity + pg_blocking_pids ile zincir yazdırılır (lab_monitor yetkisi yeterli)
 # Kullanım: LAB_TOKEN=... scripts/lock-chain-demo.sh
-#   APP_VM: BASE_HOST=<app_vm_ip> PSQL="psql 'host=<db_vm> dbname=airlab user=lab_monitor' -Atc" ...
+#   APP_VM: BASE_HOST=<app_vm_ip> PSQL="psql postgresql://lab_monitor@<db_vm>:5432/airlab -Atc" ...
 set -euo pipefail
 H="${BASE_HOST:-127.0.0.1}"; HOLD_MS="${HOLD_MS:-4000}"
 PSQL="${PSQL:-docker exec -i airlab-postgres-local psql -U postgres -d airlab -Atc}"

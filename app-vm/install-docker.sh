@@ -7,7 +7,12 @@ ADMIN_CIDR="${1:?yönetim ağı CIDR değerini verin, ör. 172.20.224.0/20}"
 [[ $EUID -eq 0 ]] || { echo "root olarak çalıştırın"; exit 1; }
 
 dnf install -y dnf-plugins-core chrony
+# Hyper-V/dizüstü VM'lerde saat dakikalarca kayabiliyor; varsayılan makestep yalnız açılışta atlar.
+# 1 sn'den büyük her farkta hemen düzelt (deney pencereleri ve Dynatrace zaman damgaları için).
+sed -i "s/^makestep .*/makestep 1 -1/" /etc/chrony.conf
+grep -q "^makestep 1 -1" /etc/chrony.conf || echo "makestep 1 -1" >> /etc/chrony.conf
 systemctl enable --now chronyd
+systemctl restart chronyd
 # Docker resmî Rocky deposu (Rocky 8/9/10). Dağıtımın podman-docker/runc paketleri çakışır → kaldır.
 dnf remove -y docker docker-client docker-common docker-latest podman-docker runc >/dev/null 2>&1 || true
 [[ -f /etc/yum.repos.d/docker-ce.repo ]] || dnf config-manager --add-repo https://download.docker.com/linux/rocky/docker-ce.repo

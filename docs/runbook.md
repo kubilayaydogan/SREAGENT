@@ -28,9 +28,9 @@ Kaynak limitleri `.env`: `APP_MEM_LIMIT=640m`, `APP_CPUS=1.0`, `CHAOS_MEM_LIMIT=
 
 ## 3. Doğrulama
 ```bash
-BASE_HOST=192.0.2.10 PSQL="psql 'host=192.0.2.20 dbname=airlab user=lab_owner' -Atc" scripts/smoke.sh   # 31 kontrol
-PSQL="psql 'host=192.0.2.20 dbname=airlab user=lab_owner' -Atc" scripts/verify-db.sh
-BASE_HOST=192.0.2.10 LAB_TOKEN=... PSQL="psql 'host=192.0.2.20 dbname=airlab user=lab_monitor' -Atc" scripts/lock-chain-demo.sh
+BASE_HOST=192.0.2.10 PSQL="psql postgresql://lab_owner@192.0.2.20:5432/airlab -Atc" scripts/smoke.sh   # 31 kontrol
+PSQL="psql postgresql://lab_owner@192.0.2.20:5432/airlab -Atc" scripts/verify-db.sh
+BASE_HOST=192.0.2.10 LAB_TOKEN=... PSQL="psql postgresql://lab_monitor@192.0.2.20:5432/airlab -Atc" scripts/lock-chain-demo.sh
 ```
 `lab_owner` parolası için `~/.pgpass` kullanın. smoke.sh DB doğrulaması iş tablolarını okuduğundan `lab_owner` gerekir;
 blocking sorgusu için `lab_monitor` (pg_monitor) yeterlidir. Not: pg_hba yalnız APP_VM IP'sine izin verdiği için bu

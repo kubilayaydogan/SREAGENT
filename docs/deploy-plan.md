@@ -1,4 +1,4 @@
-# Kurulum planı — bu ortam (APP_VM 192.168.1.3 · DB_VM 192.168.1.2 · Rocky 10.1 · Dynatrace SaaS)
+# Kurulum planı — bu ortam (APP_VM 172.20.229.26 · DB_VM 172.20.233.108 · Rocky 10.1 · Dynatrace SaaS)
 
 Bu belge `docs/runbook.md`'nin bu ortama özel, sıralı hâlidir. Her adımın **kabul** satırı
 `docs/acceptance-gate.md` tablosuna işlenir. Dynatrace environment id: `mfi74785`
@@ -8,14 +8,30 @@ Bu belge `docs/runbook.md`'nin bu ortama özel, sıralı hâlidir. Her adımın 
 
 | Konu | Karar | Gerekçe |
 |---|---|---|
-| ActiveGate yeri | **APP_VM (192.168.1.3)**, Environment ActiveGate, Linux host kurulumu | DB_VM, E5 (DB CPU) ve E6 (I/O) deneylerinin **ölçülen kaynağı**; ActiveGate JVM'i oraya konursa DB host CPU/RAM'i kirlenir ve "DB kaynaklı" bulgu bozulur. APP_VM'deki tüketim OneAgent'ta ayrı process group olarak görünür ve raporda ayrıca gösterilir. pg_hba/firewall zaten APP_VM IP'sine açık → ek kural gerekmez |
+| ActiveGate yeri | **APP_VM (172.20.229.26)**, Environment ActiveGate, Linux host kurulumu | DB_VM, E5 (DB CPU) ve E6 (I/O) deneylerinin **ölçülen kaynağı**; ActiveGate JVM'i oraya konursa DB host CPU/RAM'i kirlenir ve "DB kaynaklı" bulgu bozulur. APP_VM'deki tüketim OneAgent'ta ayrı process group olarak görünür ve raporda ayrıca gösterilir. pg_hba/firewall zaten APP_VM IP'sine açık → ek kural gerekmez |
 | Destek durumu | Rocky **10.1**: ActiveGate destek tablosunda var (8.10, 9.7, 9.8, 10.1, 10.2); OneAgent "Rocky 8, 9, 10" → **ikisi de destekli** (doküman 2026-11). Kullanıcı kararı: 2026-11-21 | Kurulum yine de sağlıksız olursa yedek: ayrı küçük VM (2 vCPU / 4 GB), IP'si `db-vm.env` → `ACTIVEGATE_IP` |
 | OneAgent modu | APP_VM **full-stack**, DB_VM **infrastructure** | APP_VM'de Java code module (servis, JDBC, JVM) gerekli; DB_VM'de host metrikleri yeterli, PostgreSQL iç metrikleri extension + collector'dan gelir |
 | Micrometer yolu | **A: SaaS Metrics API v2** | OneAgent yerel ingest ucunun container'dan erişimi doğrulanmadı; A yolu yalnız HTTPS çıkışı ister |
-| PostgreSQL extension | `com.dynatrace.extension.postgres` (Hub: "PostgreSQL"), ActiveGate grubu `airlab`, endpoint `192.168.1.2:5432` | Resmî gereksinim: `pg_monitor`, `pg_stat_statements`, `dynatrace` şeması — `create-roles.sql`/`postgresql.lab.conf` bunları zaten yapıyor |
+| PostgreSQL extension | `com.dynatrace.extension.postgres` (Hub: "PostgreSQL"), ActiveGate grubu `airlab`, endpoint `172.20.233.108:5432` | Resmî gereksinim: `pg_monitor`, `pg_stat_statements`, `dynatrace` şeması — `create-roles.sql`/`postgresql.lab.conf` bunları zaten yapıyor |
 | MCP | Remote MCP, `https://mfi74785.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp`, `Authorization: Bearer <platform token>` | Resmî doküman (2026-11-09). Araç adları sabitlenmez, `tools/list` ile okunur |
 
-> **IP planı:** APP_VM 192.168.1.3, DB_VM 192.168.1.2 (192.168.1.1 ağ geçidi olabileceği için kullanılmadı).
+> **IP planı (güncel):** VM'ler bu Windows makinesinde Hyper-V **Default Switch** ağında (DHCP/NAT, 172.20.224.0/20).
+> APP_VM `172.20.229.26` (`app-vm`), DB_VM `172.20.233.108` (`db-vm`). Default Switch IP'leri Windows yeniden başlayınca
+> değişebilir → değişirse `db-vm.env`/`.env` IP'leri güncellenip `install-postgres17.sh` (pg_hba/firewall) yeniden çalıştırılır.
+
+### Gerçek kurulumda karşılaşılanlar (2026-11-21) ve çözümleri
+
+| Sorun | Çözüm |
+|---|---|
+| Hyper-V Dynamic Memory: APP_VM 4,8 GB görüyordu | Sabit bellek: APP_VM 8 GB, DB_VM 6 GB (`Set-VMMemory -DynamicMemoryEnabled $false`) |
+| VM saatleri dakikalarca kayıyor (chrony yavaş kapatıyor) | `chrony.conf`: `makestep 1 -1` (kurulum betiklerine eklendi) |
+| OneAgent/ActiveGate kurulumu: `platform not supported: <LiNUX>` | Türkçe yerel ayar (tr_TR) "i" dönüşümünü bozuyor → kurulumları `env LANG=C LC_ALL=C` ile çalıştırın |
+| Yavaş/kopan internet (≈400–600 KB/sn): 280–330 MB kurulum dosyaları yarıda kesiliyor | Kurulum dosyalarını Windows'ta `curl --retry` ile indirip imzayı doğrulayın, `scp` ile VM'lere kopyalayın |
+| ActiveGate: `RemotePluginModule` capability indirmesi zaman aşımı | Bkz. §5.2 notu |
+| Lab uçları APP_VM'den 403 | Docker 29 host isteğinde kaynak IP'yi korur → `LAB_ALLOWED_CIDRS`'e APP_VM IP'si (/32) |
+| `PSQL="psql 'host=… user=…'"` çalışmıyor | Bağlantı bilgisi boşluksuz URI olmalı: `psql postgresql://lab_owner@172.20.233.108:5432/airlab -Atc` |
+| `verify-db.sh` servis oturumlarını göstermiyor | `lab_owner` başka rollerin oturumlarını göremez → `PSQL_MON` (lab_monitor) |
+| `install-docker.sh` sözdizimi hatası | Düzeltildi (`${1:?...}` içindeki kesme işareti) |
 
 > **Rocky 10 notu:** RHEL/Rocky 10 **x86-64-v3** CPU ister (AVX2/BMI2/FMA/MOVBE). Hipervizörde CPU tipi `host`
 > (veya v3 uyumlu) değilse işletim sistemi açılsa bile bazı paketler çalışmaz; ön kontrol bunu yakalar.
@@ -75,11 +91,11 @@ dahil olduğunu kontrol edin).
 
 ```bash
 # Git Bash / Linux; openssl gerekir
-scripts/gen-vm-env.sh --app-ip 192.168.1.3 --db-ip 192.168.1.2 --dt-env mfi74785
-scp deploy/out/db-vm.env  root@192.168.1.2:/opt/airlab/db-vm/db-vm.env
-scp deploy/out/app-vm.env root@192.168.1.3:/opt/airlab/app-vm/.env
-scp deploy/out/db-vm-oneagent.sh root@192.168.1.2:/root/
-scp deploy/out/app-vm-oneagent.sh deploy/out/app-vm-activegate.sh root@192.168.1.3:/root/
+scripts/gen-vm-env.sh --app-ip 172.20.229.26 --db-ip 172.20.233.108 --dt-env mfi74785
+scp deploy/out/db-vm.env  root@172.20.233.108:/opt/airlab/db-vm/db-vm.env
+scp deploy/out/app-vm.env root@172.20.229.26:/opt/airlab/app-vm/.env
+scp deploy/out/db-vm-oneagent.sh root@172.20.233.108:/root/
+scp deploy/out/app-vm-oneagent.sh deploy/out/app-vm-activegate.sh root@172.20.229.26:/root/
 ```
 `deploy/out/*.sh` kurulum token'larını içerir (git dışı): installer'ı tenant'tan indirir, Dynatrace imzasını
 `openssl cms -verify` ile doğrular, kurar, kendini silmeniz için uyarır. Kurulumdan sonra `shred -u /root/*-oneagent.sh /root/*-activegate.sh`.
@@ -96,27 +112,27 @@ cd /opt/airlab && mkdir -p deploy/evidence
 ```
 **Kabul:** iki VM'de de `SONUÇ: kuruluma geçilebilir`. Çıktıyı `deploy/evidence/precheck-{app,db}.txt` olarak saklayın.
 
-## 4. DB_VM (192.168.1.2)
+## 4. DB_VM (172.20.233.108)
 
 ```bash
 cd /opt/airlab/db-vm && chmod 600 db-vm.env
-sudo ./install-postgres17.sh ./db-vm.env     # PGDG EL-10, initdb, conf.d, pg_hba (yalnız 192.168.1.3), firewalld, systemd
+sudo ./install-postgres17.sh ./db-vm.env     # PGDG EL-10, initdb, conf.d, pg_hba (yalnız 172.20.229.26), firewalld, systemd
 sudo ./bootstrap-db.sh ./db-vm.env           # roller, airlab DB, pg_stat_statements, dynatrace şeması
 sudo ./verify-db-vm.sh ./db-vm.env | tee ../deploy/evidence/verify-db-vm.txt
 ```
 **Kabul (kriter 1, DB tarafı):** `postgresql-17` active; `systemd-detect-virt --container` → none;
-yalnız 192.168.1.3 için 5432 rich rule; SELinux Enforcing; `shared_preload_libraries=pg_stat_statements`.
+yalnız 172.20.229.26 için 5432 rich rule; SELinux Enforcing; `shared_preload_libraries=pg_stat_statements`.
 
 OneAgent (infrastructure modu, host grubu `airlab`):
 ```bash
 sudo bash /root/db-vm-oneagent.sh      # log: /root/db-vm-oneagent.log
 ```
 
-## 5. APP_VM (192.168.1.3)
+## 5. APP_VM (172.20.229.26)
 
 ```bash
 cd /opt/airlab
-sudo ./app-vm/install-docker.sh 192.168.1.0/24      # Docker CE (Rocky deposu), chrony, firewalld: 8080–8084 yalnız LAN'a
+sudo ./app-vm/install-docker.sh 172.20.224.0/20      # Docker CE (Rocky deposu), chrony, firewalld: 8080–8084 yalnız LAN'a
 cd app-vm && chmod 600 .env
 docker compose build                                # JDK21 + Maven container içinde, ~3–5 dk
 docker compose --profile tools run --rm db-migrator migrate
@@ -146,7 +162,7 @@ modülü etkin ve bağlı.
 ### 5.3 PostgreSQL extension
 UI → *Hub → PostgreSQL → Add to environment* → *Add monitoring configuration*:
 - ActiveGate grubu: `airlab`
-- Endpoint: host `192.168.1.2`, port `5432`, database `airlab`, kimlik doğrulama basic, kullanıcı `dynatrace`,
+- Endpoint: host `172.20.233.108`, port `5432`, database `airlab`, kimlik doğrulama basic, kullanıcı `dynatrace`,
   parola = `db-vm.env` → `DYNATRACE_PW` (credential vault önerilir), SSL kapalı (lab iç ağ)
 - Feature set: varsayılanlar + **Queries** + **Locks** + **Activity**
 - Query interval 1 dk (varsayılan). Index Recommendations kapalı (hypopg kurulmadı)
@@ -173,21 +189,21 @@ docker logs --tail 20 airlab-pg-lock-collector    # 'HTTP 202' / hata yok
 ```bash
 cd /opt/airlab
 cat > ~/.pgpass <<EOF
-192.168.1.2:5432:airlab:lab_owner:<OWNER_DB_PASSWORD>
-192.168.1.2:5432:airlab:lab_monitor:<MONITOR_DB_PASSWORD>
+172.20.233.108:5432:airlab:lab_owner:<OWNER_DB_PASSWORD>
+172.20.233.108:5432:airlab:lab_monitor:<MONITOR_DB_PASSWORD>
 EOF
 chmod 600 ~/.pgpass; sudo dnf install -y postgresql   # yalnız psql istemcisi
-BASE_HOST=192.168.1.3 PSQL="psql 'host=192.168.1.2 dbname=airlab user=lab_owner' -Atc" scripts/smoke.sh | tee deploy/evidence/smoke.txt
-PSQL="psql 'host=192.168.1.2 dbname=airlab user=lab_owner' -Atc" scripts/verify-db.sh | tee deploy/evidence/verify-db.txt
+BASE_HOST=172.20.229.26 PSQL="psql postgresql://lab_owner@172.20.233.108:5432/airlab -Atc" scripts/smoke.sh | tee deploy/evidence/smoke.txt
+PSQL="psql postgresql://lab_owner@172.20.233.108:5432/airlab -Atc" PSQL_MON="psql postgresql://lab_monitor@172.20.233.108:5432/airlab -Atc" scripts/verify-db.sh | tee deploy/evidence/verify-db.txt
 set -a; . app-vm/.env; set +a
-BASE_HOST=192.168.1.3 PSQL="psql 'host=192.168.1.2 dbname=airlab user=lab_monitor' -Atc" scripts/lock-chain-demo.sh | tee deploy/evidence/lock-chain.txt
+BASE_HOST=172.20.229.26 PSQL="psql postgresql://lab_monitor@172.20.233.108:5432/airlab -Atc" scripts/lock-chain-demo.sh | tee deploy/evidence/lock-chain.txt
 ```
 **Kabul:** smoke 31/31 (kriter 2–4 VM'de), lock zinciri waiter=checkin-service / blocker=reservation-service (kriter 10).
 
 ## 7. Deneyler (E0 → E2 → E1×3)
 
 ```bash
-export CHAOS_URL=http://192.168.1.3:8080 CHAOS_USER=chaos CHAOS_PASSWORD=<app-vm.env'deki>
+export CHAOS_URL=http://172.20.229.26:8080 CHAOS_USER=chaos CHAOS_PASSWORD=<app-vm.env'deki>
 python3 scripts/run-experiment.py E0-normal-baseline --baseline 300 --json-out deploy/evidence/E0.json
 python3 scripts/run-experiment.py E2-hot-row-lock    --baseline 300 --load 300 --recovery 300 --json-out deploy/evidence/E2.json
 for i in 1 2 3; do python3 scripts/run-experiment.py E1-independent-baggage-read --baseline 300 --load 300 --recovery 300 --json-out deploy/evidence/E1-$i.json; done

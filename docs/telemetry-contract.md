@@ -200,3 +200,28 @@ timeseries backends = avg(postgres.numbackends), waiting = avg(postgres.activity
 Ayrıntılı tablo: `docs/acceptance-gate.md`. Özet: her satır için (1) Dynatrace UI'da görünüyor, (2) DQL ile dönüyor,
 (3) **MCP aracıyla** dönüyor, (4) ingest gecikmesi ölçüldü, (5) gerekli token/MCP yetkisi belgelendi.
 Bu kapı geçilmeden Aşama 2 sonuçları "gerçek Dynatrace kanıtı" olarak sunulmaz.
+
+## J. Gerçek tenant'ta doğrulanan sinyaller ve sorgu biçimleri (`mfi74785`, 2026-11-21, MCP `execute-dql`)
+
+Kaynak: `scripts/mcp-probe.py gate` (kanıt `deploy/evidence/mcp-gate-*.json`). Bu bölüm, yukarıdaki `DOĞRULANMADI`
+etiketlerinin yerine geçer; çelişki varsa **bu bölüm geçerlidir**.
+
+| Sinyal | Doğrulanan DQL biçimi | Durum / not |
+|---|---|---|
+| Servisler | `smartscapeNodes "SERVICE"` | ✅ 4 iş servisi + chaos-controller + Spring arka plan iş parçacığı servisleri. **`dt.entity.*` ve `entityName()` bu tenant'ta YOK** |
+| Hostlar | `smartscapeNodes "HOST"` | ✅ `app-vm`, `db-vm` |
+| Servis yanıt süresi / istek | `timeseries avg(dt.service.request.response_time), sum(dt.service.request.count), by:{dt.smartscape.service}` + `getNodeName()` | ✅ birim mikrosaniye |
+| **Servis p95** | `percentile(dt.service.request.response_time, 95)` | ✅ OneAgent histogramından. **Micrometer Dynatrace v2 exporter yüzdelik GÖNDERMİYOR** ("Histogram config ... ignored"); `airlab.app.http.server.requests.percentile` yok → p95 kaynağı OneAgent |
+| Host CPU / RAM | `dt.host.cpu.usage`, `dt.host.memory.usage`, `by:{dt.smartscape.host}` | ✅ |
+| Container | `dt.containers.cpu.usage_user_time`, `.usage_system_time`, `.throttling_ratio`, `dt.containers.memory.resident_set_bytes`, `by:{dt.smartscape.container}` | ✅ `dt.containers.cpu.usage_percent` **yok** |
+| Hikari | `airlab.app.hikaricp.connections.{active,pending,...}`, `by:{service, pool}` | ✅ |
+| HTTP (Micrometer) | `sum(airlab.app.http.server.requests, rollup: count)` | ✅ tek anahtar (özet gauge); `.count` soneki yok |
+| Collector metrikleri | `airlab.pg.lock.waiters_total`, `airlab.pg.connections.used_ratio_normal`, … | ✅ |
+| Kilit kenarı logu | `fetch logs \| filter airlab.event == "airlab.pg.blocking_edge"` | ✅ gerçek E2-benzeri kilit (lock-chain-demo) yakalandı. **`event.type` logs ingest'te silinir** |
+| Uygulama logları | `log.source == "Container Output"`, `container.name` → `parse content, "JSON:j"` → `j[request_id]`, `j[experiment_id]`, `j[service][name]` | ✅ ECS JSON **ayrıştırılmadan** gelir; alanlar sorguda parse edilir |
+| PostgreSQL sunucu logları | `host.name == "db-vm"` ve `log.source` `/var/lib/pgsql/17/data/log/...` | ✅ `log_lock_waits` satırları (ek kilit kanıtı) |
+| PostgreSQL extension (`postgres.*`) | — | ⏳ ActiveGate + extension yapılandırması bekliyor |
+| Ingest → okuma gecikmesi | test kaydı ≤ ~1 dk içinde okunabildi | kaba ölçüm; kesin değer Aşama 2'de pencere başına ölçülecek |
+
+Uygulama notu (Aşama 2): skor hesaplamasında p95 servis başına OneAgent `percentile()` ile alınır; farklı servislerin
+p95'leri ortalanmaz. Container stdout logları için JSON parse sorgu tarafında yapılır (tenant'ta OpenPipeline kuralı yok).

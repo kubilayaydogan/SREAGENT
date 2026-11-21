@@ -23,7 +23,12 @@ PGBIN="/usr/pgsql-${PGVER}/bin"
 
 echo "== 1/6 Saat senkronizasyonu (chrony)"
 dnf install -y chrony
+# Hyper-V/dizüstü VM'lerde saat dakikalarca kayabiliyor; varsayılan makestep yalnız açılışta atlar.
+# 1 sn'den büyük her farkta hemen düzelt (deney pencereleri ve Dynatrace zaman damgaları için).
+sed -i "s/^makestep .*/makestep 1 -1/" /etc/chrony.conf
+grep -q "^makestep 1 -1" /etc/chrony.conf || echo "makestep 1 -1" >> /etc/chrony.conf
 systemctl enable --now chronyd
+systemctl restart chronyd
 chronyc tracking | head -3 || true
 
 echo "== 2/6 PGDG deposu ve paketler"

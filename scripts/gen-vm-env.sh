@@ -91,7 +91,8 @@ APP_MEM_LIMIT=640m
 APP_CPUS=1.0
 
 LAB_TOKEN=${LAB_TOKEN}
-LAB_ALLOWED_CIDRS=172.28.0.0/24,127.0.0.1/32
+# APP_VM IP'si: Docker host'tan gelen isteklerde kaynak IP'yi korur (Rocky 10 / Docker 29'da doğrulandı)
+LAB_ALLOWED_CIDRS=172.28.0.0/24,127.0.0.1/32,${APP_IP}/32
 LAB_MAX_HOLD_MS=5000
 LAB_PRESSURE_POOL_MAX=22
 

@@ -48,14 +48,22 @@ GATE_QUERIES: list[tuple[str, str]] = [
     ("APP_VM ve DB_VM host CPU/RAM",
      'timeseries {{ cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage) }}, by: {{ dt.smartscape.host }}, '
      'from: now()-{since} | fieldsAdd host = getNodeName(dt.smartscape.host)'),
-    ("Container CPU",
-     'timeseries cpu = avg(dt.containers.cpu.usage_percent), by: {{ dt.entity.container_group_instance }}, '
-     'from: now()-{since} | limit 20'),
+    # Servis başına p95: OneAgent histogramından (Micrometer Dynatrace v2 exporter yüzdelikleri GÖNDERMİYOR).
+    # Birim mikrosaniye. Servislerin p95'leri ortalanmaz.
+    ("4 servis — p95 (OneAgent)",
+     'timeseries p95 = percentile(dt.service.request.response_time, 95), by: {{ dt.smartscape.service }}, '
+     'from: now()-{since}, interval: 1m | fieldsAdd svc = getNodeName(dt.smartscape.service) | limit 20'),
+    # dt.containers.cpu.usage_percent bu tenant'ta YOK; mevcut anahtarlar 2026-11-21'de listelendi.
+    ("Container CPU/RAM",
+     'timeseries {{ user = sum(dt.containers.cpu.usage_user_time), sys = sum(dt.containers.cpu.usage_system_time), '
+     'thr = avg(dt.containers.cpu.throttling_ratio), rss = avg(dt.containers.memory.resident_set_bytes) }}, '
+     'by: {{ dt.smartscape.container }}, from: now()-{since} | fieldsAdd c = getNodeName(dt.smartscape.container) | limit 20'),
     ("Hikari (Micrometer)",
      'timeseries {{ active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending) }}, '
      'by: {{ service, pool }}, from: now()-{since}'),
+    # Micrometer Timer → tek anahtar (özet gauge); istek sayısı rollup: count ile.
     ("HTTP istekleri (Micrometer)",
-     'timeseries n = sum(airlab.app.http.server.requests.count), by: {{ service }}, from: now()-{since}'),
+     'timeseries n = sum(airlab.app.http.server.requests, rollup: count), by: {{ service }}, from: now()-{since}'),
     ("PostgreSQL extension",
      'timeseries {{ backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), '
      'locks = avg(postgres.locks) }}, from: now()-{since}'),
@@ -65,16 +73,21 @@ GATE_QUERIES: list[tuple[str, str]] = [
     ("airlab.pg.blocking_edge logları",
      'fetch logs, from: now()-{since} | filter airlab.event == "airlab.pg.blocking_edge" '
      '| sort timestamp desc | limit 5'),
+    # Container stdout JSON'u ayrıştırılmadan gelir (log.source = "Container Output") → sorguda parse.
     ("Uygulama ECS logları (request_id / experiment_id)",
-     'fetch logs, from: now()-{since} | filter isNotNull(request_id) or isNotNull(experiment_id) '
-     '| fields timestamp, service.name, request_id, experiment_id, dt.trace_id | limit 5'),
+     'fetch logs, from: now()-{since} | filter log.source == "Container Output" and startsWith(container.name, "airlab-") '
+     '| parse content, "JSON:j" | fieldsAdd svc = j[service][name], request_id = j[request_id], '
+     'experiment_id = j[experiment_id], status = j[http][status] | filter isNotNull(request_id) '
+     '| fields timestamp, svc, request_id, experiment_id, status, dt.trace_id | limit 5'),
+    ("PostgreSQL sunucu logları (lock wait)",
+     'fetch logs, from: now()-{since} | filter host.name == "db-vm" and contains(log.source, "postgresql") '
+     '| filter contains(content, "still waiting for") or contains(content, "acquired") | limit 5'),
     ("PostgreSQL extension top queries logları",
      'fetch logs, from: now()-{since} | filter dt.extension.name == "com.dynatrace.extension.postgres" '
      '| summarize n = count(), by: {{ event.group }}'),
-    ("Ingest gecikmesi (log zaman damgası vs. şimdi)",
-     'fetch logs, from: now()-{since} | filter in(service.name, array("reservation-service", "checkin-service", '
-     '"flightops-service", "baggage-service", "chaos-controller")) '
-     '| summarize last = max(timestamp), by: {{ service.name }} | fieldsAdd lag = now() - last'),
+    ("Tazelik (container başına son log yaşı)",
+     'fetch logs, from: now()-{since} | filter log.source == "Container Output" and startsWith(container.name, "airlab-") '
+     '| summarize last = max(timestamp), by: {{ container.name }} | fieldsAdd age = now() - last'),
 ]
 
 SECRET_RE = re.compile(r"dt0[a-z]\d{2}\.[A-Za-z0-9._-]+")
