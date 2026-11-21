@@ -223,7 +223,7 @@ etiketlerinin yerine geçer; çelişki varsa **bu bölüm geçerlidir**.
 | PostgreSQL extension (`postgres.*`) | — | ⏳ ActiveGate + extension yapılandırması bekliyor |
 | Server span'ları | `fetch spans \| filter span.kind == "server"`, servis adı **`spring.application.name`** (`service.name` yok), `duration` ns, `url.path`, `container.name` | ✅ faz bazlı p95 (`scripts/mcp-windows.py`). Span sayısı ATM/trial sınırlarıyla seyrekleşebiliyor |
 | JVM | Micrometer `airlab.app.jvm.memory.used`, `.memory.max`, `.gc.pause`, `.gc.overhead`, `.threads.live`, … `by:{service}`; OneAgent `dt.process.memory.usage` | ✅ |
-| Trace ↔ log | container loglarında trace/span kimliği **yok** | ❌ OneAgent log zenginleştirme kapalı; korelasyon `request_id`/`experiment_id` + zaman penceresiyle |
+| Trace ↔ log | `parse content, "JSON:j"` → `toString(j[dt][trace_id])`, `toString(j[dt][span_id])`; span tarafında `toString(trace.id)` (uid türü) ile `lookup` | ✅ OneAgent "Java – Trace/span context enrichment for logs" (yapılandırılmış) açık; yalnız 2026-11-21 16:42 sonrası loglar. Kimlik log özniteliği olarak çıkarılmıyor (container logu ayrıştırılmadan girer); "unstructured" zenginleştirme JSON'u bozabileceği için kapalı |
 | Ingest → okuma gecikmesi | test kaydı ≤ ~1 dk içinde okunabildi | kaba ölçüm; kesin değer Aşama 2'de pencere başına ölçülecek |
 
 Uygulama notu (Aşama 2): skor hesaplamasında p95 servis başına OneAgent `percentile()` ile alınır; farklı servislerin

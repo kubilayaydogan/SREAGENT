@@ -225,6 +225,15 @@ BASE_HOST=172.20.229.26 PSQL="psql postgresql://lab_monitor@172.20.233.108:5432/
 ```
 **Kabul:** smoke 31/31 (kriter 2–4 VM'de), lock zinciri waiter=checkin-service / blocker=reservation-service (kriter 10).
 
+### Trace ↔ log bağlantısı (OneAgent log zenginleştirme)
+
+1. Dynatrace UI → **Settings → Preferences → OneAgent features** → filtre `enrichment` →
+   **"Java – Trace/span context enrichment for logs"** açık. "…for unstructured logs" **kapalı** kalsın (ECS JSON'u bozabilir).
+2. APP_VM'de Java container'larını yeniden başlatın (özellik süreç başlangıcında devreye girer):
+   `for c in airlab-flightops airlab-baggage airlab-checkin airlab-reservation airlab-chaos; do docker restart $c; done`
+3. Doğrulama: `docker logs airlab-flightops | grep airlab.access | tail -1` → `"dt":{"trace_id":…,"span_id":…}`;
+   Dynatrace'te log ↔ span eşleşmesi sorgusu `deploy/evidence/mcp-trace-log-join.json` içinde.
+
 ## 7. Deneyler (E0 → E2 → E1×3)
 
 ```bash

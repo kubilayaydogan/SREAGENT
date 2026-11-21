@@ -19,7 +19,7 @@ doğrulandı · **TENANT ✅** = gerçek tenant'ta MCP ile okundu · **AÇIK** =
 | 9 | Etkisiz yük | bağımsız yükte diğerleri etkilenmiş görünmez | **VM ✅ + TENANT ✅** (E1×3) | aşağıdaki deney tablosu; `mcp-experiment-windows.json` |
 | 10 | Kilit kanıtı | kaynak/etkilenen session + servis eşlemesi ile gerçek zincir | **VM ✅ + TENANT ✅** | `vm/lock-chain.txt`; aynı kenar Dynatrace'te `airlab.event == "airlab.pg.blocking_edge"` + PG `log_lock_waits` |
 | 11 | Durdurma | yeni yük durur; sunucu işleri sınırlı sürede biter | **VM ✅** | `vm/experiments/stop-test*.{log,txt}`, `E-stop.json`: stop-all 16:02:03.77 → 16:02:04'te aktif servis sorgusu 0, kilit bekleyen 0 (öncesi 6–12 / 3–10); reservation 4 backend iptal; havuzlar açık kaldı |
-| 12 | Telemetri | 4 servis, 2 host, JDBC, Hikari, PG sinyalleri Dynatrace'te | **TENANT ✅** (extension ve trace↔log hariç) | aşağıdaki tablo; `postgres.*` extension ❌ (Dynatrace extension/ActiveGate uyumsuzluğu) |
+| 12 | Telemetri | 4 servis, 2 host, JDBC, Hikari, PG sinyalleri Dynatrace'te | **TENANT ✅** (extension hariç) | aşağıdaki tablo; `postgres.*` extension ❌ (Dynatrace extension/ActiveGate uyumsuzluğu) |
 | 13 | MCP veri yolu | agent sinyalleri gerçek MCP aracıyla sorgulanabilir | **TENANT ✅** | `mcp-gate-*.json` (13/15 kapı sorgusu), `mcp-experiment-windows.json` (deney pencereleri) — `execute-dql` |
 | 14 | Eksikler | doğrulanamayanlar açık | bu belge + PROJECT_STATE.md | |
 
@@ -42,7 +42,7 @@ Sorgular: `scripts/mcp-probe.py` → `GATE_QUERIES`; anahtar/biçim ayrıntısı
 | `airlab.pg.blocking_edge` logları | ☐ | ✅ | | gerçek kilit kenarı okundu; alan `airlab.event` |
 | PostgreSQL sunucu logları (lock wait) | ☐ | ✅ | | `db-vm`, `log_lock_waits` |
 | Uygulama ECS logları (`request_id`, `experiment_id`) | ☐ | ✅ | | `Container Output` + `parse content, "JSON:j"` |
-| trace ↔ log korelasyonu (`dt.trace_id`) | ☐ | ❌ | | son 2 saatte ~61.000 container logunun hiçbirinde trace/span kimliği yok (OneAgent log zenginleştirme kapalı). Korelasyon `request_id`/`experiment_id` + zaman penceresiyle yapılır (**AÇIK**) |
+| trace ↔ log korelasyonu (`dt.trace_id`) | ☐ | ✅ | ≤ ~1 dk | 2026-11-21 16:42'den itibaren: OneAgent "Java – Trace/span context enrichment for logs" açıldı + servisler yeniden başlatıldı. ECS JSON'da `dt.trace_id`/`dt.span_id` var; log ↔ span eşleşmesi 13/13 (aynı span 13/13), `mcp-trace-log-join.json`. Kimlik ayrı öznitelik değil, JSON içinde → sorguda `parse content, "JSON:j"`; UI'daki log→trace bağlantısı için OpenPipeline ile `dt.trace_id` çıkarılmalı (yapılmadı). Önceki deney logları kimliksiz |
 
 ## VM deneyleri ve Dynatrace'teki karşılığı (2026-11-21)
 

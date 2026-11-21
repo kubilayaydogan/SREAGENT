@@ -1,0 +1,20 @@
+{
+ "generated": "2026-11-21T16:47:48.811403+00:00",
+ "tool": "execute-dql",
+ "purpose": "OneAgent Java log enrichment sonrası log ↔ span eşleşmesi (trace_id + span_id)",
+ "query": "fetch logs, from:\"2026-11-21T16:42:00Z\"\n| filter log.source == \"Container Output\" and contains(content, \"airlab.access\")\n| parse content, \"JSON:j\"\n| fieldsAdd tid = toString(j[dt][trace_id]), sid = toString(j[dt][span_id]), log_svc = j[service][name], msg = j[message]\n| lookup [fetch spans, from:\"2026-11-21T16:42:00Z\" | filter span.kind == \"server\"\n          | fields t = toString(trace.id), s = toString(span.id), svc = spring.application.name, path = url.path],\n    sourceField:tid, lookupField:t, prefix:\"sp_\"\n| summarize loglar=count(), eslesen=countIf(isNotNull(sp_t)), ayni_span=countIf(sp_s == sid),\n    ornek=takeAny(record(log_svc, msg, tid, sp_svc, sp_path))\n",
+ "result": [
+  {
+   "loglar": "13",
+   "eslesen": "13",
+   "ayni_span": "13",
+   "ornek": {
+    "log_svc": "reservation-service",
+    "msg": "GET /api/flights/search 400 2ms",
+    "tid": "383155139b2b536e6be8b0c11004a197",
+    "sp_svc": "reservation-service",
+    "sp_path": "/api/flights/search"
+   }
+  }
+ ]
+}

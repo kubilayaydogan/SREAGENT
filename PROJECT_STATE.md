@@ -64,8 +64,9 @@ Docker 29'un kaynak IP'yi koruması (lab uçları 403 → `LAB_ALLOWED_CIDRS`), 
    `/var/lib/dynatrace/remotepluginmodule/log/extensions/datasources/com.dynatrace.extension.postgres/dynatracesourcesql.jar_fastcheck.log`.
    Etki: `postgres.*` metrikleri ve extension top-queries yok. DB sinyalleri collector (`airlab.pg.*`, `blocking_edge`, `pg_stat_statements` özeti),
    PostgreSQL sunucu logları ve OneAgent DB çağrılarıyla karşılanıyor. ActiveGate/extension güncellenince yeniden denenebilir.
-2. **Trace ↔ log korelasyonu yok:** container loglarında trace/span kimliği yok (OneAgent log zenginleştirme kapalı).
-   Aşama 2'de korelasyon `request_id`/`experiment_id` + zaman penceresiyle yapılır ya da zenginleştirme açılır.
+2. **Trace ↔ log:** ✅ OneAgent Java log zenginleştirmesi açıldı (2026-11-21 16:42); ECS loglarında `dt.trace_id`/`dt.span_id`,
+   MCP ile log ↔ span eşleşmesi 13/13 (`deploy/evidence/mcp-trace-log-join.json`). Kalan: kimlik ayrı log özniteliği değil
+   (sorguda JSON parse gerekiyor); Dynatrace UI'daki log→trace bağlantısı için OpenPipeline kuralı gerekir (yapılmadı).
 3. **Span verisi seyrek gelebiliyor** (ATM/trial sınırları); agent metrik + log ile çapraz kontrol etmeli.
 4. Default Switch IP'leri Windows yeniden başlayınca değişebilir.
 
