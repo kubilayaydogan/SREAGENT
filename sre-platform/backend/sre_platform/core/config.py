@@ -33,6 +33,10 @@ class PlatformSettings:
     retention_days: int = 180
     worker_id: str = ""
     environment: str = "lab"
+    watch_enabled: bool = True                    # eski sre-agent watch'un yerini alır (PG durumlu)
+    health_check_minutes: int = 15                # zamanlanmış sağlık kontrolü aralığı (0 = kapalı)
+    health_check_window_minutes: int = 15
+    health_check_llm: bool = False                # normal döngüde Claude çağrısı yok (maliyet); olayda watch açar
 
     @property
     def libpq_url(self) -> str:
@@ -72,6 +76,10 @@ def load_platform_settings() -> PlatformSettings:
         retention_days=_int("SRE_RETENTION_DAYS", 180),
         worker_id=os.getenv("SRE_WORKER_ID") or os.getenv("HOSTNAME", "worker"),
         environment=os.getenv("SRE_ENVIRONMENT", "lab"),
+        watch_enabled=os.getenv("SRE_WATCH_ENABLED", "true").lower() in ("1", "true", "yes"),
+        health_check_minutes=_int("SRE_HEALTH_CHECK_MINUTES", 15),
+        health_check_window_minutes=_int("SRE_HEALTH_CHECK_WINDOW_MINUTES", 15),
+        health_check_llm=os.getenv("SRE_HEALTH_CHECK_LLM", "false").lower() in ("1", "true", "yes"),
     )
 
 

@@ -34,13 +34,14 @@ RETURNING j.id
 
 async def ensure(s: AsyncSession, name: str, job_type: str, interval_seconds: int, params: dict | None = None,
                  enabled: bool = True) -> None:
-    """Tanımı oluşturur; varsa aralığı/parametreleri günceller (çalışma durumu korunur)."""
+    """Tanımı oluşturur; varsa aralık/parametre/etkinlik yapılandırmadan güncellenir (çalışma durumu korunur)."""
     stmt = insert(ScheduledJob).values(name=name, job_type=job_type, interval_seconds=interval_seconds,
                                        params=params or {}, enabled=enabled)
     await s.execute(stmt.on_conflict_do_update(index_elements=[ScheduledJob.name],
                                                set_={"job_type": stmt.excluded.job_type,
                                                      "interval_seconds": stmt.excluded.interval_seconds,
-                                                     "params": stmt.excluded.params}))
+                                                     "params": stmt.excluded.params,
+                                                     "enabled": stmt.excluded.enabled}))
 
 
 async def claim(s: AsyncSession, worker: str, lease_seconds: int, n: int = 1) -> list[ScheduledJob]:

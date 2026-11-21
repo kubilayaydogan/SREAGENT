@@ -27,7 +27,7 @@ SIGNAL_STEP = {"http": "app_metrics", "hikari": "app_metrics", "jvm_gc": "app_me
                "db_conn": "db_metrics", "db_sessions": "db_metrics", "lock_waiters": "db_metrics",
                "collector": "db_metrics", "db_stats": "db_metrics", "statements": "db_metrics",
                "edges": "logs", "pg_lock_logs": "logs", "spans": "traces", "hosts": "infra", "containers": "infra",
-               "edges_detail": "extra", "top_statements": "extra"}
+               "edges_detail": "extra", "top_statements": "extra", "slow_traces": "traces", "problems": "extra"}
 NODE_MESSAGE = {"plan": "Analiz penceresi ve karşılaştırma (baseline) penceresi belirlendi.",
                 "collect": "Dynatrace verileri toplandı.",
                 "analyze": "Kanıtlar ilişkilendirildi ve risk puanı hesaplandı.",

@@ -31,6 +31,8 @@ export const SIGNAL_LABEL: Record<string, string> = {
   containers: "Container kaynakları",
   edges_detail: "Kilit kenarı detayı",
   top_statements: "En yavaş SQL",
+  slow_traces: "En yavaş istekler (trace)",
+  problems: "Davis problemleri",
 };
 
 export const MECHANISM_LABEL: Record<string, string> = {

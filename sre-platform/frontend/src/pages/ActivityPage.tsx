@@ -6,6 +6,7 @@ import { ActivityTimeline, toolsFromRecords } from "@/components/ActivityTimelin
 import { InvestigationStatusBadge, SeverityBadge } from "@/components/badges";
 import { AppSelect } from "@/components/filters";
 import { ToolTable } from "@/components/RecordTables";
+import { JobsCard } from "@/features/JobsCard";
 import { Button, Card, CardBody, CardHeader, Input, Label, Select, Skeleton } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui/states";
 import { errorToast, useInvestigation, useInvestigations, useTools } from "@/hooks/queries";
@@ -210,6 +211,7 @@ export default function ActivityPage() {
             </ul>
           </Card>
           {can("sre") && <ManualInvestigation />}
+          <JobsCard />
         </div>
         <div>
           {investigationId ? (

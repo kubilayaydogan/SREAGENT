@@ -1,0 +1,135 @@
+# Bilgi bankası tohum kayıtları (origin: seed). Ajanın tanıdığı 6 mekanizmaya ve airlab lab topolojisine göre
+# yazılmıştır. "verified: false" — lab deneyleriyle doğrulandıkça arayüzden güncellenmelidir.
+# Runbook prosedürleri önce SALT-OKUNUR teşhis adımlarıdır; değişiklik içeren adımlar onay akışından geçer.
+
+known_issues:
+  - title: "Sıcak satır kilidi: uzun transaction diğer servisleri bekletiyor"
+    mechanism: row_lock
+    tags: [postgresql, lock, latency]
+    description: >
+      Bir servisin aynı satırları uzun süre kilitli tutan transaction'ı, aynı satırlara yazan diğer servislerin
+      isteklerini bekletir. Etkilenen servislerde gecikme artar; kaynak serviste genellikle artış görülmez.
+    symptoms: |
+      - Etkilenen servis(ler)de p95/ortalama gecikme baseline'ın 2 katından fazla
+      - PostgreSQL'de lock_waiters > 0, PG loglarında "still waiting for ShareLock/RowExclusiveLock"
+      - Kilit kenarı (edge) kayıtlarında bekleyen → bloklayan uygulama çifti
+      - DB CPU ve bağlantı sayısı normal
+    root_cause: "Kaynak serviste aynı satırı güncelleyen uzun süreli (ör. sleep içeren / büyük batch) transaction."
+    resolution: |
+      Bloklayan oturum pg_stat_activity'den belirlenir; transaction kaynak serviste kısaltılır veya
+      satır erişim sırası düzeltilir. Acil durumda bloklayan oturumun sonlandırılması (pg_terminate_backend)
+      SQL_WRITE onayı gerektirir.
+
+  - title: "Hikari bağlantı havuzu tükenmesi"
+    mechanism: pool_saturation
+    tags: [hikari, connection-pool, latency]
+    description: >
+      Uygulamanın Hikari havuzundaki tüm bağlantılar meşgul; yeni istekler bağlantı beklerken gecikme artar,
+      connectionTimeout aşılırsa 5xx oluşur.
+    symptoms: |
+      - hikaricp aktif/maks oranı ≥ 0.9, pending > 0
+      - Aynı servisin HTTP gecikmesi ve (uzarsa) hata oranı artar
+      - DB tarafında genel bağlantı baskısı olmayabilir (havuz uygulama içi sınır)
+    root_cause: "Yavaş sorgular veya kilit beklemeleri bağlantıları uzun tutuyor; ya da havuz boyutu yük için küçük."
+    resolution: |
+      Önce bağlantıları uzun tutan sebep (kilit, yavaş SQL) giderilir. Havuz boyutunu büyütmek DB'nin global
+      bağlantı sınırını zorlayabilir; DB_CONFIG/RESTART onayı ile yapılır.
+
+  - title: "PostgreSQL global bağlantı baskısı (max_connections'a yaklaşma)"
+    mechanism: global_connection_pressure
+    tags: [postgresql, connections]
+    symptoms: |
+      - numbackends / max_connections ≥ 0.85
+      - Birden fazla servis aynı anda etkilenir; yeni bağlantılar "too many clients" ile reddedilebilir
+    root_cause: "Toplam havuz boyutları + harici istemciler max_connections sınırını aşıyor ya da bağlantı sızıntısı var."
+    resolution: |
+      Hangi rol/uygulamanın bağlantı tuttuğu pg_stat_activity ile belirlenir. Boşta bekleyen (idle in transaction)
+      oturumlar incelenir. Sınır değişikliği DB_CONFIG onayı ister.
+
+  - title: "DB_VM CPU doygunluğu"
+    mechanism: db_cpu
+    tags: [postgresql, cpu, infra]
+    symptoms: |
+      - DB_VM host CPU ≥ %85
+      - Tüm servislerde orantılı gecikme artışı; en yavaş SQL ifadelerinin süresi artar
+    root_cause: "Pahalı sorgular (tam tablo taraması, eksik indeks) veya harici yük DB CPU'sunu tüketiyor."
+    resolution: "pg_stat_statements ile en çok CPU tüketen ifadeler bulunur; sorgu/indeks düzeltilir."
+
+  - title: "APP_VM CPU baskısı (gürültülü komşu)"
+    mechanism: app_vm_cpu
+    tags: [cpu, infra, containers]
+    symptoms: |
+      - APP_VM host CPU ≥ %85; container CPU dağılımında baskın bir container
+      - Aynı host'taki servislerin hepsinde gecikme artışı, DB metrikleri normal
+    root_cause: "Aynı host'ta CPU yoğun bir süreç (ör. derleme, yük üreteci, chaos deneyi) uygulamalarla yarışıyor."
+    resolution: "Baskın container/süreç belirlenir; deney veya derleme durdurulur ya da CPU limiti uygulanır (INFRA onayı)."
+
+  - title: "Bağımsız yük artışı (kendi trafiğiyle yavaşlayan servis)"
+    mechanism: independent_load
+    tags: [load, capacity]
+    symptoms: |
+      - Servisin throughput'u belirgin artmış, gecikme artışı yalnız o serviste
+      - Kilit, havuz ve DB baskısı yok
+    root_cause: "Talep artışı; servisin kapasitesi veya ölçeklenmesi yetersiz."
+    resolution: "Trafik kaynağı doğrulanır (beklenen mi, deney mi). Kalıcıysa kapasite planlaması yapılır."
+
+runbooks:
+  - title: "Kilit bekleme teşhisi (salt-okunur)"
+    mechanism: row_lock
+    risk_level: low
+    tags: [postgresql, lock]
+    description: "Kim kimi bekletiyor? Bloklayan oturumu ve sorgusunu bulur. Hiçbir şeyi değiştirmez."
+    procedure: |
+      1. Dynatrace'te ilgili zaman aralığında kilit kenarlarını ve PG kilit loglarını açın (araştırma → Kanıtlar).
+      2. DB_VM'de salt-okunur rol ile:
+         ```sql
+         SELECT a.pid, a.usename, a.application_name, now() - a.xact_start AS tx_age, a.state,
+                pg_blocking_pids(a.pid) AS blocked_by, left(a.query, 200) AS query
+           FROM pg_stat_activity a
+          WHERE a.datname = current_database() AND (cardinality(pg_blocking_pids(a.pid)) > 0 OR a.xact_start < now() - interval '30 seconds')
+          ORDER BY tx_age DESC NULLS LAST;
+         ```
+      3. Bloklayan pid'in application_name'i kaynak servistir; sorgusu ve transaction yaşı RCA'ya eklenir.
+      4. Aksiyon gerekiyorsa (oturum sonlandırma) incident ekranından **SQL_WRITE** onayı isteyin.
+
+  - title: "Bloklayan oturumu sonlandırma"
+    mechanism: row_lock
+    risk_level: high
+    tags: [postgresql, lock, destructive]
+    description: "Uzun transaction'ı sonlandırır; o transaction'daki değişiklikler geri alınır. Dört göz onayı zorunlu."
+    procedure: |
+      **Önkoşul:** Onaylar ekranında APPROVED durumda SQL_WRITE talebi.
+      1. Hedef pid'i "Kilit bekleme teşhisi" runbook'u ile yeniden doğrulayın (pid'ler değişebilir).
+      2. Yetkili rol ile: `SELECT pg_terminate_backend(<pid>);`
+      3. 5 dakika boyunca Dashboard'da etkilenen servislerin gecikmesini izleyin; watch koşullarının kapanmasını bekleyin.
+      4. Incident zaman çizelgesine uygulanan adımı ve saati not edin.
+
+  - title: "Bağlantı havuzu doygunluğu teşhisi"
+    mechanism: pool_saturation
+    risk_level: low
+    tags: [hikari]
+    procedure: |
+      1. Dashboard → uygulama sağlığı tablosunda "Havuz" sütunu ve araştırmadaki Hikari kanıtını kontrol edin.
+      2. Bağlantıları uzun tutan nedeni arayın: aynı pencerede kilit bekleme (row_lock) veya yavaş SQL var mı?
+      3. pg_stat_activity'de ilgili application_name için `state`, `wait_event_type` dağılımına bakın.
+      4. Kök neden kilit/yavaş SQL ise önce onu çözün; havuz boyutu değişikliği **DB_CONFIG** onayı ister.
+
+  - title: "Servisi yeniden başlatma"
+    risk_level: medium
+    requires_approval: true
+    tags: [restart, container]
+    description: "Son çare. Kök neden çözülmeden yeniden başlatma sorunu yalnızca erteler."
+    procedure: |
+      **Önkoşul:** APPROVED durumda RESTART talebi.
+      1. APP_VM'de: `docker compose -f /opt/airlab/app-vm/docker-compose.yml restart <servis>`
+      2. Sağlık kontrolünü bekleyin (`docker ps` → healthy) ve Dashboard'da trafiğin döndüğünü doğrulayın.
+      3. Incident'a not ekleyin.
+
+  - title: "APP_VM CPU baskısı teşhisi"
+    mechanism: app_vm_cpu
+    risk_level: low
+    tags: [cpu]
+    procedure: |
+      1. Araştırmadaki host/container kanıtlarında baskın container'ı belirleyin.
+      2. APP_VM'de: `docker stats --no-stream` ile doğrulayın.
+      3. Chaos deneyi çalışıyorsa Chaos Controller durumunu kontrol edin; derleme vb. işlemleri erteleyin.

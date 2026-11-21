@@ -48,7 +48,8 @@ async def create(s: AsyncSession, *, title: str, source: IncidentSource, severit
     except IntegrityError:
         raise Conflict(f"aynı anahtarla açık incident var: {dedup_key}") from None
     s.add(IncidentEvent(incident_id=inc.id, kind="status", to_status=S.OPEN.value, user_id=created_by,
-                        message=f"Incident açıldı ({source.value})"))
+                        message=f"Incident açıldı ({source.value})",
+                        **({"at": detected_at} if detected_at else {})))   # zaman çizelgesi tespit anından başlar
     if investigation_id:
         await link_investigation(s, inc.id, investigation_id, relation="trigger", user_id=created_by, log=False)
     await s.flush()

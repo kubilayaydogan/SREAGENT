@@ -121,10 +121,35 @@ class InvestigationRunner:
                 await investigations.complete(s, inv, report)
             else:
                 await investigations.fail(s, inv, error or "rapor üretilmedi", cancelled=cancelled)
+        if report and not error and not cancel.is_set():
+            try:
+                await self._correlate(inv_id, start, end, emit)
+            except Exception:  # noqa: BLE001 — ek kanıt toplanamazsa analiz sonucu geçerli kalır
+                log.exception("kanıt ilişkilendirme başarısız")
         if error:
             await emit("error", {"code": "cancelled" if cancelled else "timeout" if timed_out else "analysis_failed",
                                  "message": error, "investigation_id": str(inv_id)})
         return inv, report
+
+    async def _correlate(self, inv_id: uuid.UUID, start, end, emit) -> None:
+        """Yavaş trace kimlikleri + Davis problemleri → ek kanıt (puanlamayı değiştirmez)."""
+        from ..services import correlation
+        await emit("agent_thinking", {"step": "traces", "message": "En yavaş isteklerin trace kimlikleri ve Davis "
+                                                                   "problemleri kanıtlara ekleniyor."})
+        events: list[dict] = []
+        gw = self.rt.gateway_factory(on_event=events.append)
+        res = await asyncio.to_thread(gw.run_many, correlation.queries(start, end, self.rt.agent.cfg))
+        rows: dict[str, uuid.UUID] = {}
+        for ev in events:
+            await self._handle(("tool", ev), inv_id, rows, [time.monotonic()], emit)
+        items = correlation.evidence(res, end)
+        async with transaction(self.rt.sm) as s:
+            await investigations.upsert_evidence(s, inv_id, items)
+        for it in items:
+            if it.get("data_status") == "OK":
+                await emit("evidence_found", {"evidence_key": it["key"], "signal": it["signal"], "step": "traces",
+                                              "records": 1, "trace_id": it.get("trace_id"),
+                                              "dynatrace_query_id": it.get("dynatrace_query_id")})
 
     async def _handle(self, item: tuple, inv_id: uuid.UUID, rows: dict, node_t: list, emit) -> None:
         kind = item[0]

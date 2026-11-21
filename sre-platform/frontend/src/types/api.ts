@@ -436,3 +436,26 @@ export interface AgentEvent<T = Record<string, unknown>> {
   seq: number;
   data: T;
 }
+
+export interface Job {
+  id: string;
+  name: string;
+  job_type: string;
+  interval_seconds: number;
+  enabled: boolean;
+  next_run_at: string;
+  last_run_at: string | null;
+  locked_by: string | null;
+  locked_until: string | null;
+}
+
+export interface JobRun {
+  id: string;
+  job_id: string;
+  worker_id: string;
+  status: "RUNNING" | "SUCCEEDED" | "FAILED";
+  started_at: string;
+  finished_at: string | null;
+  result: Record<string, unknown>;
+  error: string | null;
+}
