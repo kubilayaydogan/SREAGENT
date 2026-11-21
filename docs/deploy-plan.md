@@ -19,6 +19,28 @@ Bu belge `docs/runbook.md`'nin bu ortama özel, sıralı hâlidir. Her adımın 
 > APP_VM `172.20.229.26` (`app-vm`), DB_VM `172.20.233.108` (`db-vm`). Default Switch IP'leri Windows yeniden başlayınca
 > değişebilir → değişirse `db-vm.env`/`.env` IP'leri güncellenip `install-postgres17.sh` (pg_hba/firewall) yeniden çalıştırılır.
 
+### ActiveGate'i yavaş bağlantıda kurma (doğrulandı 2026-11-21)
+
+```bash
+# 1) Bileşensiz kur (indirme beklemez, geri alma olmaz)
+sudo env LANG=C LC_ALL=C /bin/bash Dynatrace-ActiveGate-Linux-x86.sh --set-group=airlab --no-modules
+# 2) Bileşeni aç; ActiveGate arka planda indirir (kopma kurulumu bozmaz, ~15 dk)
+printf '
+[rpm]
+rpm_enabled = true
+
+[extension_controller]
+extension_controller_enabled = true
+'   | sudo tee -a /var/lib/dynatrace/gateway/config/custom.properties
+sudo systemctl restart dynatracegateway
+# 3) /var/lib/dynatrace/packages/modules.downloaded "RemotePluginModule, OK" olunca dosyayı HEMEN yedekle
+#    (installer güncelleme kipinde klasörü temizleyip yeniden indirir) ve parametresiz çalıştır:
+sudo sh -c 'install -d -m700 /root/ag-pkg && cp -p /var/lib/dynatrace/packages/Dynatrace-Remote-Plugin-Module-*.sh* /root/ag-pkg/'
+sudo sh -c 'cd /root/ag-pkg && env LANG=C LC_ALL=C /bin/bash ./Dynatrace-Remote-Plugin-Module-Linux-x86-*.sh'
+systemctl is-active dynatracegateway extensionsmodule
+```
+Yapmayın: aynı installer'ı güncelleme kipinde yeniden çalıştırmak — indirilmiş bileşeni silip yeniden indirir.
+
 ### Gerçek kurulumda karşılaşılanlar (2026-11-21) ve çözümleri
 
 | Sorun | Çözüm |
@@ -27,7 +49,7 @@ Bu belge `docs/runbook.md`'nin bu ortama özel, sıralı hâlidir. Her adımın 
 | VM saatleri dakikalarca kayıyor (chrony yavaş kapatıyor) | `chrony.conf`: `makestep 1 -1` (kurulum betiklerine eklendi) |
 | OneAgent/ActiveGate kurulumu: `platform not supported: <LiNUX>` | Türkçe yerel ayar (tr_TR) "i" dönüşümünü bozuyor → kurulumları `env LANG=C LC_ALL=C` ile çalıştırın |
 | Yavaş/kopan internet (≈400–600 KB/sn): 280–330 MB kurulum dosyaları yarıda kesiliyor | Kurulum dosyalarını Windows'ta `curl --retry` ile indirip imzayı doğrulayın, `scp` ile VM'lere kopyalayın |
-| ActiveGate: `RemotePluginModule` capability indirmesi zaman aşımı | Bkz. §5.2 notu |
+| ActiveGate: `RemotePluginModule` (Extensions Module, 354 MB) indirmesi kopuyor; kurulum 15 dk bekleyip **tamamen geri alıyor** (3 deneme) | Çözüm aşağıda: "ActiveGate'i yavaş bağlantıda kurma" |
 | Lab uçları APP_VM'den 403 | Docker 29 host isteğinde kaynak IP'yi korur → `LAB_ALLOWED_CIDRS`'e APP_VM IP'si (/32) |
 | `PSQL="psql 'host=… user=…'"` çalışmıyor | Bağlantı bilgisi boşluksuz URI olmalı: `psql postgresql://lab_owner@172.20.233.108:5432/airlab -Atc` |
 | `verify-db.sh` servis oturumlarını göstermiyor | `lab_owner` başka rollerin oturumlarını göremez → `PSQL_MON` (lab_monitor) |

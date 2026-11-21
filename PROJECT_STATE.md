@@ -9,7 +9,7 @@ Son güncelleme: 2026-11-21 · Aşama: **1 — VM'lere kuruldu; deneyler ve Post
 | Kaynak kod tamamlandı | 4 iş servisi, chaos-controller, db-migrator, lab-common, pg-lock-collector, VM betikleri, belgeler | ✅ derleme + 29 test |
 | Yerelde uçtan uca doğrulandı | Docker Desktop: PG17 + 5 Java container | ✅ smoke 31/31, E1–E8 tek koşu |
 | İki VM üzerinde kuruldu ve doğrulandı | `app-vm` 172.20.229.26 + `db-vm` 172.20.233.108 (Hyper-V, Rocky 10.1) | ✅ PG17 systemd, Docker, 5 servis + collector, smoke 31/31, gerçek kilit zinciri |
-| Gerçek Dynatrace + MCP | tenant `mfi74785`, Remote MCP `execute-dql` | ✅ 13/15 kapı sinyali veriyle okundu; ❌ PostgreSQL extension (ActiveGate kurulamadı) |
+| Gerçek Dynatrace + MCP | tenant `mfi74785`, Remote MCP `execute-dql` | ✅ 13/15 kapı sinyali veriyle okundu; ⏳ PostgreSQL extension (ActiveGate hazır, UI yapılandırması bekliyor) |
 | VM'de kontrollü deneyler | E0 → E2 → E1×3 | **AÇIK** |
 
 Ayrıntı ve kanıt: `docs/acceptance-gate.md`, `deploy/evidence/vm/`, `deploy/evidence/mcp-gate-*.json`.
@@ -36,7 +36,7 @@ Ayrıntı ve kanıt: `docs/acceptance-gate.md`, `deploy/evidence/vm/`, `deploy/e
 | app-vm | Docker 29.10 / Compose 5.8, 7 imaj, şema v4 + seed scale=1 | ✅ |
 | app-vm | OneAgent 1.349.123 fullstack (5 JVM'e enjekte) | ✅ bağlı |
 | app-vm | 4 iş servisi + chaos-controller + pg-lock-collector (`COLLECTOR_DT_MODE=both`, Micrometer → Dynatrace) | ✅ çalışıyor |
-| app-vm | Environment ActiveGate (grup `airlab`) | ❌ 3 deneme başarısız, kaldırıldı (aşağıya bakın) |
+| app-vm | Environment ActiveGate 1.349 (grup `airlab`) + Extensions Module | ✅ çalışıyor (`--no-modules` + arka plan indirme yolu, deploy-plan) |
 
 Erişim: `ssh airlab-app` / `ssh airlab-db` (kullanıcı `kubilay`, anahtar `~/.ssh/airlab`). Repo VM'lerde `/opt/airlab`.
 
@@ -56,9 +56,7 @@ Docker 29'un kaynak IP'yi koruması (lab uçları 403 → `LAB_ALLOWED_CIDRS`), 
 
 ## Açık maddeler
 
-1. **ActiveGate / PostgreSQL extension.** Tenant Sidney'de (ap-southeast-2). ActiveGate kurulumu `RemotePluginModule`
-   bileşenini (Extensions 2.0 çalışma birimini de içerir) indirirken bağlantı sunucu tarafından sıfırlanıyor
-   (3 deneme, 5–11 dk'da kesildi). Kurulum betiği bu indirmeyi 15 dk bekler, kopunca kurulumu geri alır. Kullanıcı kararı bekleniyor.
+1. **PostgreSQL extension:** ActiveGate + Extensions Module hazır; extension'ın Dynatrace UI'da yapılandırılması ve `postgres.*` metriklerinin MCP ile doğrulanması bekliyor.
 2. **VM'de deneyler:** E0 → E2 → E1×3 (kriter 5–9, 11'in VM kanıtı).
 3. JVM heap/GC sorgusu ve `dt.trace_id` ile trace ↔ log korelasyonu doğrulanmadı.
 4. Default Switch IP'leri Windows yeniden başlayınca değişebilir.

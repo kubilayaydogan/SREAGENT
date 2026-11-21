@@ -19,7 +19,7 @@ doğrulandı · **TENANT ✅** = gerçek tenant'ta MCP ile okundu · **AÇIK** =
 | 9 | Etkisiz yük | bağımsız yükte diğerleri etkilenmiş görünmez | YEREL (tek koşu); VM E1×3 **AÇIK** | |
 | 10 | Kilit kanıtı | kaynak/etkilenen session + servis eşlemesi ile gerçek zincir | **VM ✅ + TENANT ✅** | `vm/lock-chain.txt`; aynı kenar Dynatrace'te `airlab.event == "airlab.pg.blocking_edge"` + PG `log_lock_waits` |
 | 11 | Durdurma | yeni yük durur; sunucu işleri sınırlı sürede biter | YEREL; VM **AÇIK** | E4 stop-all |
-| 12 | Telemetri | 4 servis, 2 host, JDBC, Hikari, PG sinyalleri Dynatrace'te | **TENANT ✅** (extension hariç) | aşağıdaki tablo; `postgres.*` extension **AÇIK** (ActiveGate kurulamadı) |
+| 12 | Telemetri | 4 servis, 2 host, JDBC, Hikari, PG sinyalleri Dynatrace'te | **TENANT ✅** (extension hariç) | aşağıdaki tablo; `postgres.*` extension **AÇIK** (UI yapılandırması) |
 | 13 | MCP veri yolu | agent sinyalleri gerçek MCP aracıyla sorgulanabilir | **TENANT ✅** 13/15 | `deploy/evidence/mcp-gate-*.json` (`execute-dql`) |
 | 14 | Eksikler | doğrulanamayanlar açık | bu belge + PROJECT_STATE.md | |
 
@@ -37,7 +37,7 @@ Sorgular: `scripts/mcp-probe.py` → `GATE_QUERIES`; anahtar/biçim ayrıntısı
 | JVM heap/GC/thread | ☐ | ☐ | | sorgulanmadı (**AÇIK**) |
 | `airlab.app.hikaricp.connections.*` | ☐ | ✅ | | `by: service, pool` |
 | `airlab.app.http.server.requests` | ☐ | ✅ | | `rollup: count`; `.percentile` anahtarı **yok** |
-| `postgres.*` (extension) | ☐ | ❌ | | ActiveGate kurulamadı (**AÇIK**) |
+| `postgres.*` (extension) | ☐ | ❌ | | ActiveGate + Extensions Module hazır; extension UI yapılandırması (**AÇIK**) |
 | `airlab.pg.*` metrikleri (collector) | ☐ | ✅ | | |
 | `airlab.pg.blocking_edge` logları | ☐ | ✅ | | gerçek kilit kenarı okundu; alan `airlab.event` |
 | PostgreSQL sunucu logları (lock wait) | ☐ | ✅ | | `db-vm`, `log_lock_waits` |
