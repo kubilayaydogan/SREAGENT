@@ -1,0 +1,917 @@
+{
+  "id": "rep-20261121-174115-e33bd6",
+  "kind": "analyze",
+  "generated_at": "2026-11-21T17:41:15Z",
+  "status": "complete",
+  "question": null,
+  "windows": [
+    {
+      "name": "baseline",
+      "start": "2026-11-21T14:47:00Z",
+      "end": "2026-11-21T14:51:00Z"
+    },
+    {
+      "name": "window",
+      "start": "2026-11-21T14:52:00Z",
+      "end": "2026-11-21T14:56:00Z"
+    }
+  ],
+  "notes": [
+    "Baseline kullanıcı tarafından verildi."
+  ],
+  "risk": {
+    "overall": {
+      "score": 65.1,
+      "band": "yüksek",
+      "coverage": 1.0,
+      "scored_apps": 4,
+      "total_apps": 4
+    },
+    "apps": {
+      "reservation-service": {
+        "components": {
+          "latency": 0.0,
+          "errors": 0.0,
+          "saturation": 0.0,
+          "lock": 1.0,
+          "resource": 0.0,
+          "_latency_ratio": 0.778,
+          "_latency_source": "span_p95",
+          "_latency_delta_ms": -8.0
+        },
+        "score": 15.0,
+        "coverage": 1.0,
+        "band": "düşük",
+        "missing": []
+      },
+      "checkin-service": {
+        "components": {
+          "latency": 1.0,
+          "errors": 0.003,
+          "saturation": 1.0,
+          "lock": 1.0,
+          "resource": 0.0,
+          "_latency_ratio": 131.8,
+          "_latency_source": "span_p95",
+          "_latency_delta_ms": 3924.0
+        },
+        "score": 65.1,
+        "coverage": 1.0,
+        "band": "yüksek",
+        "missing": []
+      },
+      "flightops-service": {
+        "components": {
+          "latency": 0.0,
+          "errors": 0.0,
+          "saturation": 0.0,
+          "lock": 0.0,
+          "resource": 0.0,
+          "_latency_ratio": 1.0,
+          "_latency_source": "span_p95",
+          "_latency_delta_ms": 0.0
+        },
+        "score": 0.0,
+        "coverage": 1.0,
+        "band": "düşük",
+        "missing": []
+      },
+      "baggage-service": {
+        "components": {
+          "latency": 0.0,
+          "errors": 0.0,
+          "saturation": 0.0,
+          "lock": 0.0,
+          "resource": 0.0,
+          "_latency_ratio": 0.962,
+          "_latency_source": "span_p95",
+          "_latency_delta_ms": -1.0
+        },
+        "score": 0.0,
+        "coverage": 1.0,
+        "band": "düşük",
+        "missing": []
+      }
+    }
+  },
+  "data_coverage": {
+    "signals_ok": 15,
+    "signals_total": 15,
+    "ratio": 1.0,
+    "gaps": {}
+  },
+  "causality": {
+    "primary_mechanism": "row_lock",
+    "confidence": "high",
+    "source_apps": [
+      "reservation-service"
+    ],
+    "affected_apps": [
+      "checkin-service"
+    ]
+  },
+  "impacted": {
+    "checkin-service": {
+      "reasons": [
+        "gecikme ×131.8 (span_p95, +3924 ms)",
+        "havuz zaman aşımı 1"
+      ],
+      "latency_ratio": 131.8,
+      "latency_source": "span_p95"
+    }
+  },
+  "mechanisms": [
+    {
+      "id": "row_lock",
+      "title": "Satır kilidi beklemesi",
+      "source_apps": [
+        "reservation-service"
+      ],
+      "affected_apps": [
+        "checkin-service"
+      ],
+      "mechanism": "Kaynak uygulamanın açık transaction'ı satır kilidini tutarken etkilenen uygulamanın UPDATE/SELECT FOR UPDATE işlemleri Lock/transactionid beklemesine düşüyor; bekleyen istekler Hikari bağlantısını tuttuğu için havuz doluluğu ve gecikme artıyor.",
+      "signals": [
+        "blocking_edge logları",
+        "pg lock waiters metriği",
+        "PostgreSQL log_lock_waits"
+      ],
+      "edges_total": 339.0,
+      "edge_pairs": [
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "checkin-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": "checkin",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 62.0,
+          "wait_max_s": 5.785
+        },
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "reservation-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": "lab_hold_booking",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 39.0,
+          "wait_max_s": 4.13
+        },
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "reservation-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": "lab_hold_booking",
+          "blocker_state": "active",
+          "blocker_wait": "Timeout",
+          "n": 143.0,
+          "wait_max_s": 9.784
+        },
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "reservation-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": null,
+          "blocker_state": "active",
+          "blocker_wait": "IO",
+          "n": 4.0,
+          "wait_max_s": 4.787
+        },
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "reservation-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": null,
+          "blocker_state": "active",
+          "blocker_wait": "LWLock",
+          "n": 1.0,
+          "wait_max_s": 1.118
+        },
+        {
+          "waiter_app": "reservation-service",
+          "blocker_app": "checkin-service",
+          "wait_type": "Lock",
+          "waiter_op": "create_booking",
+          "blocker_op": "checkin",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 5.0,
+          "wait_max_s": 0.114
+        },
+        {
+          "waiter_app": "reservation-service",
+          "blocker_app": "checkin-service",
+          "wait_type": "Lock",
+          "waiter_op": "lab_hold_booking",
+          "blocker_op": "checkin",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 12.0,
+          "wait_max_s": 2.885
+        },
+        {
+          "waiter_app": "reservation-service",
+          "blocker_app": "reservation-service",
+          "wait_type": "Lock",
+          "waiter_op": "create_booking",
+          "blocker_op": "lab_hold_booking",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 2.0,
+          "wait_max_s": 0.114
+        },
+        {
+          "waiter_app": "reservation-service",
+          "blocker_app": "reservation-service",
+          "wait_type": "Lock",
+          "waiter_op": "lab_hold_booking",
+          "blocker_op": "lab_hold_booking",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 9.0,
+          "wait_max_s": 1.958
+        },
+        {
+          "waiter_app": "reservation-service",
+          "blocker_app": "reservation-service",
+          "wait_type": "Lock",
+          "waiter_op": "lab_hold_booking",
+          "blocker_op": "lab_hold_booking",
+          "blocker_state": "active",
+          "blocker_wait": "Timeout",
+          "n": 60.0,
+          "wait_max_s": 6.397
+        }
+      ],
+      "blocker_states": [
+        "active"
+      ],
+      "chain_blockers": [
+        "checkin-service"
+      ],
+      "confidence": "high",
+      "evidence_ids": [
+        "ev-3da6d874cc",
+        "ev-1f65c0cea3",
+        "ev-6dab0cfb9b",
+        "ev-97fa45257d"
+      ]
+    },
+    {
+      "id": "pool_saturation",
+      "title": "checkin-service bağlantı havuzu doygunluğu",
+      "source_apps": [
+        "reservation-service"
+      ],
+      "affected_apps": [
+        "checkin-service"
+      ],
+      "mechanism": "Kilit beklemesinin sonucu: bekleyen istekler bağlantıları tutuyor.",
+      "secondary_to": "row_lock",
+      "pool_ratio": 0.625,
+      "pending_max": 0.0,
+      "timeouts": 1.0,
+      "rpm_ratio": null,
+      "signals": [
+        "Hikari aktif/max"
+      ],
+      "confidence": "medium",
+      "evidence_ids": [
+        "ev-9d19b96fae",
+        "ev-0526fc3b03"
+      ]
+    }
+  ],
+  "alternatives": [],
+  "unexplained_impacted": [],
+  "data_gaps": [],
+  "true_zero_signals": [],
+  "human_review": [
+    "Kaynak uygulamanın uzun süren/boşta açık transaction'larını (blocker_state, xact_age) inceleyin; pg_stat_activity'de 'idle in transaction' oturumları ve uygulama transaction sınırlarını doğrulayın."
+  ],
+  "evidence": [
+    {
+      "id": "ev-0526fc3b03",
+      "signal": "http",
+      "status": "OK",
+      "records": 8,
+      "dynatrace_query_id": "01a1ff32-c821-7bfe-a861-cce72369beb5",
+      "dql": "timeseries n=sum(airlab.app.http.server.requests, rollup: count), t=sum(airlab.app.http.server.requests, rollup: sum), mx=max(airlab.app.http.server.requests, rollup: max), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m, by:{service, outcome}, filter:{not startsWith(uri, \"/actuator\") and not startsWith(uri, \"/lab\")}",
+      "error": null
+    },
+    {
+      "id": "ev-d1531e8797",
+      "signal": "spans",
+      "status": "OK",
+      "records": 10,
+      "dynatrace_query_id": "01a1ff32-c86f-744e-8bd6-5b5177deb799",
+      "dql": "fetch spans, from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\" | filter span.kind == \"server\" and isNotNull(spring.application.name) and not startsWith(url.path, \"/actuator\") and not startsWith(url.path, \"/lab\") | fieldsAdd w = if(start_time < toTimestamp(\"2026-11-21T14:47:00Z\"), \"_out\", else:if(start_time < toTimestamp(\"2026-11-21T14:51:00Z\"), \"baseline\", else:if(start_time < toTimestamp(\"2026-11-21T14:56:00Z\"), \"window\", else:\"_out\"))) | summarize n=count(), p50=percentile(duration, 50)/1000000, p95=percentile(duration, 95)/1000000, by:{w, svc=spring.application.name}",
+      "error": null
+    },
+    {
+      "id": "ev-9d19b96fae",
+      "signal": "hikari",
+      "status": "OK",
+      "records": 4,
+      "dynatrace_query_id": "01a1ff32-c81d-7dcd-958a-1583a074fa05",
+      "dql": "timeseries a=max(airlab.app.hikaricp.connections.active), pe=max(airlab.app.hikaricp.connections.pending), mx=max(airlab.app.hikaricp.connections.max), to=sum(airlab.app.hikaricp.connections.timeout), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m, by:{service}",
+      "error": null
+    },
+    {
+      "id": "ev-ca5ba92a42",
+      "signal": "jvm_gc",
+      "status": "OK",
+      "records": 4,
+      "dynatrace_query_id": "01a1ff32-c901-7233-8cb4-a43b7ffc4f4a",
+      "dql": "timeseries gc=sum(airlab.app.jvm.gc.pause, rollup: count), gcmax=max(airlab.app.jvm.gc.pause, rollup: max), ov=max(airlab.app.jvm.gc.overhead), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m, by:{service}",
+      "error": null
+    },
+    {
+      "id": "ev-4db2cfc9a8",
+      "signal": "jvm_heap",
+      "status": "OK",
+      "records": 4,
+      "dynatrace_query_id": "01a1ff32-cde2-7994-8046-1d1c481263b7",
+      "dql": "timeseries used=max(airlab.app.jvm.memory.used), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m, by:{service, area} | filter area == \"heap\"",
+      "error": null
+    },
+    {
+      "id": "ev-074b644512",
+      "signal": "hosts",
+      "status": "OK",
+      "records": 2,
+      "dynatrace_query_id": "01a1ff32-cea4-76ce-82b6-cfd6e21d6bbc",
+      "dql": "timeseries cpu=avg(dt.host.cpu.usage), io=avg(dt.host.cpu.iowait), mem=avg(dt.host.memory.usage), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m, by:{dt.smartscape.host} | fieldsAdd host=getNodeName(dt.smartscape.host)",
+      "error": null
+    },
+    {
+      "id": "ev-7a5d3c3c45",
+      "signal": "containers",
+      "status": "OK",
+      "records": 6,
+      "dynatrace_query_id": "01a1ff32-d0d9-7bd8-868d-3a046827b269",
+      "dql": "timeseries u=sum(dt.containers.cpu.usage_user_time), s=sum(dt.containers.cpu.usage_system_time), rss=max(dt.containers.memory.resident_set_bytes), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m, by:{dt.smartscape.container} | fieldsAdd name=getNodeName(dt.smartscape.container)",
+      "error": null
+    },
+    {
+      "id": "ev-25ce79e17e",
+      "signal": "db_conn",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a1ff32-d0fd-7775-b816-e791c83348a9",
+      "dql": "timeseries r=max(airlab.pg.connections.used_ratio_normal), used=max(airlab.pg.connections.used), slots=max(airlab.pg.connections.normal_slots), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m",
+      "error": null
+    },
+    {
+      "id": "ev-eeed0339b1",
+      "signal": "db_sessions",
+      "status": "OK",
+      "records": 11,
+      "dynatrace_query_id": "01a1ff32-d1fa-7ff4-a624-8e1a8f406203",
+      "dql": "timeseries s=avg(airlab.pg.sessions), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m, by:{app, state, wait_type}",
+      "error": null
+    },
+    {
+      "id": "ev-6dab0cfb9b",
+      "signal": "lock_waiters",
+      "status": "OK",
+      "records": 4,
+      "dynatrace_query_id": "01a1ff32-d383-78f7-9863-bf825db00aae",
+      "dql": "timeseries wt=max(airlab.pg.lock.waiters), wmax=max(airlab.pg.lock.wait_max_seconds), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m, by:{waiter.app, blocker.app}",
+      "error": null
+    },
+    {
+      "id": "ev-1f65c0cea3",
+      "signal": "collector",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a1ff32-d3c0-78f6-80a4-59d6d2f2b4f4",
+      "dql": "timeseries up=min(airlab.pg.collector.up), tot=max(airlab.pg.lock.waiters_total), tavg=avg(airlab.pg.lock.waiters_total), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m",
+      "error": null
+    },
+    {
+      "id": "ev-3da6d874cc",
+      "signal": "edges",
+      "status": "OK",
+      "records": 11,
+      "dynatrace_query_id": "01a1ff32-d478-7b5f-8bee-215f1ff4ee1e",
+      "dql": "fetch logs, from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\" | filter airlab.event == \"airlab.pg.blocking_edge\" | fieldsAdd w = if(timestamp < toTimestamp(\"2026-11-21T14:47:00Z\"), \"_out\", else:if(timestamp < toTimestamp(\"2026-11-21T14:51:00Z\"), \"baseline\", else:if(timestamp < toTimestamp(\"2026-11-21T14:56:00Z\"), \"window\", else:\"_out\"))) | summarize n=count(), wait_max=max(toDouble(waiter.wait_seconds)), by:{w, waiter_app=waiter.app, blocker_app=blocker.app, wait_type=waiter.wait_event_type, waiter_op=waiter.op, blocker_op=blocker.op, blocker_state=blocker.state, blocker_wait=blocker.wait_event_type}",
+      "error": null
+    },
+    {
+      "id": "ev-97fa45257d",
+      "signal": "pg_lock_logs",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a1ff32-d4da-711f-abb8-7f4ff755c00e",
+      "dql": "fetch logs, from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\" | filter host.name == \"db-vm\" and contains(content, \"still waiting for\") | fieldsAdd w = if(timestamp < toTimestamp(\"2026-11-21T14:47:00Z\"), \"_out\", else:if(timestamp < toTimestamp(\"2026-11-21T14:51:00Z\"), \"baseline\", else:if(timestamp < toTimestamp(\"2026-11-21T14:56:00Z\"), \"window\", else:\"_out\"))) | summarize n=count(), by:{w}",
+      "error": null
+    },
+    {
+      "id": "ev-5e52ebc0c3",
+      "signal": "db_stats",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a1ff32-d684-7652-97c2-22ffdff509c7",
+      "dql": "timeseries dl=sum(airlab.pg.db.deadlocks), rb=sum(airlab.pg.db.xact_rollback), cm=sum(airlab.pg.db.xact_commit), tmp=sum(airlab.pg.db.temp_bytes), rd=sum(airlab.pg.db.blks_read), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m",
+      "error": null
+    },
+    {
+      "id": "ev-add6e8c858",
+      "signal": "statements",
+      "status": "OK",
+      "records": 7,
+      "dynatrace_query_id": "01a1ff32-d777-7980-ac0f-737d06d61862",
+      "dql": "timeseries et=sum(airlab.pg.statements.exec_time_ms), calls=sum(airlab.pg.statements.calls), from:\"2026-11-21T14:47:00Z\", to:\"2026-11-21T14:56:00Z\", interval:1m, by:{db.role}",
+      "error": null
+    },
+    {
+      "id": "ev-20feee3507",
+      "signal": "edges_detail",
+      "status": "OK",
+      "records": 15,
+      "dynatrace_query_id": "01a1ff32-e7fc-7002-8ed3-497115daf22f",
+      "dql": "fetch logs, from:\"2026-11-21T14:52:00Z\", to:\"2026-11-21T14:56:00Z\" | filter airlab.event == \"airlab.pg.blocking_edge\" | fields timestamp, content, waiter.app, blocker.app, waiter.wait_event_type, waiter.wait_event, waiter.wait_seconds, blocker.state, blocker.wait_event_type, blocker.xact_age_seconds, waiter.op, blocker.op | sort toDouble(waiter.wait_seconds) desc | limit 15",
+      "error": null
+    }
+  ],
+  "extra_evidence": {
+    "edges_detail": {
+      "evidence_id": "ev-20feee3507",
+      "status": "OK",
+      "records": [
+        {
+          "timestamp": "2026-11-21T14:55:02.566000000Z",
+          "content": "checkin-service(svc_checkin) pid 18393 waits Lock/transactionid for reservation-service(svc_reservation) pid 19850 wait=8.80s blocker_xact_age=4.92s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 8.798,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 4.918,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:52:07.220000000Z",
+          "content": "checkin-service(svc_checkin) pid 19962 waits Lock/transactionid for reservation-service(svc_reservation) pid 19850 wait=8.79s blocker_xact_age=3.16s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 8.788,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 3.155,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:55:02.566000000Z",
+          "content": "checkin-service(svc_checkin) pid 19967 waits Lock/transactionid for reservation-service(svc_reservation) pid 19850 wait=7.47s blocker_xact_age=4.92s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 7.469,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 4.918,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:54:12.562000000Z",
+          "content": "checkin-service(svc_checkin) pid 19987 waits Lock/transactionid for reservation-service(svc_reservation) pid 19965 wait=6.47s blocker_xact_age=1.25s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 6.466,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 1.255,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:55:07.564000000Z",
+          "content": "checkin-service(svc_checkin) pid 19968 waits Lock/transactionid for reservation-service(svc_reservation) pid 18304 wait=6.13s blocker_xact_age=1.83s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 6.133,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 1.826,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:53:07.224000000Z",
+          "content": "checkin-service(svc_checkin) pid 19962 waits Lock/transactionid for reservation-service(svc_reservation) pid 19966 wait=6.12s blocker_xact_age=6.62s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 6.123,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 6.619,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:54:57.567000000Z",
+          "content": "reservation-service(svc_reservation) pid 19966 waits Lock/transactionid for reservation-service(svc_reservation) pid 19992 wait=5.92s blocker_xact_age=3.91s",
+          "waiter.app": "reservation-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 5.922,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 3.911,
+          "waiter.op": "lab_hold_booking",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:54:57.567000000Z",
+          "content": "checkin-service(svc_checkin) pid 19968 waits Lock/transactionid for reservation-service(svc_reservation) pid 19992 wait=5.80s blocker_xact_age=3.91s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 5.803,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 3.911,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:55:07.564000000Z",
+          "content": "checkin-service(svc_checkin) pid 19986 waits Lock/transactionid for reservation-service(svc_reservation) pid 18304 wait=5.80s blocker_xact_age=1.83s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 5.801,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 1.826,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:52:07.220000000Z",
+          "content": "checkin-service(svc_checkin) pid 19969 waits Lock/transactionid for reservation-service(svc_reservation) pid 19850 wait=5.79s blocker_xact_age=3.16s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 5.786,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 3.155,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:52:02.220000000Z",
+          "content": "checkin-service(svc_checkin) pid 19721 waits Lock/tuple for checkin-service(svc_checkin) pid 19969 wait=5.79s blocker_xact_age=0.79s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "checkin-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "tuple",
+          "waiter.wait_seconds": 5.785,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Lock",
+          "blocker.xact_age_seconds": 0.789,
+          "waiter.op": "checkin",
+          "blocker.op": "checkin"
+        },
+        {
+          "timestamp": "2026-11-21T14:52:02.220000000Z",
+          "content": "checkin-service(svc_checkin) pid 19721 waits Lock/tuple for checkin-service(svc_checkin) pid 19986 wait=5.79s blocker_xact_age=3.13s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "checkin-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "tuple",
+          "waiter.wait_seconds": 5.785,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Lock",
+          "blocker.xact_age_seconds": 3.125,
+          "waiter.op": "checkin",
+          "blocker.op": "checkin"
+        },
+        {
+          "timestamp": "2026-11-21T14:52:42.220000000Z",
+          "content": "checkin-service(svc_checkin) pid 19969 waits Lock/transactionid for reservation-service(svc_reservation) pid 19965 wait=5.78s blocker_xact_age=5.80s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 5.781,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 5.796,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:54:52.566000000Z",
+          "content": "checkin-service(svc_checkin) pid 19721 waits Lock/transactionid for reservation-service(svc_reservation) pid 19961 wait=5.47s blocker_xact_age=4.96s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 5.47,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 4.959,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        },
+        {
+          "timestamp": "2026-11-21T14:55:37.565000000Z",
+          "content": "checkin-service(svc_checkin) pid 18393 waits Lock/transactionid for reservation-service(svc_reservation) pid 18304 wait=5.47s blocker_xact_age=3.48s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "reservation-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 5.469,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 3.483,
+          "waiter.op": "checkin",
+          "blocker.op": "lab_hold_booking"
+        }
+      ]
+    }
+  },
+  "explanation": "## Özet\n- **Risk puanı:** 65,1 (**yüksek**), yalnızca checkin-service kaynaklı. reservation-service 15,0 (düşük), flightops ve baggage 0,0.\n- **Veri kapsamı:** 1,0 (15/15 sinyal, 4/4 uygulama puanlandı).\n- **Nedensellik güveni:** `row_lock` için yüksek, `pool_saturation` için orta (ikincil).\n- checkin-service p95 gecikmesi 30 ms'den 3954 ms'ye çıktı (×131,8, span_p95). Havuz zaman aşımı 1, hata oranı 0,005.\n\nBu dört kavram ayrıdır. Yüksek bir risk bandı nedensellik kesinliği anlamına gelmez.\n\n## Kaynak → Etkilenen\n- **Kaynak:** reservation-service, `lab_hold_booking` işlemi (ev-3da6d874cc, ev-1f65c0cea3, ev-6dab0cfb9b, ev-97fa45257d).\n- **Etkilenen:** checkin-service, `checkin` işlemi. Bekleme türü Lock; örneklerde `transactionid` ve `tuple` (ev-20feee3507).\n- Toplam 339 blocking edge ve 1117 `log_lock_waits` kaydı var. Baseline'da ikisi de 0.\n\n## Mekanizma\n- Kaynağın açık transaction'ı satır kilidini tutuyor, checkin güncellemeleri bekliyor. Bekleyen istekler Hikari bağlantısını tuttuğundan havuz doluyor (en yüksek 0,875, ortalama 0,625; ev-9d19b96fae, ev-0526fc3b03).\n- DB lock waiter ortalaması 6, en yüksek 20. checkin-service için ortalama 11.\n- En büyük çift: `lab_hold_booking` → `checkin`, blocker bekleme olayı `Timeout`, n=143, en uzun bekleme 9,78 sn.\n- Örnek kayıt: bekleyen 8,80 sn, blocker xact yaşı 4,92 sn (ev-20feee3507).\n\n## Alternatifler\nMotor alternatif açıklama üretmedi (`alternatives` boş). Yine de veride şunlar var:\n- **Karşılıklı ve kendi içinde bekleme:** `checkin` → `checkin` (n=62, en uzun 5,79 sn) ve `checkin` → `lab_hold_booking` (n=12, en uzun 2,89 sn). Zincir blocker'ı olarak checkin-service de işaretli. Tek yönlü \"reservation → checkin\" anlatımı eksik kalabilir.\n- `lab_hold_booking` içi çekişme (n=69) kaynağın kendi kendini de yavaşlatabildiğini gösteriyor.\n- Host CPU, iowait, bellek ve GC belirgin değişmedi, yani kaynak yetersizliği kanıtı yok.\n\n## Veri boşlukları\n- Motor boşluk bildirmedi (`gaps` ve `data_gaps` boş).\n- Veride sorgu metni, transaction sınırları ve kilidin neden tutulduğu yok.\n- Pencereler 4'er dakika. Baseline kullanıcı tarafından verildi.\n- `chaos-controller` konteyneri görünüyor ama olay verisi yok. İlişkisi hakkında yorum yapılamaz.\n- `rpm_ratio` boş (null).\n\n## Önerilen insan incelemesi\n- reservation-service'in `lab_hold_booking` transaction'larını (blocker_state, xact_age) ve `pg_stat_activity`'de \"idle in transaction\" oturumlarını inceleyin. `Timeout` bekleme olayının nedenini doğrulayın.\n- checkin-service içindeki `checkin` ↔ `checkin` tuple kilidi çekişmesini ayrıca değerlendirin.\n- Bu bulgular korelasyon ve edge kanıtına dayanır, kesin kök neden hükmü değildir.",
+  "explanation_source": "Claude (claude-sonnet-5-5)",
+  "errors": [],
+  "budget": {
+    "queries_used": 16,
+    "elapsed_s": 34.8,
+    "llm_calls": 1,
+    "input_tokens": 9771,
+    "output_tokens": 2382
+  },
+  "features_summary": {
+    "baseline": {
+      "apps": {
+        "baggage-service": {
+          "rpm": 66.0,
+          "err_rate": 0.0,
+          "http_mean_ms": 12.155,
+          "span_n": 263.0,
+          "span_p95_ms": 26.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 2.0,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 51.724
+        },
+        "checkin-service": {
+          "rpm": 243.25,
+          "err_rate": 0.0,
+          "http_mean_ms": 15.038,
+          "span_n": 972.0,
+          "span_p95_ms": 30.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 2.0,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 96.563
+        },
+        "flightops-service": {
+          "rpm": 62.75,
+          "err_rate": 0.0,
+          "http_mean_ms": 6.116,
+          "span_n": 251.0,
+          "span_p95_ms": 15.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 2.0,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 8.312
+        },
+        "reservation-service": {
+          "rpm": 72.25,
+          "err_rate": 0.0,
+          "http_mean_ms": 13.965,
+          "span_n": 288.0,
+          "span_p95_ms": 36.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 2.0,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 14.512
+        }
+      },
+      "hosts": {
+        "db-vm": {
+          "cpu": 1.143,
+          "cpu_max": 1.265,
+          "iowait": 0.564,
+          "mem": 29.871,
+          "points": 4
+        },
+        "app-vm": {
+          "cpu": 6.043,
+          "cpu_max": 6.825,
+          "iowait": 0.017,
+          "mem": 65.955,
+          "points": 4
+        }
+      },
+      "db": {
+        "conn_ratio": 0.096,
+        "conn_used_max": 9.0,
+        "conn_slots": 94.0,
+        "collector_points": 4,
+        "collector_up_min": 1.0,
+        "lock_waiters_max": 0.0,
+        "lock_waiters_avg": 0.0,
+        "edges_total": 0,
+        "pg_lock_wait_logs": 0,
+        "deadlocks": 0.0,
+        "rollbacks": 4.0,
+        "commits": 4377.0,
+        "temp_bytes": 0.0
+      },
+      "containers": {
+        "checkin-service": {
+          "cpu_cores": 0.0368,
+          "rss_max": 402303658.0
+        },
+        "pg-lock-collector": {
+          "cpu_cores": 0.0014,
+          "rss_max": 26077184.0
+        },
+        "flightops-service": {
+          "cpu_cores": 0.0165,
+          "rss_max": 361796949.0
+        },
+        "chaos-controller": {
+          "cpu_cores": 0.0946,
+          "rss_max": 317979306.0
+        },
+        "baggage-service": {
+          "cpu_cores": 0.0163,
+          "rss_max": 407826432.0
+        },
+        "reservation-service": {
+          "cpu_cores": 0.0286,
+          "rss_max": 371734528.0
+        }
+      }
+    },
+    "window": {
+      "apps": {
+        "baggage-service": {
+          "rpm": 66.0,
+          "err_rate": 0.0,
+          "http_mean_ms": 8.473,
+          "span_n": 330.0,
+          "span_p95_ms": 25.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 2.0,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 23.94
+        },
+        "checkin-service": {
+          "rpm": 242.75,
+          "err_rate": 0.005,
+          "http_mean_ms": 1021.345,
+          "span_n": 1217.0,
+          "span_p95_ms": 3954.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 1.0,
+          "pool_ratio": 0.875,
+          "pool_ratio_avg": 0.625,
+          "gc_overhead": 0.0,
+          "db_sessions": 8.758,
+          "lock_waiters_avg": 11.0,
+          "db_exec_ms_per_min": 227677.0
+        },
+        "flightops-service": {
+          "rpm": 55.25,
+          "err_rate": 0.0,
+          "http_mean_ms": 5.231,
+          "span_n": 315.0,
+          "span_p95_ms": 15.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 2.0,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 7.78
+        },
+        "reservation-service": {
+          "rpm": 69.0,
+          "err_rate": 0.0,
+          "http_mean_ms": 22.707,
+          "span_n": 345.0,
+          "span_p95_ms": 28.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.5,
+          "pool_ratio_avg": 0.5,
+          "gc_overhead": 0.0,
+          "db_sessions": 8.025,
+          "lock_waiters_avg": 4.75,
+          "db_exec_ms_per_min": 243437.5
+        }
+      },
+      "hosts": {
+        "db-vm": {
+          "cpu": 1.145,
+          "cpu_max": 1.184,
+          "iowait": 0.433,
+          "mem": 30.537,
+          "points": 4
+        },
+        "app-vm": {
+          "cpu": 6.653,
+          "cpu_max": 7.776,
+          "iowait": 0.012,
+          "mem": 66.386,
+          "points": 4
+        }
+      },
+      "db": {
+        "conn_ratio": 0.202,
+        "conn_used_max": 19.0,
+        "conn_slots": 94.0,
+        "collector_points": 4,
+        "collector_up_min": 1.0,
+        "lock_waiters_max": 20.0,
+        "lock_waiters_avg": 6.0,
+        "edges_total": 339.0,
+        "pg_lock_wait_logs": 1117.0,
+        "deadlocks": 0.0,
+        "rollbacks": 17.0,
+        "commits": 5434.0,
+        "temp_bytes": 0.0
+      },
+      "containers": {
+        "checkin-service": {
+          "cpu_cores": 0.0439,
+          "rss_max": 408741205.0
+        },
+        "pg-lock-collector": {
+          "cpu_cores": 0.0022,
+          "rss_max": 26169344.0
+        },
+        "flightops-service": {
+          "cpu_cores": 0.0146,
+          "rss_max": 362041344.0
+        },
+        "chaos-controller": {
+          "cpu_cores": 0.0913,
+          "rss_max": 320333141.0
+        },
+        "baggage-service": {
+          "cpu_cores": 0.0164,
+          "rss_max": 409536512.0
+        },
+        "reservation-service": {
+          "cpu_cores": 0.0432,
+          "rss_max": 390135808.0
+        }
+      }
+    }
+  },
+  "fixture": false
+}

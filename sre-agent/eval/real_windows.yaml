@@ -1,0 +1,8 @@
+# Gerçek VM deney pencereleri (2026-11-21, tenant mfi74785). YALNIZ GİRDİ: zaman aralıkları. Deney adı/etiketi agent'a
+# verilmez. Pencereler deneyin BASELINE ve LOAD fazlarının içine (tam dakikaya) yuvarlanmıştır; kaynak:
+# deploy/evidence/mcp-experiment-windows.json
+E0:   {baseline_from: "2026-11-21T14:37:00Z", baseline_to: "2026-11-21T14:41:00Z", from: "2026-11-21T14:42:00Z", to: "2026-11-21T14:43:00Z"}
+E2:   {baseline_from: "2026-11-21T14:47:00Z", baseline_to: "2026-11-21T14:51:00Z", from: "2026-11-21T14:52:00Z", to: "2026-11-21T14:56:00Z"}
+E1-1: {baseline_from: "2026-11-21T15:02:00Z", baseline_to: "2026-11-21T15:06:00Z", from: "2026-11-21T15:07:00Z", to: "2026-11-21T15:11:00Z"}
+E1-2: {baseline_from: "2026-11-21T15:18:00Z", baseline_to: "2026-11-21T15:22:00Z", from: "2026-11-21T15:23:00Z", to: "2026-11-21T15:27:00Z"}
+E1-3: {baseline_from: "2026-11-21T15:33:00Z", baseline_to: "2026-11-21T15:37:00Z", from: "2026-11-21T15:38:00Z", to: "2026-11-21T15:42:00Z"}

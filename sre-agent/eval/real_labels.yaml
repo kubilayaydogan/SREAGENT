@@ -1,0 +1,9 @@
+# Gerçek deneylerin beklenen sonuçları (değerlendirme etiketi; agent girdisine girmez).
+E0:   {primary: null, max_score: 25}
+E2:   {primary: row_lock, sources: [reservation-service], affected: [checkin-service], min_score: 50}
+E1-1: {primary: independent_load, sources: [baggage-service], not_mechanisms: [row_lock],
+       not_impacted: [reservation-service, checkin-service, flightops-service]}
+E1-2: {primary: independent_load, sources: [baggage-service], not_mechanisms: [row_lock],
+       not_impacted: [reservation-service, checkin-service, flightops-service]}
+E1-3: {primary: independent_load, sources: [baggage-service], not_mechanisms: [row_lock],
+       not_impacted: [reservation-service, checkin-service, flightops-service]}

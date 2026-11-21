@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-Son güncelleme: 2026-11-21 · Aşama: **1 — VM'de kuruldu, deneyler ve MCP kapısı tamam; Aşama 2 kullanıcı onayı bekliyor** · Aşama 2: **başlanmadı**
+Son güncelleme: 2026-11-21 · Aşama: **2 — SRE Agent yazıldı, testlendi, APP_VM'e dağıtılıyor** · Aşama 1: **tamam**
 
 ## Özet
 
@@ -76,6 +76,24 @@ Docker 29'un kaynak IP'yi koruması (lab uçları 403 → `LAB_ALLOWED_CIDRS`), 
 - E4: ana havuzlar mevcut bağlantılarını koruduğu için arka plan etkilenmedi; hata üretmek için concurrency/hold artırılmalı.
 - E6: disk I/O Docker Desktop page cache nedeniyle ölçülmedi — VM'de ölçülmeli.
 
-## Aşama 2
+## Aşama 2 — SRE Agent (2026-11-21)
 
-Başlanmadı. Girdi: bu belge, `docs/architecture.md`, `docs/telemetry-contract.md` (§J dahil), `docs/acceptance-gate.md`.
+Kod `sre-agent/`; mimari kararlar `docs/decisions/ADR-007-sre-agent.md`; işletim `docs/sre-agent-runbook.md`.
+
+| Konu | Durum |
+|---|---|
+| Yığın | Python 3.13, LangGraph 1.2.24 + SqliteSaver, langchain-anthropic 1.7.12 (`claude-sonnet-5-5`), langchain-mcp-adapters 0.3.2 / mcp 1.30.0, LangSmith 0.16 (redakte) |
+| Veri kaynağı | Yalnız Dynatrace Remote MCP `execute-dql`. 21 araç keşfedildi; sabit katalog (15 sinyal + 2 ek kanıt). DB bağlantısı yok, sessiz fallback yok |
+| CLI | `doctor`, `analyze` (`--last`, `--from/--to`, `--baseline-from/--baseline-to`), `ask`, `chat`, `watch`, `watch-status`, `report list/show` |
+| Puan / atıf | Deterministik. Risk, veri kapsamı ve nedensellik güveni ayrı. Mekanizmalar: row_lock (kök engelleyici), pool_saturation, global_connection_pressure, db_cpu, app_vm_cpu (agent'ın kendi CPU'su `self_is_source`), independent_load |
+| Testler | ✅ 38/38 (`pytest`): puan formülü, veri kalitesi, 10 senaryo, graf (MCP/Claude kesintisi, checkpoint, redaksiyon, prompt injection), watch durum makinesi |
+| Değerlendirme | ✅ sentetik 10/10 (`deploy/evidence/sre-agent-eval-synthetic.json`, fixture). ✅ **gerçek VM deneyleri 5/5** (`deploy/evidence/sre-agent-eval-real.json`): E0 sorun yok; E2 row_lock reservation → checkin (yüksek güven); E1×3 baggage bağımsız yük, yayılma yok |
+| Örnek raporlar | `docs/examples/sre-agent/` (gerçek veri + Claude açıklaması) |
+| Dağıtım | `app-vm/docker-compose.yml` → `sre-agent` (watch, profil `agent`) + `sre-agent-cli` (profil `agent-cli`), volume `agent-data`, ağ `airlab-agent` (DB/servis ağına bağlı değil). Gizli bilgiler `app-vm/agent.env` (gitignored, `scripts/gen-agent-env.sh`) |
+
+Aşama 2 açık maddeleri:
+1. Eşikler 2026-11-21 deneylerine göre kalibre edildi. E3–E8 (havuz, global bağlantı, DB/APP CPU) VM'de koşulmadı; bu
+   mekanizmalar yalnız sentetik senaryolarla doğrulandı.
+2. `postgres.*` extension metrikleri yok: DB CPU'nun nedeni (sorgu ya da bakım) ayrıştırılamaz.
+3. Trial (~2026-12-06) bitince yeni tenant için `DT_ENV`/`T_MCP` değiştirilip `doctor` çalıştırılmalı.
+4. Çalışma bitince tüm token ve anahtarlar (Dynatrace, Anthropic, LangSmith) döndürülmeli.

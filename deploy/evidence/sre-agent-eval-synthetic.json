@@ -1,0 +1,171 @@
+{
+  "kind": "synthetic",
+  "fixture": true,
+  "rows": [
+    {
+      "case": "normal",
+      "report": "eval-normal",
+      "fails": [],
+      "score": 0.0,
+      "primary": null,
+      "confidence": null,
+      "sources": [],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "independent_load",
+      "report": "eval-independent_load",
+      "fails": [],
+      "score": 0.0,
+      "primary": "independent_load",
+      "confidence": "medium",
+      "sources": [
+        "flightops-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "row_lock",
+      "report": "eval-row_lock",
+      "fails": [],
+      "score": 65.0,
+      "primary": "row_lock",
+      "confidence": "high",
+      "sources": [
+        "reservation-service"
+      ],
+      "affected": [
+        "checkin-service"
+      ],
+      "impacted": [
+        "checkin-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "single_pool",
+      "report": "eval-single_pool",
+      "fails": [],
+      "score": 50.0,
+      "primary": "pool_saturation",
+      "confidence": "high",
+      "sources": [
+        "baggage-service"
+      ],
+      "affected": [
+        "baggage-service"
+      ],
+      "impacted": [
+        "baggage-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "global_connection",
+      "report": "eval-global_connection",
+      "fails": [],
+      "score": 43.6,
+      "primary": "global_connection_pressure",
+      "confidence": "high",
+      "sources": [
+        "reservation-service"
+      ],
+      "affected": [
+        "flightops-service",
+        "reservation-service"
+      ],
+      "impacted": [
+        "flightops-service",
+        "reservation-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "db_cpu",
+      "report": "eval-db_cpu",
+      "fails": [],
+      "score": 30.0,
+      "primary": "db_cpu",
+      "confidence": "high",
+      "sources": [
+        "checkin-service"
+      ],
+      "affected": [
+        "checkin-service",
+        "reservation-service"
+      ],
+      "impacted": [
+        "checkin-service",
+        "reservation-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "app_vm_cpu",
+      "report": "eval-app_vm_cpu",
+      "fails": [],
+      "score": 40.0,
+      "primary": "app_vm_cpu",
+      "confidence": "high",
+      "sources": [
+        "baggage-service"
+      ],
+      "affected": [
+        "flightops-service",
+        "reservation-service"
+      ],
+      "impacted": [
+        "flightops-service",
+        "reservation-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "two_sources",
+      "report": "eval-two_sources",
+      "fails": [],
+      "score": 60.0,
+      "primary": "row_lock",
+      "confidence": "high",
+      "sources": [
+        "reservation-service"
+      ],
+      "affected": [
+        "checkin-service"
+      ],
+      "impacted": [
+        "baggage-service",
+        "checkin-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "missing_telemetry",
+      "report": "eval-missing_telemetry",
+      "fails": [],
+      "score": 0.0,
+      "primary": null,
+      "confidence": null,
+      "sources": [],
+      "affected": [],
+      "impacted": [],
+      "coverage": "9/15"
+    },
+    {
+      "case": "stale_telemetry",
+      "report": "eval-stale_telemetry",
+      "fails": [],
+      "score": 0.0,
+      "primary": null,
+      "confidence": null,
+      "sources": [],
+      "affected": [],
+      "impacted": [],
+      "coverage": "13/15"
+    }
+  ]
+}

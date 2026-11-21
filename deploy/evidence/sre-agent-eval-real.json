@@ -1,0 +1,78 @@
+{
+  "kind": "real",
+  "fixture": false,
+  "rows": [
+    {
+      "case": "E0",
+      "report": "rep-20261121-172623-2f3a16",
+      "fails": [],
+      "score": 0.0,
+      "primary": null,
+      "confidence": null,
+      "sources": [],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "E2",
+      "report": "rep-20261121-172630-e5e2ec",
+      "fails": [],
+      "score": 65.1,
+      "primary": "row_lock",
+      "confidence": "high",
+      "sources": [
+        "reservation-service"
+      ],
+      "affected": [
+        "checkin-service"
+      ],
+      "impacted": [
+        "checkin-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "E1-1",
+      "report": "rep-20261121-172641-dd54ff",
+      "fails": [],
+      "score": 0.0,
+      "primary": "independent_load",
+      "confidence": "medium",
+      "sources": [
+        "baggage-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "E1-2",
+      "report": "rep-20261121-172647-75cbae",
+      "fails": [],
+      "score": 0.0,
+      "primary": "independent_load",
+      "confidence": "medium",
+      "sources": [
+        "baggage-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "E1-3",
+      "report": "rep-20261121-172653-ffcd30",
+      "fails": [],
+      "score": 0.0,
+      "primary": "independent_load",
+      "confidence": "medium",
+      "sources": [
+        "baggage-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    }
+  ]
+}

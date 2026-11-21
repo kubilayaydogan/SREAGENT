@@ -15,3 +15,4 @@ db-vm/db-vm.env
 
 # VM env çıktıları (parola içerir)
 deploy/out/
+app-vm/agent.env

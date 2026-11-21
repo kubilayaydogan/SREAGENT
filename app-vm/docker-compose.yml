@@ -164,13 +164,50 @@ services:
       DB_OWNER_PASSWORD: ${OWNER_DB_PASSWORD}
       LAB_ALLOW_RESET: ${LAB_ALLOW_RESET:-false}
 
+  # ---- Aşama 2: SRE Agent (salt-okur; tek canlı veri kaynağı Dynatrace Remote MCP, DB bağlantısı YOK)
+  # Gizli değerler agent.env'de (scripts/gen-agent-env.sh üretir, chmod 600, repoya girmez).
+  sre-agent:
+    profiles: [agent]
+    restart: unless-stopped
+    image: airlab/sre-agent:${IMAGE_TAG:-1.0.0}
+    build: { context: ../sre-agent }
+    container_name: airlab-sre-agent
+    command: ["watch"]
+    env_file: [agent.env]
+    environment:
+      AGENT_DATA_DIR: /data
+    volumes: ["agent-data:/data"]
+    networks: [agent]            # airlab ağına (servisler/DB) bağlı değil; yalnız dışa HTTPS
+    mem_limit: 512m
+    cpus: 0.5
+    stop_grace_period: 30s       # SIGTERM → mevcut tick biter, durum SQLite'ta kalır
+
+  # Aynı imajdan ayrı CLI oturumları: docker compose run --rm sre-agent-cli ask "..."
+  sre-agent-cli:
+    profiles: [agent-cli]
+    image: airlab/sre-agent:${IMAGE_TAG:-1.0.0}
+    entrypoint: ["sre-agent"]
+    command: ["--help"]
+    env_file: [agent.env]
+    environment:
+      AGENT_DATA_DIR: /data
+    volumes: ["agent-data:/data"]
+    networks: [agent]
+    stdin_open: true
+    tty: true
+    mem_limit: 512m
+    cpus: 0.5
+
 networks:
   airlab:
     name: airlab
     ipam:
       config:
         - subnet: 172.28.0.0/24
+  agent:
+    name: airlab-agent
 
 volumes:
   chaos-data:
   collector-data:
+  agent-data:

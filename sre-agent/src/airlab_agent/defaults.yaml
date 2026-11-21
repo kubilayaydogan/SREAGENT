@@ -1,0 +1,102 @@
+# airlab SRE Agent — varsayılan yapılandırma. AGENT_CONFIG ile verilen YAML bu değerlerin üzerine (derin) birleştirilir.
+# Eşikler ilk kalibrasyondur: 2026-11-21 VM deneylerinde (E0/E2/E1×3) ölçülen değerlere göre seçildi. Başka donanımda
+# yeniden kalibre edin. Puan arıza olasılığı DEĞİLDİR; "baseline'a göre ne kadar kötüleşme var" ölçüsüdür.
+
+apps:                       # analiz edilen iş uygulamaları (Micrometer `service` / span `spring.application.name`)
+  - reservation-service
+  - checkin-service
+  - flightops-service
+  - baggage-service
+tooling_apps:               # APP_VM'de çalışan ama iş uygulaması olmayan bileşenler (kaynak tüketimi raporlanır, puanlanmaz)
+  - chaos-controller
+  - pg-lock-collector
+  - sre-agent
+hosts:
+  app: app-vm
+  db: db-vm
+db_role_to_app:             # pg_stat_statements kullanıcı bazlıdır; rol → uygulama eşlemesi
+  svc_reservation: reservation-service
+  svc_checkin: checkin-service
+  svc_flightops: flightops-service
+  svc_baggage: baggage-service
+container_image_to_app:     # Dynatrace container adı (imaj) → uygulama
+  airlab/reservation: reservation-service
+  airlab/checkin: checkin-service
+  airlab/flightops: flightops-service
+  airlab/baggage: baggage-service
+  airlab/chaos-controller: chaos-controller
+  airlab/pg-lock-collector: pg-lock-collector
+  airlab/sre-agent: sre-agent
+latency_exclude_path_prefixes: ["/actuator", "/lab"]   # gecikme = kullanıcıya dönük işlemler; /lab bakım/yük uçları
+# Telemetride gelen ama gözlem verisinden ATILAN alanlar (değerlendirme/kaos etiketi sızmasın):
+strip_fields: ["waiter.experiment_id", "blocker.experiment_id", "blocker.lab_hold", "experiment_id", "lab_hold"]
+
+windows:
+  default_minutes: 15        # analyze/ask için varsayılan pencere
+  baseline_minutes: 15       # pencereden hemen önceki baseline uzunluğu
+  ingest_lag_seconds: 120    # pencere sonu en geç now - lag (Dynatrace giriş gecikmesi)
+  max_minutes: 180
+
+quality:
+  min_span_samples: 30       # p95 için asgari span sayısı (ATM örneklemesi nedeniyle)
+  min_metric_points: 3       # 1 dk'lık kovalarda asgari dolu nokta
+  stale_after_seconds: 300   # son veri noktası pencere sonundan bu kadar eskiyse STALE
+  min_score_coverage: 0.6    # puan bileşen ağırlığının en az bu oranı ölçülebilmeli; yoksa score=null
+
+impact:                       # "etkilendi" kararı (uygulama bazında, baseline'a göre)
+  latency_ratio: 1.5
+  latency_min_delta_ms: 20
+  error_rate_delta: 0.01     # 5xx oranında +1 puan
+  throughput_load_ratio: 2.0 # kaynak aday: istek hızı baseline'ın en az 2 katı
+  min_load_rpm_delta: 60     # ...ve en az +60 istek/dk (1 rps); boşa yakın baseline'dan oran şişmesin
+
+mechanisms:
+  lock_min_edges: 3          # pencerede asgari kilit kenarı logu
+  lock_min_waiters_avg: 0.5
+  pool_active_ratio: 0.85
+  db_conn_ratio: 0.80
+  db_cpu_pct: 80
+  app_cpu_pct: 85
+  cpu_increase_pp: 20        # host CPU'da baseline'a göre asgari artış (yüzde puan)
+  gc_overhead: 0.10
+
+score:
+  weights: {latency: 0.30, errors: 0.25, saturation: 0.20, lock: 0.15, resource: 0.10}
+  # parçalı doğrusal normalize: [değer_sıfır, değer_bir] → 0..1
+  latency_ratio: [1.2, 3.0]
+  error_rate: [0.005, 0.05]
+  pool_ratio: [0.75, 1.0]
+  lock_waiters: [0.0, 3.0]
+  cpu_pct: [70, 95]
+  bands: {low: 25, medium: 50, high: 75}
+
+budgets:
+  max_queries_per_run: 40
+  max_tool_calls_llm: 4
+  max_iterations: 2          # ek kanıt turu
+  run_timeout_seconds: 240
+  query_timeout_seconds: 60
+  query_retries: 2
+  llm_max_tokens: 2500
+  llm_timeout_seconds: 90
+  llm_retries: 2
+
+watch:
+  poll_seconds: 60
+  window_seconds: 60          # değerlendirme penceresi (tamamlanmış dakikalar)
+  baseline_windows: 15        # kayan baseline: önceki 15 tamamlanmış pencerenin medyanı
+  confirm_windows: 3          # olay açmak için art arda YENİ pencere sayısı
+  clear_windows: 3            # kapatmak (recovery) için art arda temiz pencere
+  cooldown_minutes: 10        # kapanan anahtar bu süre yeniden açılmaz
+  analysis_minutes: 10        # olay anında tam analiz penceresi
+  max_backfill_windows: 10    # yeniden başlatmada en fazla geriye dönük pencere
+  thresholds:                 # open = olay eşiği, clear = temizlenme eşiği (hysteresis: clear < open)
+    latency_ratio: {open: 2.0, clear: 1.3}
+    error_rate: {open: 0.02, clear: 0.005}
+    pool_ratio: {open: 0.9, clear: 0.7}
+    lock_waiters: {open: 1.0, clear: 0.2}
+    db_conn_ratio: {open: 0.85, clear: 0.7}
+    host_cpu_pct: {open: 85, clear: 70}
+  gap_windows_event: 5        # art arda veri boşluğu sayısı → "telemetri eksik" olayı
+  min_requests: 5             # gecikme/hata kararı için pencere başına asgari istek
+  llm_on_incident: true       # olay AÇILDIĞINDA Claude açıklaması (normal döngüde hiç çağrılmaz)

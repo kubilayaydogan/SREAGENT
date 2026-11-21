@@ -1,0 +1,174 @@
+"""Rapor: JSON (makine) + Markdown (insan). Risk şiddeti, veri kapsamı ve nedensellik güveni ayrı alanlardır."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from .redact import redact
+
+CONF_TR = {"high": "yüksek", "medium": "orta", "low": "düşük", None: "—"}
+
+
+def coverage_summary(quality: dict) -> dict:
+    total = len(quality)
+    ok = sum(1 for q in quality.values() if q["status"] == "OK" or q.get("true_zero"))
+    gaps = {k: q["status"] for k, q in quality.items() if q["status"] != "OK" and not q.get("true_zero")}
+    return {"signals_ok": ok, "signals_total": total, "ratio": round(ok / total, 3) if total else 0.0, "gaps": gaps}
+
+
+def human_review(attr: dict, quality: dict, scores: dict) -> list[str]:
+    out = []
+    for m in attr.get("mechanisms", []):
+        if m["id"] == "row_lock":
+            out.append("Kaynak uygulamanın uzun süren/boşta açık transaction'larını (blocker_state, xact_age) inceleyin; "
+                       "pg_stat_activity'de 'idle in transaction' oturumları ve uygulama transaction sınırlarını doğrulayın.")
+        if m["id"] == "pool_saturation" and not m.get("secondary_to"):
+            out.append(f"{m['affected_apps'][0]} için havuz boyutu ve gelen yükün beklenen olup olmadığını teyit edin.")
+        if m["id"] == "global_connection_pressure":
+            out.append("max_connections / uygulama havuz boyutlarının toplamını ve bağlantı sızıntısını kontrol edin.")
+        if m["id"] == "db_cpu":
+            out.append("DB_VM'de en pahalı sorguların planlarını (EXPLAIN) ve bakım işlerini inceleyin.")
+        if m["id"] == "app_vm_cpu":
+            if m.get("self_is_source"):
+                out.append("CPU artışının bir kısmı SRE Agent'ın kendisinden; watch aralığını/eşzamanlılığı gözden geçirin.")
+            out.append("APP_VM'de CPU tüketen container'ları doğrulayın; DB tarafı normal mi kontrol edin.")
+    if scores["overall"]["score"] is None:
+        out.append("Puan hesaplanamadı (veri kapsamı yetersiz): telemetri hattını (OneAgent, collector, ingest) kontrol edin.")
+    if any(q["status"] in ("PERMISSION",) for q in quality.values()):
+        out.append("Platform token kapsamlarını (storage:*:read) kontrol edin; bazı sorgular yetki hatası verdi.")
+    return out or ["Belirgin bir risk yok; rutin izleme yeterli."]
+
+
+def build(state: dict) -> dict:
+    attr = state.get("attribution") or {"mechanisms": [], "impacted": {}, "unexplained_impacted": []}
+    scores = state.get("scores") or {"apps": {}, "overall": {"score": None, "band": None, "coverage": 0.0}}
+    quality = state.get("quality") or {}
+    mechs = attr["mechanisms"]
+    primary = next((m for m in mechs if not m.get("secondary_to")), None)
+    rep = {
+        "id": state["run_id"], "kind": state.get("mode", "analyze"), "generated_at": state["generated_at"],
+        "status": state.get("status", "complete"), "question": state.get("question"),
+        "windows": state.get("windows"), "notes": state.get("notes", []),
+        "risk": {"overall": scores["overall"], "apps": {a: {k: v for k, v in s.items()}
+                                                         for a, s in scores["apps"].items()}},
+        "data_coverage": coverage_summary(quality),
+        "causality": {"primary_mechanism": primary["id"] if primary else None,
+                      "confidence": primary["confidence"] if primary else None,
+                      "source_apps": primary["source_apps"] if primary else [],
+                      "affected_apps": primary["affected_apps"] if primary else sorted(attr["impacted"])},
+        "impacted": attr["impacted"], "mechanisms": mechs, "alternatives": state.get("alternatives", []),
+        "unexplained_impacted": attr.get("unexplained_impacted", []),
+        "data_gaps": [f"{k}: {q['status']}" + (f" — {q['detail']}" if q.get("detail") else "")
+                      for k, q in quality.items() if q["status"] != "OK" and not q.get("true_zero")],
+        "true_zero_signals": sorted(k for k, q in quality.items() if q.get("true_zero")),
+        "human_review": human_review(attr, quality, scores),
+        "evidence": state.get("evidence", []), "extra_evidence": state.get("extra", {}),
+        "explanation": state.get("explanation"), "explanation_source": state.get("explanation_source"),
+        "errors": state.get("errors", []), "budget": state.get("budget", {}),
+        "features_summary": state.get("features_summary"),
+        "fixture": bool(state.get("fixture")),
+    }
+    return redact(rep)
+
+
+def _fmt(v: Any, pct=False) -> str:
+    if v is None:
+        return "veri yok"
+    if isinstance(v, float):
+        return f"{v:.1%}" if pct else f"{v:.1f}"
+    return str(v)
+
+
+def to_markdown(r: dict) -> str:
+    o = r["risk"]["overall"]
+    L = []
+    if r.get("fixture"):
+        L.append("> **FIXTURE / SENTETİK VERİ** — bu rapor test verisiyle üretildi, gerçek bir ölçüm değildir.\n")
+    L.append(f"# airlab SRE raporu `{r['id']}`")
+    L.append(f"- Tür: {r['kind']} · Durum: **{r['status']}** · Üretim: {r['generated_at']}")
+    for w in r.get("windows") or []:
+        L.append(f"- Pencere `{w['name']}`: {w['start']} → {w['end']}")
+    if r.get("question"):
+        L.append(f"- Soru: {r['question']}")
+    for n in r.get("notes", []):
+        L.append(f"- Not: {n}")
+    c = r["causality"]
+    L += ["", "## Üç ayrı değerlendirme", "| Boyut | Değer |", "|---|---|",
+          f"| Risk şiddeti (0–100) | {_fmt(o['score'])} ({o.get('band') or 'hesaplanamadı'}) |",
+          f"| Veri kapsamı | {r['data_coverage']['signals_ok']}/{r['data_coverage']['signals_total']} sinyal OK, "
+          f"puan kapsamı ort. {_fmt(o.get('coverage'), pct=True)} |",
+          f"| Nedensellik güveni | {CONF_TR.get(c['confidence'], c['confidence'])} "
+          f"({c['primary_mechanism'] or 'mekanizma yok'}) |", ""]
+    L += ["## Uygulama puanları", "| Uygulama | Puan | Bant | Kapsam | Gecikme oranı | Eksik bileşen |", "|---|---|---|---|---|---|"]
+    for a, s in r["risk"]["apps"].items():
+        comp = s.get("components", {})
+        lr, src = comp.get("_latency_ratio"), comp.get("_latency_source")
+        lat = f"×{lr:.2f} ({src})" if lr else "veri yok"
+        L.append(f"| {a} | {_fmt(s['score'])} | {s.get('band') or '—'} | {_fmt(s['coverage'], pct=True)} | {lat} | "
+                 f"{', '.join(s.get('missing', [])) or '—'} |")
+    L += ["", "## Kaynak → Etkilenen",
+          f"- Kaynak: {', '.join(c['source_apps']) or 'belirlenemedi'}",
+          f"- Etkilenen: {', '.join(c['affected_apps']) or 'yok'}"]
+    for a, i in r["impacted"].items():
+        L.append(f"  - {a}: {'; '.join(i['reasons'])}")
+    L += ["", "## Mekanizmalar"]
+    if not r["mechanisms"]:
+        L.append("- Tespit edilen mekanizma yok.")
+    for m in r["mechanisms"]:
+        L.append(f"- **{m['title']}** (`{m['id']}`, güven: {CONF_TR.get(m['confidence'])}"
+                 + (f", ikincil → {m['secondary_to']}" if m.get("secondary_to") else "") + ")")
+        L.append(f"  - Kaynak: {', '.join(m['source_apps']) or '—'} · Etkilenen: {', '.join(m['affected_apps']) or '—'}")
+        L.append(f"  - {m['mechanism']}")
+        L.append(f"  - Sinyaller: {', '.join(m['signals'])} · Kanıt: {', '.join(m['evidence_ids']) or '—'}")
+    L += ["", "## Alternatif açıklamalar"] + ([f"- {x}" for x in r["alternatives"]] or ["- —"])
+    L += ["", "## Veri boşlukları"] + ([f"- {x}" for x in r["data_gaps"]] or ["- Yok"])
+    L += ["", "## Önerilen insan incelemesi"] + [f"- {x}" for x in r["human_review"]]
+    if r.get("explanation"):
+        L += ["", f"## Açıklama ({r.get('explanation_source')})", r["explanation"]]
+    if r.get("errors"):
+        L += ["", "## Hatalar"] + [f"- {e}" for e in r["errors"]]
+    L += ["", "## Kanıtlar", "| ID | Sinyal | Durum | Kayıt | Dynatrace queryId |", "|---|---|---|---|---|"]
+    for e in r["evidence"]:
+        L.append(f"| {e['id']} | {e['signal']} | {e['status']} | {e['records']} | {e.get('dynatrace_query_id') or '—'} |")
+    b = r.get("budget") or {}
+    L += ["", f"_Bütçe: {b.get('queries_used', 0)} sorgu, LLM {b.get('llm_calls', 0)} çağrı / "
+              f"{b.get('input_tokens', 0)}+{b.get('output_tokens', 0)} token, süre {b.get('elapsed_s', 0)} sn._"]
+    return "\n".join(L) + "\n"
+
+
+def deterministic_explanation(r: dict) -> str:
+    """Claude yokken kural tabanlı Türkçe özet."""
+    o, c = r["risk"]["overall"], r["causality"]
+    parts = [f"Genel risk: {_fmt(o['score'])} ({o.get('band') or 'hesaplanamadı'})."]
+    if c["primary_mechanism"]:
+        m = next(x for x in r["mechanisms"] if x["id"] == c["primary_mechanism"])
+        parts.append(f"Birincil mekanizma: {m['title']} — kaynak {', '.join(m['source_apps']) or 'belirsiz'}, "
+                     f"etkilenen {', '.join(m['affected_apps']) or 'yok'} (güven: {CONF_TR[m['confidence']]}).")
+    elif r["impacted"]:
+        parts.append(f"Etkilenen uygulamalar: {', '.join(r['impacted'])}; mekanizma belirlenemedi.")
+    else:
+        parts.append("Baseline'a göre anlamlı bir kötüleşme yok.")
+    if r["data_gaps"]:
+        parts.append(f"Veri boşluğu: {len(r['data_gaps'])} sinyal OK değil.")
+    return " ".join(parts)
+
+
+def save(r: dict, reports_dir: Path) -> tuple[Path, Path]:
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    j, m = reports_dir / f"{r['id']}.json", reports_dir / f"{r['id']}.md"
+    j.write_text(json.dumps(r, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    m.write_text(to_markdown(r), encoding="utf-8")
+    return j, m
+
+
+def list_reports(reports_dir: Path, limit: int = 20) -> list[dict]:
+    out = []
+    for p in sorted(reports_dir.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:limit]:
+        try:
+            r = json.loads(p.read_text(encoding="utf-8"))
+            out.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "generated_at": r["generated_at"],
+                        "score": r["risk"]["overall"]["score"], "primary": r["causality"]["primary_mechanism"]})
+        except Exception:  # noqa: BLE001
+            continue
+    return out
