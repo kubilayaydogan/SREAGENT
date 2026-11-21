@@ -3,7 +3,7 @@
 # Kullanım: sudo ./install-docker.sh <yönetim-CIDR>   ör. sudo ./install-docker.sh 192.168.1.0/24
 # SELinux ve firewalld KAPATILMAZ. Uygulama portları yalnız yönetim ağına açılır.
 set -euo pipefail
-ADMIN_CIDR="${1:?yönetim ağı CIDR'ı verin (ör. 10.0.0.0/24)}"
+ADMIN_CIDR="${1:?yönetim ağı CIDR değerini verin, ör. 172.20.224.0/20}"
 [[ $EUID -eq 0 ]] || { echo "root olarak çalıştırın"; exit 1; }
 
 dnf install -y dnf-plugins-core chrony
