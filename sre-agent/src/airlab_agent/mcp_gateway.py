@@ -70,7 +70,7 @@ def _classify(res: Any) -> tuple[str, list[dict], str | None, str | None, list[s
 
 class McpGateway:
     def __init__(self, url: str, token: str, *, timeout_s: float = 60, retries: int = 2, max_queries: int = 40,
-                 concurrency: int = 4):
+                 concurrency: int = 4, on_event=None):
         if not url or not token:
             raise McpUnavailable("DT_MCP_URL/DT_ENV ve DT_PLATFORM_TOKEN tanımlı değil")
         self._conn = {SERVER: {"transport": "streamable_http", "url": url, "timeout": timeout_s,
@@ -79,6 +79,15 @@ class McpGateway:
         self.timeout_s, self.retries, self.max_queries, self.concurrency = timeout_s, retries, max_queries, concurrency
         self.queries_used = 0
         self.log: list[QueryResult] = []
+        # İsteğe bağlı gözlemci: {"phase": "start"|"end", "key", "dql", ...}. Hata atarsa sorgu etkilenmez.
+        self.on_event = on_event
+
+    def _emit(self, ev: dict) -> None:
+        if self.on_event is not None:
+            try:
+                self.on_event(ev)
+            except Exception:  # noqa: BLE001
+                pass
 
     # ---- keşif
     async def _discover(self) -> dict:
@@ -98,20 +107,32 @@ class McpGateway:
     # ---- sorgu
     async def _one(self, session, key: str, dql: str) -> QueryResult:
         if self.queries_used >= self.max_queries:
-            return QueryResult(key, dql, "SKIPPED_BUDGET", error="sorgu bütçesi doldu")
+            r = QueryResult(key, dql, "SKIPPED_BUDGET", error="sorgu bütçesi doldu")
+            self._emit({"phase": "end", "key": key, "dql": dql, "status": r.status, "records": 0, "query_id": None,
+                        "elapsed_ms": 0, "error": r.error, "evidence_id": r.evidence_id})
+            return r
         self.queries_used += 1
+        self._emit({"phase": "start", "key": key, "dql": dql, "tool": DQL_TOOL})
         last = None
+        t_all = time.monotonic()
         for attempt in range(self.retries + 1):
             t0 = time.monotonic()
             try:
                 res = await asyncio.wait_for(
                     session.call_tool(DQL_TOOL, {"dqlQueryString": dql, "includeTypes": False}), self.timeout_s)
                 status, recs, qid, err, notes = _classify(res)
-                return QueryResult(key, dql, status, recs, qid, err, int((time.monotonic() - t0) * 1000), notes)
+                r = QueryResult(key, dql, status, recs, qid, err, int((time.monotonic() - t0) * 1000), notes)
+                self._emit({"phase": "end", "key": key, "dql": dql, "status": status, "records": len(recs),
+                            "query_id": qid, "elapsed_ms": int((time.monotonic() - t_all) * 1000), "error": err,
+                            "attempts": attempt + 1, "evidence_id": r.evidence_id})
+                return r
             except Exception as e:  # noqa: BLE001
                 last = e
                 await asyncio.sleep(min(2 ** attempt, 8))
-        raise McpUnavailable(redact_text(f"{type(last).__name__}: {last}"))
+        err = redact_text(f"{type(last).__name__}: {last}")
+        self._emit({"phase": "end", "key": key, "dql": dql, "status": "UNAVAILABLE", "records": 0, "query_id": None,
+                    "elapsed_ms": int((time.monotonic() - t_all) * 1000), "error": err, "attempts": self.retries + 1})
+        raise McpUnavailable(err)
 
     async def _many(self, items: list[tuple[str, str]]) -> list[QueryResult]:
         async with self.client.session(SERVER) as session:

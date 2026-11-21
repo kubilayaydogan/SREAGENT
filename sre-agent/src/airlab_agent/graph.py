@@ -51,6 +51,7 @@ class AgentState(TypedDict, total=False):
     use_llm: bool
     fixture: bool
     report_paths: list[str]
+    report: dict
 
 
 def _qr_dict(r: QueryResult) -> dict:
@@ -74,7 +75,7 @@ def _summary(fw: dict) -> dict:
             "containers": fw["containers"]}
 
 
-def build_graph(settings, gateway_factory, llm=None, checkpointer=None):
+def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_files: bool = True):
     cfg = settings.cfg
     b = cfg["budgets"]
 
@@ -192,8 +193,11 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None):
             budget.update(llm_calls=llm.usage["calls"], input_tokens=llm.usage["input_tokens"],
                           output_tokens=llm.usage["output_tokens"])
         r = rpt.build({**state, "budget": budget})
-        j, m = rpt.save(r, settings.reports_dir)
-        return {"budget": budget, "report_paths": [str(j), str(m)]}
+        paths: list[str] = []
+        if persist_files:                         # platform raporu PostgreSQL'e yazar; CLI dosyaya
+            j, m = rpt.save(r, settings.reports_dir)
+            paths = [str(j), str(m)]
+        return {"budget": budget, "report_paths": paths, "report": r}
 
     g = StateGraph(AgentState)
     for name, fn in [("plan", plan), ("collect", collect), ("analyze", analyze), ("extra_evidence", extra_evidence),
@@ -213,22 +217,44 @@ def new_run_id(prefix: str = "rep") -> str:
     return f"{prefix}-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:6]}"
 
 
+def initial_state(start: datetime, end: datetime, *, run_id: str, mode: str = "analyze", question: str | None = None,
+                  notes: list[str] | None = None, use_llm: bool = True, fixture: bool = False,
+                  baseline: tuple[datetime, datetime] | None = None) -> AgentState:
+    return {"run_id": run_id, "mode": mode, "question": question,
+            "generated_at": iso(datetime.now(timezone.utc)), "started_monotonic": time.monotonic(),
+            "start": iso(start), "end": iso(end), "notes": notes or [], "errors": [],
+            "budget": {}, "use_llm": use_llm, "fixture": fixture,
+            "baseline_start": iso(baseline[0]) if baseline else None,
+            "baseline_end": iso(baseline[1]) if baseline else None}
+
+
 def run_analysis(settings, gateway_factory, start: datetime, end: datetime, *, llm=None, question: str | None = None,
                  mode: str = "analyze", notes: list[str] | None = None, callbacks: list | None = None,
                  run_id: str | None = None, use_llm: bool = True, fixture: bool = False,
-                 baseline: tuple[datetime, datetime] | None = None) -> dict[str, Any]:
-    from langgraph.checkpoint.sqlite import SqliteSaver
-
-    settings.ensure_dirs()
+                 baseline: tuple[datetime, datetime] | None = None, checkpointer=None, persist_files: bool = True,
+                 on_node=None, recursion_limit: int = 25) -> dict[str, Any]:
+    """Analizi çalıştırır. `checkpointer` verilmezse SQLite (CLI); platform PostgresSaver verir.
+    `on_node(name, update)` her düğüm bittiğinde çağrılır (ilerleme olayları için)."""
     run_id = run_id or new_run_id("inc" if mode == "watch-incident" else "rep")
-    init: AgentState = {"run_id": run_id, "mode": mode, "question": question,
-                        "generated_at": iso(datetime.now(timezone.utc)), "started_monotonic": time.monotonic(),
-                        "start": iso(start), "end": iso(end), "notes": notes or [], "errors": [],
-                        "budget": {}, "use_llm": use_llm, "fixture": fixture,
-                        "baseline_start": iso(baseline[0]) if baseline else None,
-                        "baseline_end": iso(baseline[1]) if baseline else None}
+    init = initial_state(start, end, run_id=run_id, mode=mode, question=question, notes=notes, use_llm=use_llm,
+                         fixture=fixture, baseline=baseline)
+    cfg = {"configurable": {"thread_id": run_id}, "callbacks": callbacks or [], "run_name": f"airlab-{mode}",
+           "metadata": {"run_id": run_id, "mode": mode}, "recursion_limit": recursion_limit}
+
+    def _go(saver):
+        graph = build_graph(settings, gateway_factory, llm, saver, persist_files=persist_files)
+        if on_node is None:
+            return graph.invoke(init, cfg)
+        for chunk in graph.stream(init, cfg, stream_mode="updates"):
+            for name, update in chunk.items():
+                on_node(name, update or {})
+        return graph.get_state(cfg).values
+
+    if checkpointer is not None:
+        if persist_files:
+            settings.ensure_dirs()
+        return _go(checkpointer)
+    from langgraph.checkpoint.sqlite import SqliteSaver
+    settings.ensure_dirs()
     with SqliteSaver.from_conn_string(str(settings.checkpoint_db)) as saver:
-        graph = build_graph(settings, gateway_factory, llm, saver)
-        cfg = {"configurable": {"thread_id": run_id}, "callbacks": callbacks or [], "run_name": f"airlab-{mode}",
-               "metadata": {"run_id": run_id, "mode": mode}, "recursion_limit": 25}
-        return graph.invoke(init, cfg)
+        return _go(saver)
