@@ -50,9 +50,10 @@ Hepsini kendi ortamınızda saklayın; sohbete/repoya yazmayın.
 |---|---|
 | T1 OneAgent installer metainfo | ✅ 200 — `latestAgentVersion 1.349.123` |
 | T2 ActiveGate installer metainfo | ✅ 200 — `latestGatewayVersion 1.349.93` |
-| T3 ile `POST /api/v2/metrics/ingest`, `/logs/ingest` | ❌ 403 — `openpipeline:metrics:ingest` / `openpipeline:logs:ingest` eksik |
+| T3 ingest (yenilendi) | ✅ test metriği 202, test logu 200/204; MCP ile geri okundu |
+| Log alanı `event.type` | ⚠ logs ingest bu alanı **siler** → collector `airlab.event` kullanıyor; kilit kenarı biçimindeki test logu tüm `waiter.*`/`blocker.*` alanlarıyla okundu |
 | T4 Remote MCP initialize + tools/list | ✅ `dynatrace-mcp 1.0`, protokol 2025-06-18, 21 araç, DQL aracı `execute-dql(dqlQueryString)` |
-| T4 kapı DQL'leri | Sözdizimi ✅ (13/13). Veri okuma ❌: `smartscapeNodes` → *Missing OAuth scope storage:smartscape:read*; metrics/logs → *MISSING_BUCKET_PERMISSIONS* |
+| T4 kapı DQL'leri (yenilendi) | ✅ 13/13 izin hatasız; hepsi `BOS` (henüz kurulum yok) |
 | Tenant modeli | **Smartscape on Grail**: `dt.entity.*` ve `entityName()` yok → `smartscapeNodes`, `dt.smartscape.*`, `getNodeName()` |
 
 **Bucket izni:** platform token, sahibi kullanıcının IAM izinleriyle sınırlıdır. Token kapsamı doğru olsa da kullanıcı/grup
@@ -158,13 +159,9 @@ veritabanında `postgres` kullanıcısıyla çalıştırın.
 monitoring configuration durumu **OK**.
 
 ### 5.4 Uygulama metrikleri ve collector'ı Dynatrace'e aç
-`.env`'de T3'ü girin:
-```
-COLLECTOR_DT_MODE=both
-DT_INGEST_TOKEN=<T3>
-DT_METRICS_EXPORT=true
-DT_METRICS_TOKEN=<T3>
-```
+`deploy/out/app-vm.env`'de zaten dolu (T3 doğrulandı): `COLLECTOR_DT_MODE=both`, `DT_METRICS_EXPORT=true`,
+`DT_INGEST_TOKEN`/`DT_METRICS_TOKEN`. Bu nedenle §5.1'deki `docker compose up -d` ile gönderim başlar; aşağıdaki
+komutlar yalnız `.env` değişirse gerekir:
 ```bash
 docker compose up -d --force-recreate
 docker compose --profile observability up -d --force-recreate pg-lock-collector

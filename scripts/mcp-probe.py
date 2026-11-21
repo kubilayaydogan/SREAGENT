@@ -63,7 +63,7 @@ GATE_QUERIES: list[tuple[str, str]] = [
      'timeseries {{ waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal) }}, '
      'from: now()-{since}'),
     ("airlab.pg.blocking_edge logları",
-     'fetch logs, from: now()-{since} | filter event.type == "airlab.pg.blocking_edge" '
+     'fetch logs, from: now()-{since} | filter airlab.event == "airlab.pg.blocking_edge" '
      '| sort timestamp desc | limit 5'),
     ("Uygulama ECS logları (request_id / experiment_id)",
      'fetch logs, from: now()-{since} | filter isNotNull(request_id) or isNotNull(experiment_id) '
@@ -215,23 +215,38 @@ def summarize_result(res) -> dict:
     texts = [c.get("text", "") for c in res.get("content", []) if c.get("type") == "text"]
     joined = "\n".join(texts)
     out = {"isError": bool(res.get("isError")), "text_chars": len(joined), "text_head": joined[:1500]}
+    # execute-dql metni: "Query metadata: {...}" (bildirimler dahil) + "Query result records:\n[ ... ]"
+    marker = "Query result records:"
+    if marker in joined:
+        meta, recs = joined.split(marker, 1)
+        out["metadata_head"] = meta[:3000]
+        recs = recs.strip()
+        out["records_head"] = recs[:2500]
+        try:
+            out["record_count"] = len(json.loads(recs))
+        except json.JSONDecodeError:
+            out["record_count"] = 0 if re.fullmatch(r"\[\s*\]", recs) else None
     if res.get("structuredContent") is not None:
         out["structured_head"] = json.dumps(res["structuredContent"], ensure_ascii=False)[:1500]
     return out
 
 
+PERMISSION_RE = re.compile(r"missing oauth scope|missing required scope|access denied|missing_bucket_permissions"
+                           r"|no bucket permissions|forbidden|not authorized|unauthori")
+
+
 def classify(summary: dict) -> str:
-    """Boş sonuç / hata / veri var ayrımı (gerçek sıfır ile 'kayıt yok' aynı şey değildir)."""
-    head = (summary.get("text_head", "") + summary.get("structured_head", "")).lower()
-    if re.search(r"missing oauth scope|missing required scope|access denied|missing_bucket_permissions|no bucket permissions", head):
+    """Boş sonuç / hata / izin / veri var ayrımı (gerçek sıfır ile 'kayıt yok' aynı şey değildir).
+    İzin uyarıları yalnız metadata/hata metninde aranır; kayıt içeriği (ör. log metni) sınıflandırmayı etkilemez."""
+    meta = summary.get("metadata_head", summary.get("text_head", "")).lower()
+    if PERMISSION_RE.search(meta):
         return "IZIN_HATASI"
     if summary.get("isError"):
         return "HATA"
-    if re.search(r"permission|forbidden|not authorized|missing scope|missing oauth scope|access denied|unauthori", head):
-        return "IZIN_HATASI"
-    if re.search(r"\b0 records\b|no records|\"records\":\s*\[\]|returned 0|empty result", head):
-        return "BOS"
-    return "VERI_VAR" if summary.get("text_chars", 0) > 0 else "BOS"
+    if "record_count" in summary:
+        n = summary["record_count"]
+        return "BOS" if n == 0 else ("VERI_VAR" if n else "BELIRSIZ")
+    return "BELIRSIZ"
 
 
 def main() -> int:

@@ -69,7 +69,7 @@ Dynatrace'te bu satırların kabul edildiği (HTTP 202, metrik anahtarı oluştu
 
 ### A.2 Log olayları
 
-`event.type = "airlab.pg.blocking_edge"` (her örnekte her waiter→blocker kenarı için bir kayıt) — YEREL-DOĞRULANDI
+`airlab.event = "airlab.pg.blocking_edge"` (Dynatrace logs ingest `event.type` alanını siler — mfi74785'te 2026-11-21 doğrulandı; bu yüzden `airlab.event`) (her örnekte her waiter→blocker kenarı için bir kayıt) — YEREL-DOĞRULANDI
 
 | Alan | Örnek | Not |
 |---|---|---|
@@ -177,7 +177,7 @@ REST hata gövdesi aynı `code` alanını taşır.
 ```dql
 // Blocking zinciri kenarları (E2 penceresi)
 fetch logs, from: "2026-11-19T21:14:10Z", to: "2026-11-19T21:15:00Z"
-| filter event.type == "airlab.pg.blocking_edge"
+| filter airlab.event == "airlab.pg.blocking_edge"
 | summarize edges = count(), max_wait = max(toDouble(`waiter.wait_seconds`)),
             by: { `waiter.app`, `blocker.app`, `blocker.lab_hold` }
 

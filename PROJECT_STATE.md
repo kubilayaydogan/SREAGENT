@@ -9,7 +9,7 @@ Son güncelleme: 2026-11-21 · Aşama: **1 (kod tamam, hedef VM + Dynatrace doğ
 | Kaynak kod tamamlandı | derleniyor, testler geçiyor | 4 iş servisi, chaos-controller, db-migrator, lab-common, pg-lock-collector, VM betikleri, belgeler |
 | Yerelde uçtan uca doğrulandı | Docker Desktop: PG17 container + 5 Java container | smoke 31/31, E1–E8 tek koşu, lock zinciri, stop-all cleanup |
 | İki VM üzerinde doğrulandı | Rocky 10.1 APP_VM + DB_VM (systemd PG17) | **HAYIR** — kullanıcı `docs/deploy-plan.md` ile kuracak |
-| Gerçek Dynatrace + MCP üzerinde doğrulandı | tenant UI / DQL / MCP aracı | **KISMEN** — MCP bağlantısı ve DQL sözdizimi gerçek tenant'ta ✅; veri okuma izin eksikliğinden ❌; telemetri henüz yok |
+| Gerçek Dynatrace + MCP üzerinde doğrulandı | tenant UI / DQL / MCP aracı | **KISMEN** — token'lar, ingest → MCP yolu ve 13 kapı sorgusu gerçek tenant'ta ✅; airlab telemetrisi henüz yok (VM kurulumu bekliyor) |
 
 ## Derleme ve test (gerçekten çalıştırıldı)
 
@@ -56,9 +56,10 @@ Ayrıntılı tablo: `docs/acceptance-gate.md`. Kısa durum:
 | Kontrol | Sonuç |
 |---|---|
 | OneAgent / ActiveGate kurulum token'ları | ✅ installer metainfo + indirme 200 (OneAgent 1.349.123, ActiveGate 1.349.93) |
-| Ingest token | ❌ 403: `openpipeline:metrics:ingest` / `openpipeline:logs:ingest` kapsamı yok → **yeniden üretilmeli** |
+| Ingest token (yenilendi) | ✅ test metriği + test logu gönderildi ve MCP ile geri okundu (uçtan uca ingest → Grail → MCP) |
 | Remote MCP | ✅ initialize + tools/list: `dynatrace-mcp 1.0`, 21 araç, DQL aracı `execute-dql` (`deploy/evidence/mcp-list-*.json`) |
-| Kapı DQL'leri (13) | sözdizimi ✅; veri ❌ `storage:smartscape:read` kapsamı yok + token sahibinde Grail bucket izni yok (`deploy/evidence/mcp-gate-*.json`) |
+| Kapı DQL'leri (13) | ✅ izin hatası yok, hepsi `BOS` — telemetri henüz yok (`deploy/evidence/mcp-gate-*.json`) |
+| Log şeması | ⚠ logs ingest `event.type`'ı siler → collector `airlab.event`'e geçirildi (collector testleri 5/5); kilit kenarı biçimi tenant'ta okundu |
 | Bulgu | Tenant **Smartscape on Grail**: `dt.entity.*` / `entityName()` yok → probe sorguları `smartscapeNodes` / `getNodeName` ile güncellendi. **Aşama 2 bunu dikkate almalı** |
 
 Bu ortam için hazırlananlar (kod; VM'de çalıştırılmadı):
@@ -71,7 +72,7 @@ Bu ortam için hazırlananlar (kod; VM'de çalıştırılmadı):
 
 ## Sıradaki adım (kullanıcı ortamında)
 
-Önce ingest ve MCP token'larını §1'e göre yeniden üretin (bucket izni dahil); sonra `docs/deploy-plan.md` §2–§8'i uygulayın ve `deploy/evidence/` çıktılarını iletin. Ardından kabul kapısı ve bu belge
+Token'lar hazır ve doğrulandı; `docs/deploy-plan.md` §3–§8'i uygulayın (env dosyaları ve kurulum betikleri `deploy/out/`'ta) ve `deploy/evidence/` çıktılarını iletin. Ardından kabul kapısı ve bu belge
 gerçek sonuçlarla güncellenir. **Kapı dolmadan Aşama 2'ye başlanmayacak.**
 
 ## Aşama 2

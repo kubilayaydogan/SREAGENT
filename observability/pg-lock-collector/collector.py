@@ -255,7 +255,7 @@ class Collector:
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "loglevel": "WARN",
                         "log.source": "airlab.pg-lock-collector",
-                        "event.type": "airlab.pg.blocking_edge",
+                        "airlab.event": "airlab.pg.blocking_edge",
                         "db.host": self.db_host,
                         "content": f"{wapp}({wrole}) pid {wpid} waits {wet}/{we} for {bapp}({brole}) pid {bpid} "
                                    f"wait={float(wait_s or 0):.2f}s blocker_xact_age={float(bxa or 0):.2f}s",
@@ -345,7 +345,7 @@ class Collector:
 
     def _event(self, etype: str, content: str, level: str = "INFO") -> dict:
         return {"timestamp": datetime.now(timezone.utc).isoformat(), "loglevel": level,
-                "log.source": "airlab.pg-lock-collector", "event.type": etype, "db.host": self.db_host,
+                "log.source": "airlab.pg-lock-collector", "airlab.event": etype, "db.host": self.db_host,
                 "content": content}
 
 

@@ -1,0 +1,349 @@
+{
+  "probe": "airlab-mcp-probe/1.0",
+  "utc": "2026-11-21T08:21:19+00:00",
+  "url": "https://mfi74785.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp",
+  "command": "gate",
+  "steps": [
+    {
+      "signal": "4 servis (OneAgent) — servis listesi",
+      "tool": "execute-dql",
+      "dql": "smartscapeNodes \"SERVICE\" | filter contains(name, \"reservation\") or contains(name, \"checkin\") or contains(name, \"flightops\") or contains(name, \"baggage\") or contains(name, \"chaos\") | fields id, name | limit 50",
+      "status": "BOS",
+      "ms": 1240,
+      "result": {
+        "isError": false,
+        "text_chars": 1052,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"smartscapeNodes \\\"SERVICE\\\"\\n| filter contains(name, \\\"reservation\\\") OR contains(name, \\\"checkin\\\") OR contains(name, \\\"flightops\\\") OR contains(name, \\\"baggage\\\") OR contains(name, \\\"chaos\\\")\\n| fields id, name\\n| limit 50\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"smartscapeNodes \\\"SERVICE\\\" | filter contains(name, \\\"reservation\\\") or contains(name, \\\"checkin\\\") or contains(name, \\\"flightops\\\") or contains(name, \\\"baggage\\\") or contains(name, \\\"chaos\\\") | fields id, name | limit 50\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T06:21:24.613094267Z\",\n      \"end\" : \"2026-11-21T08:21:24.613094267Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 23,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-25f4-723a-99f4-57ec320c214c\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"smartscapeNodes \\\"SERVICE\\\"\\n| filter contains(name, \\\"reservation\\\") OR contains(name, \\\"checkin\\\") OR contains(name, \\\"flightops\\\") OR contains(name, \\\"baggage\\\") OR contains(name, \\\"chaos\\\")\\n| fields id, name\\n| limit 50\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"smartscapeNodes \\\"SERVICE\\\" | filter contains(name, \\\"reservation\\\") or contains(name, \\\"checkin\\\") or contains(name, \\\"flightops\\\") or contains(name, \\\"baggage\\\") or contains(name, \\\"chaos\\\") | fields id, name | limit 50\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T06:21:24.613094267Z\",\n      \"end\" : \"2026-11-21T08:21:24.613094267Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 23,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-25f4-723a-99f4-57ec320c214c\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"smartscapeNodes \\\"SERVICE\\\"\\n| filter contains(name, \\\"reservation\\\") OR contains(name, \\\"checkin\\\") OR contains(name, \\\"flightops\\\") OR contains(name, \\\"baggage\\\") OR contains(name, \\\"chaos\\\")\\n| fields id, name\\n| limit 50\", \"timezone\": \"Z\", \"query\": \"smartscapeNodes \\\"SERVICE\\\" | filter contains(name, \\\"reservation\\\") or contains(name, \\\"checkin\\\") or contains(name, \\\"flightops\\\") or contains(name, \\\"baggage\\\") or contains(name, \\\"chaos\\\") | fields id, name | limit 50\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795242084.6130943, \"end\": 1795249284.6130943}, \"locale\": \"und\", \"executionTimeMilliseconds\": 23, \"notifications\": [], \"queryId\": \"01a1fd32-25f4-723a-99f4-57ec320c214c\", \"sampled\": false}, \"metrics\": []}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "İki host (APP_VM, DB_VM)",
+      "tool": "execute-dql",
+      "dql": "smartscapeNodes \"HOST\" | fields id, name | limit 20",
+      "status": "BOS",
+      "ms": 1232,
+      "result": {
+        "isError": false,
+        "text_chars": 715,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"smartscapeNodes \\\"HOST\\\"\\n| fields id, name\\n| limit 20\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"smartscapeNodes \\\"HOST\\\" | fields id, name | limit 20\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T06:21:25.856539355Z\",\n      \"end\" : \"2026-11-21T08:21:25.856539355Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 20,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-2acf-74b6-8154-fea26728f341\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"smartscapeNodes \\\"HOST\\\"\\n| fields id, name\\n| limit 20\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"smartscapeNodes \\\"HOST\\\" | fields id, name | limit 20\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T06:21:25.856539355Z\",\n      \"end\" : \"2026-11-21T08:21:25.856539355Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 20,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-2acf-74b6-8154-fea26728f341\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"smartscapeNodes \\\"HOST\\\"\\n| fields id, name\\n| limit 20\", \"timezone\": \"Z\", \"query\": \"smartscapeNodes \\\"HOST\\\" | fields id, name | limit 20\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795242085.8565392, \"end\": 1795249285.8565392}, \"locale\": \"und\", \"executionTimeMilliseconds\": 20, \"notifications\": [], \"queryId\": \"01a1fd32-2acf-74b6-8154-fea26728f341\", \"sampled\": false}, \"metrics\": []}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "4 servis — yanıt süresi/istek sayısı",
+      "tool": "execute-dql",
+      "dql": "timeseries { rt = avg(dt.service.request.response_time), n = sum(dt.service.request.count) }, by: { dt.smartscape.service }, from: now()-1h | fieldsAdd svc = getNodeName(dt.smartscape.service) | limit 20",
+      "status": "BOS",
+      "ms": 1858,
+      "result": {
+        "isError": false,
+        "text_chars": 1151,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{dt.smartscape.service}, {rt = avg(dt.service.request.response_time), n = sum(dt.service.request.count)}\\n| fieldsAdd svc = getNodeName(dt.smartscape.service)\\n| limit 20\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { rt = avg(dt.service.request.response_time), n = sum(dt.service.request.count) }, by: { dt.smartscape.service }, from: now()-1h | fieldsAdd svc = getNodeName(dt.smartscape.service) | limit 20\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 20,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-30a4-7dbf-98ed-6aa8a6636df0\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"dt.service.request.response_time\",\n    \"fieldName\" : \"rt\"\n  }, {\n    \"metric.key\" : \"dt.service.request.count\",\n    \"fieldName\" : \"n\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{dt.smartscape.service}, {rt = avg(dt.service.request.response_time), n = sum(dt.service.request.count)}\\n| fieldsAdd svc = getNodeName(dt.smartscape.service)\\n| limit 20\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { rt = avg(dt.service.request.response_time), n = sum(dt.service.request.count) }, by: { dt.smartscape.service }, from: now()-1h | fieldsAdd svc = getNodeName(dt.smartscape.service) | limit 20\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 20,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-30a4-7dbf-98ed-6aa8a6636df0\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"dt.service.request.response_time\",\n    \"fieldName\" : \"rt\"\n  }, {\n    \"metric.key\" : \"dt.service.request.count\",\n    \"fieldName\" : \"n\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, by:{dt.smartscape.service}, {rt = avg(dt.service.request.response_time), n = sum(dt.service.request.count)}\\n| fieldsAdd svc = getNodeName(dt.smartscape.service)\\n| limit 20\", \"timezone\": \"Z\", \"query\": \"timeseries { rt = avg(dt.service.request.response_time), n = sum(dt.service.request.count) }, by: { dt.smartscape.service }, from: now()-1h | fieldsAdd svc = getNodeName(dt.smartscape.service) | limit 20\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245660.0, \"end\": 1795249320.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 20, \"notifications\": [], \"queryId\": \"01a1fd32-30a4-7dbf-98ed-6aa8a6636df0\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"dt.service.request.response_time\", \"fieldName\": \"rt\"}, {\"metric.key\": \"dt.service.request.count\", \"fieldName\": \"n\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "APP_VM ve DB_VM host CPU/RAM",
+      "tool": "execute-dql",
+      "dql": "timeseries { cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage) }, by: { dt.smartscape.host }, from: now()-1h | fieldsAdd host = getNodeName(dt.smartscape.host)",
+      "status": "BOS",
+      "ms": 1273,
+      "result": {
+        "isError": false,
+        "text_chars": 1070,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{dt.smartscape.host}, {cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage)}\\n| fieldsAdd host = getNodeName(dt.smartscape.host)\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage) }, by: { dt.smartscape.host }, from: now()-1h | fieldsAdd host = getNodeName(dt.smartscape.host)\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 22,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-3712-70eb-a22f-42eadc2c5c41\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"dt.host.cpu.usage\",\n    \"fieldName\" : \"cpu\"\n  }, {\n    \"metric.key\" : \"dt.host.memory.usage\",\n    \"fieldName\" : \"mem\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{dt.smartscape.host}, {cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage)}\\n| fieldsAdd host = getNodeName(dt.smartscape.host)\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage) }, by: { dt.smartscape.host }, from: now()-1h | fieldsAdd host = getNodeName(dt.smartscape.host)\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 22,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-3712-70eb-a22f-42eadc2c5c41\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"dt.host.cpu.usage\",\n    \"fieldName\" : \"cpu\"\n  }, {\n    \"metric.key\" : \"dt.host.memory.usage\",\n    \"fieldName\" : \"mem\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, by:{dt.smartscape.host}, {cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage)}\\n| fieldsAdd host = getNodeName(dt.smartscape.host)\", \"timezone\": \"Z\", \"query\": \"timeseries { cpu = avg(dt.host.cpu.usage), mem = avg(dt.host.memory.usage) }, by: { dt.smartscape.host }, from: now()-1h | fieldsAdd host = getNodeName(dt.smartscape.host)\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245660.0, \"end\": 1795249320.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 22, \"notifications\": [], \"queryId\": \"01a1fd32-3712-70eb-a22f-42eadc2c5c41\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"dt.host.cpu.usage\", \"fieldName\": \"cpu\"}, {\"metric.key\": \"dt.host.memory.usage\", \"fieldName\": \"mem\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "Container CPU",
+      "tool": "execute-dql",
+      "dql": "timeseries cpu = avg(dt.containers.cpu.usage_percent), by: { dt.entity.container_group_instance }, from: now()-1h | limit 20",
+      "status": "BOS",
+      "ms": 1695,
+      "result": {
+        "isError": false,
+        "text_chars": 918,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{dt.entity.container_group_instance}, cpu = avg(dt.containers.cpu.usage_percent)\\n| limit 20\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries cpu = avg(dt.containers.cpu.usage_percent), by: { dt.entity.container_group_instance }, from: now()-1h | limit 20\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 19,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-3bd0-7a00-b8fe-4b0020fa7c1a\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"dt.containers.cpu.usage_percent\",\n    \"fieldName\" : \"cpu\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{dt.entity.container_group_instance}, cpu = avg(dt.containers.cpu.usage_percent)\\n| limit 20\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries cpu = avg(dt.containers.cpu.usage_percent), by: { dt.entity.container_group_instance }, from: now()-1h | limit 20\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 19,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-3bd0-7a00-b8fe-4b0020fa7c1a\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"dt.containers.cpu.usage_percent\",\n    \"fieldName\" : \"cpu\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, by:{dt.entity.container_group_instance}, cpu = avg(dt.containers.cpu.usage_percent)\\n| limit 20\", \"timezone\": \"Z\", \"query\": \"timeseries cpu = avg(dt.containers.cpu.usage_percent), by: { dt.entity.container_group_instance }, from: now()-1h | limit 20\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245660.0, \"end\": 1795249320.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 19, \"notifications\": [], \"queryId\": \"01a1fd32-3bd0-7a00-b8fe-4b0020fa7c1a\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"dt.containers.cpu.usage_percent\", \"fieldName\": \"cpu\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "Hikari (Micrometer)",
+      "tool": "execute-dql",
+      "dql": "timeseries { active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending) }, by: { service, pool }, from: now()-1h",
+      "status": "BOS",
+      "ms": 1455,
+      "result": {
+        "isError": false,
+        "text_chars": 1098,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{service, pool}, {active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending)}\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending) }, by: { service, pool }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 12,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-4344-7969-848f-1c1a62e0ba04\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"airlab.app.hikaricp.connections.active\",\n    \"fieldName\" : \"active\"\n  }, {\n    \"metric.key\" : \"airlab.app.hikaricp.connections.pending\",\n    \"fieldName\" : \"pending\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{service, pool}, {active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending)}\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending) }, by: { service, pool }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 12,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-4344-7969-848f-1c1a62e0ba04\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"airlab.app.hikaricp.connections.active\",\n    \"fieldName\" : \"active\"\n  }, {\n    \"metric.key\" : \"airlab.app.hikaricp.connections.pending\",\n    \"fieldName\" : \"pending\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, by:{service, pool}, {active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending)}\", \"timezone\": \"Z\", \"query\": \"timeseries { active = avg(airlab.app.hikaricp.connections.active), pending = avg(airlab.app.hikaricp.connections.pending) }, by: { service, pool }, from: now()-1h\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245660.0, \"end\": 1795249320.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 12, \"notifications\": [], \"queryId\": \"01a1fd32-4344-7969-848f-1c1a62e0ba04\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"airlab.app.hikaricp.connections.active\", \"fieldName\": \"active\"}, {\"metric.key\": \"airlab.app.hikaricp.connections.pending\", \"fieldName\": \"pending\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "HTTP istekleri (Micrometer)",
+      "tool": "execute-dql",
+      "dql": "timeseries n = sum(airlab.app.http.server.requests.count), by: { service }, from: now()-1h",
+      "status": "BOS",
+      "ms": 1325,
+      "result": {
+        "isError": false,
+        "text_chars": 853,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{service}, n = sum(airlab.app.http.server.requests.count)\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries n = sum(airlab.app.http.server.requests.count), by: { service }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 16,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-487f-7662-a388-dcf425aaa9f2\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"airlab.app.http.server.requests.count\",\n    \"fieldName\" : \"n\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, by:{service}, n = sum(airlab.app.http.server.requests.count)\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries n = sum(airlab.app.http.server.requests.count), by: { service }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 16,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-487f-7662-a388-dcf425aaa9f2\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"airlab.app.http.server.requests.count\",\n    \"fieldName\" : \"n\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, by:{service}, n = sum(airlab.app.http.server.requests.count)\", \"timezone\": \"Z\", \"query\": \"timeseries n = sum(airlab.app.http.server.requests.count), by: { service }, from: now()-1h\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245660.0, \"end\": 1795249320.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 16, \"notifications\": [], \"queryId\": \"01a1fd32-487f-7662-a388-dcf425aaa9f2\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"airlab.app.http.server.requests.count\", \"fieldName\": \"n\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "PostgreSQL extension",
+      "tool": "execute-dql",
+      "dql": "timeseries { backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks) }, from: now()-1h",
+      "status": "BOS",
+      "ms": 1222,
+      "result": {
+        "isError": false,
+        "text_chars": 1114,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, {backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks)}\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks) }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 17,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-4d5e-725b-adaf-cdf4d9c0ec45\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"postgres.numbackends\",\n    \"fieldName\" : \"backends\"\n  }, {\n    \"metric.key\" : \"postgres.activity.active_waiting\",\n    \"fieldName\" : \"waiting\"\n  }, {\n    \"metric.key\" : \"postgres.locks\",\n    \"fieldName\" : \"locks\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, {backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks)}\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks) }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 17,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-4d5e-725b-adaf-cdf4d9c0ec45\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"postgres.numbackends\",\n    \"fieldName\" : \"backends\"\n  }, {\n    \"metric.key\" : \"postgres.activity.active_waiting\",\n    \"fieldName\" : \"waiting\"\n  }, {\n    \"metric.key\" : \"postgres.locks\",\n    \"fieldName\" : \"locks\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, {backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks)}\", \"timezone\": \"Z\", \"query\": \"timeseries { backends = avg(postgres.numbackends), waiting = avg(postgres.activity.active_waiting), locks = avg(postgres.locks) }, from: now()-1h\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245660.0, \"end\": 1795249320.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 17, \"notifications\": [], \"queryId\": \"01a1fd32-4d5e-725b-adaf-cdf4d9c0ec45\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"postgres.numbackends\", \"fieldName\": \"backends\"}, {\"metric.key\": \"postgres.activity.active_waiting\", \"fieldName\": \"waiting\"}, {\"metric.key\": \"postgres.locks\", \"fieldName\": \"locks\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "airlab.pg.* (collector)",
+      "tool": "execute-dql",
+      "dql": "timeseries { waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal) }, from: now()-1h",
+      "status": "BOS",
+      "ms": 1289,
+      "result": {
+        "isError": false,
+        "text_chars": 1019,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, {waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal)}\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal) }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 12,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-5220-723b-8141-21f432ae78e5\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"airlab.pg.lock.waiters_total\",\n    \"fieldName\" : \"waiters\"\n  }, {\n    \"metric.key\" : \"airlab.pg.connections.used_ratio_normal\",\n    \"fieldName\" : \"used\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"timeseries from:now() - 1h, {waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal)}\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"timeseries { waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal) }, from: now()-1h\\n\",\n    \"scannedRecords\" : 0,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 0,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:00Z\",\n      \"end\" : \"2026-11-21T08:22:00Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 12,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-5220-723b-8141-21f432ae78e5\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ {\n    \"metric.key\" : \"airlab.pg.lock.waiters_total\",\n    \"fieldName\" : \"waiters\"\n  }, {\n    \"metric.key\" : \"airlab.pg.connections.used_ratio_normal\",\n    \"fieldName\" : \"used\"\n  } ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"timeseries from:now() - 1h, {waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal)}\", \"timezone\": \"Z\", \"query\": \"timeseries { waiters = max(airlab.pg.lock.waiters_total), used = max(airlab.pg.connections.used_ratio_normal) }, from: now()-1h\\n\", \"scannedRecords\": 0, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 0, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245660.0, \"end\": 1795249320.0}, \"locale\": \"und\", \"executionTimeMilliseconds\": 12, \"notifications\": [], \"queryId\": \"01a1fd32-5220-723b-8141-21f432ae78e5\", \"sampled\": false}, \"metrics\": [{\"metric.key\": \"airlab.pg.lock.waiters_total\", \"fieldName\": \"waiters\"}, {\"metric.key\": \"airlab.pg.connections.used_ratio_normal\", \"fieldName\": \"used\"}]}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "airlab.pg.blocking_edge logları",
+      "tool": "execute-dql",
+      "dql": "fetch logs, from: now()-1h | filter airlab.event == \"airlab.pg.blocking_edge\" | sort timestamp desc | limit 5",
+      "status": "BOS",
+      "ms": 1412,
+      "result": {
+        "isError": false,
+        "text_chars": 834,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter airlab.event == \\\"airlab.pg.blocking_edge\\\"\\n| sort timestamp desc\\n| limit 5\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter airlab.event == \\\"airlab.pg.blocking_edge\\\" | sort timestamp desc | limit 5\\n\",\n    \"scannedRecords\" : 2,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 31,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:37.389489334Z\",\n      \"end\" : \"2026-11-21T08:21:37.389489334Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 16,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-57dd-7882-a089-4bc7ff0439fe\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter airlab.event == \\\"airlab.pg.blocking_edge\\\"\\n| sort timestamp desc\\n| limit 5\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter airlab.event == \\\"airlab.pg.blocking_edge\\\" | sort timestamp desc | limit 5\\n\",\n    \"scannedRecords\" : 2,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 31,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:37.389489334Z\",\n      \"end\" : \"2026-11-21T08:21:37.389489334Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 16,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-57dd-7882-a089-4bc7ff0439fe\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"fetch logs, from:now() - 1h\\n| filter airlab.event == \\\"airlab.pg.blocking_edge\\\"\\n| sort timestamp desc\\n| limit 5\", \"timezone\": \"Z\", \"query\": \"fetch logs, from: now()-1h | filter airlab.event == \\\"airlab.pg.blocking_edge\\\" | sort timestamp desc | limit 5\\n\", \"scannedRecords\": 2, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 31, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245697.3894894, \"end\": 1795249297.3894894}, \"locale\": \"und\", \"executionTimeMilliseconds\": 16, \"notifications\": [], \"queryId\": \"01a1fd32-57dd-7882-a089-4bc7ff0439fe\", \"sampled\": false}, \"metrics\": []}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "Uygulama ECS logları (request_id / experiment_id)",
+      "tool": "execute-dql",
+      "dql": "fetch logs, from: now()-1h | filter isNotNull(request_id) or isNotNull(experiment_id) | fields timestamp, service.name, request_id, experiment_id, dt.trace_id | limit 5",
+      "status": "BOS",
+      "ms": 1248,
+      "result": {
+        "isError": false,
+        "text_chars": 948,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter isNotNull(request_id) OR isNotNull(experiment_id)\\n| fields timestamp, service.name, request_id, experiment_id, dt.trace_id\\n| limit 5\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter isNotNull(request_id) or isNotNull(experiment_id) | fields timestamp, service.name, request_id, experiment_id, dt.trace_id | limit 5\\n\",\n    \"scannedRecords\" : 2,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 31,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:38.639739251Z\",\n      \"end\" : \"2026-11-21T08:21:38.639739251Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 20,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-5cba-779e-830e-138595185fef\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter isNotNull(request_id) OR isNotNull(experiment_id)\\n| fields timestamp, service.name, request_id, experiment_id, dt.trace_id\\n| limit 5\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter isNotNull(request_id) or isNotNull(experiment_id) | fields timestamp, service.name, request_id, experiment_id, dt.trace_id | limit 5\\n\",\n    \"scannedRecords\" : 2,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 31,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:38.639739251Z\",\n      \"end\" : \"2026-11-21T08:21:38.639739251Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 20,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-5cba-779e-830e-138595185fef\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"fetch logs, from:now() - 1h\\n| filter isNotNull(request_id) OR isNotNull(experiment_id)\\n| fields timestamp, service.name, request_id, experiment_id, dt.trace_id\\n| limit 5\", \"timezone\": \"Z\", \"query\": \"fetch logs, from: now()-1h | filter isNotNull(request_id) or isNotNull(experiment_id) | fields timestamp, service.name, request_id, experiment_id, dt.trace_id | limit 5\\n\", \"scannedRecords\": 2, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 31, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245698.6397393, \"end\": 1795249298.6397393}, \"locale\": \"und\", \"executionTimeMilliseconds\": 20, \"notifications\": [], \"queryId\": \"01a1fd32-5cba-779e-830e-138595185fef\", \"sampled\": false}, \"metrics\": []}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "PostgreSQL extension top queries logları",
+      "tool": "execute-dql",
+      "dql": "fetch logs, from: now()-1h | filter dt.extension.name == \"com.dynatrace.extension.postgres\" | summarize n = count(), by: { event.group }",
+      "status": "BOS",
+      "ms": 1275,
+      "result": {
+        "isError": false,
+        "text_chars": 884,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter dt.extension.name == \\\"com.dynatrace.extension.postgres\\\"\\n| summarize by:{event.group}, n = count()\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter dt.extension.name == \\\"com.dynatrace.extension.postgres\\\" | summarize n = count(), by: { event.group }\\n\",\n    \"scannedRecords\" : 2,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 31,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:39.906871203Z\",\n      \"end\" : \"2026-11-21T08:21:39.906871203Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 16,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-61b7-7698-8df5-e4588f2f3786\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter dt.extension.name == \\\"com.dynatrace.extension.postgres\\\"\\n| summarize by:{event.group}, n = count()\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter dt.extension.name == \\\"com.dynatrace.extension.postgres\\\" | summarize n = count(), by: { event.group }\\n\",\n    \"scannedRecords\" : 2,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 31,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:39.906871203Z\",\n      \"end\" : \"2026-11-21T08:21:39.906871203Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 16,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-61b7-7698-8df5-e4588f2f3786\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"fetch logs, from:now() - 1h\\n| filter dt.extension.name == \\\"com.dynatrace.extension.postgres\\\"\\n| summarize by:{event.group}, n = count()\", \"timezone\": \"Z\", \"query\": \"fetch logs, from: now()-1h | filter dt.extension.name == \\\"com.dynatrace.extension.postgres\\\" | summarize n = count(), by: { event.group }\\n\", \"scannedRecords\": 2, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 31, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245699.9068713, \"end\": 1795249299.9068713}, \"locale\": \"und\", \"executionTimeMilliseconds\": 16, \"notifications\": [], \"queryId\": \"01a1fd32-61b7-7698-8df5-e4588f2f3786\", \"sampled\": false}, \"metrics\": []}, \"types\": []}"
+      }
+    },
+    {
+      "signal": "Ingest gecikmesi (log zaman damgası vs. şimdi)",
+      "tool": "execute-dql",
+      "dql": "fetch logs, from: now()-1h | filter in(service.name, array(\"reservation-service\", \"checkin-service\", \"flightops-service\", \"baggage-service\", \"chaos-controller\")) | summarize last = max(timestamp), by: { service.name } | fieldsAdd lag = now() - last",
+      "status": "BOS",
+      "ms": 1777,
+      "result": {
+        "isError": false,
+        "text_chars": 1125,
+        "text_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter in(service.name, array(\\\"reservation-service\\\", \\\"checkin-service\\\", \\\"flightops-service\\\", \\\"baggage-service\\\", \\\"chaos-controller\\\"))\\n| summarize by:{service.name}, last = max(timestamp)\\n| fieldsAdd lag = now() - last\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter in(service.name, array(\\\"reservation-service\\\", \\\"checkin-service\\\", \\\"flightops-service\\\", \\\"baggage-service\\\", \\\"chaos-controller\\\")) | summarize last = max(timestamp), by: { service.name } | fieldsAdd lag = now() - last\\n\",\n    \"scannedRecords\" : 2,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 31,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:41.291424203Z\",\n      \"end\" : \"2026-11-21T08:21:41.291424203Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 17,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-671a-7747-b032-6f5d40059e67\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\nQuery result records:\n[ ]",
+        "metadata_head": "Query metadata:\n{\n  \"grail\" : {\n    \"canonicalQuery\" : \"fetch logs, from:now() - 1h\\n| filter in(service.name, array(\\\"reservation-service\\\", \\\"checkin-service\\\", \\\"flightops-service\\\", \\\"baggage-service\\\", \\\"chaos-controller\\\"))\\n| summarize by:{service.name}, last = max(timestamp)\\n| fieldsAdd lag = now() - last\",\n    \"timezone\" : \"Z\",\n    \"query\" : \"fetch logs, from: now()-1h | filter in(service.name, array(\\\"reservation-service\\\", \\\"checkin-service\\\", \\\"flightops-service\\\", \\\"baggage-service\\\", \\\"chaos-controller\\\")) | summarize last = max(timestamp), by: { service.name } | fieldsAdd lag = now() - last\\n\",\n    \"scannedRecords\" : 2,\n    \"dqlVersion\" : \"V1_0\",\n    \"scannedBytes\" : 31,\n    \"scannedDataPoints\" : 0,\n    \"analysisTimeframe\" : {\n      \"start\" : \"2026-11-21T07:21:41.291424203Z\",\n      \"end\" : \"2026-11-21T08:21:41.291424203Z\"\n    },\n    \"locale\" : \"und\",\n    \"executionTimeMilliseconds\" : 17,\n    \"notifications\" : [ ],\n    \"queryId\" : \"01a1fd32-671a-7747-b032-6f5d40059e67\",\n    \"sampled\" : false\n  },\n  \"metrics\" : [ ]\n}\nGrail types for the records in the query result:\n[ ]\n",
+        "records_head": "[ ]",
+        "record_count": 0,
+        "structured_head": "{\"records\": [], \"metadata\": {\"grail\": {\"canonicalQuery\": \"fetch logs, from:now() - 1h\\n| filter in(service.name, array(\\\"reservation-service\\\", \\\"checkin-service\\\", \\\"flightops-service\\\", \\\"baggage-service\\\", \\\"chaos-controller\\\"))\\n| summarize by:{service.name}, last = max(timestamp)\\n| fieldsAdd lag = now() - last\", \"timezone\": \"Z\", \"query\": \"fetch logs, from: now()-1h | filter in(service.name, array(\\\"reservation-service\\\", \\\"checkin-service\\\", \\\"flightops-service\\\", \\\"baggage-service\\\", \\\"chaos-controller\\\")) | summarize last = max(timestamp), by: { service.name } | fieldsAdd lag = now() - last\\n\", \"scannedRecords\": 2, \"dqlVersion\": \"V1_0\", \"scannedBytes\": 31, \"scannedDataPoints\": 0, \"analysisTimeframe\": {\"start\": 1795245701.2914243, \"end\": 1795249301.2914243}, \"locale\": \"und\", \"executionTimeMilliseconds\": 17, \"notifications\": [], \"queryId\": \"01a1fd32-671a-7747-b032-6f5d40059e67\", \"sampled\": false}, \"metrics\": []}, \"types\": []}"
+      }
+    }
+  ],
+  "server": {
+    "info": {
+      "name": "dynatrace-mcp",
+      "version": "1.0"
+    },
+    "protocolVersion": "2025-06-18",
+    "capabilities": [
+      "resources",
+      "tools"
+    ],
+    "session": true,
+    "ms": 2351
+  },
+  "tools": [
+    {
+      "name": "adaptive-anomaly-detector",
+      "required": [
+        "timeSeriesData",
+        "numberOfSignalFluctuations"
+      ]
+    },
+    {
+      "name": "ask-dynatrace-docs",
+      "required": [
+        "prompt"
+      ]
+    },
+    {
+      "name": "create-dql",
+      "required": [
+        "request"
+      ]
+    },
+    {
+      "name": "execute-dql",
+      "required": [
+        "dqlQueryString"
+      ]
+    },
+    {
+      "name": "explain-dql",
+      "required": [
+        "dql"
+      ]
+    },
+    {
+      "name": "find-documents",
+      "required": [
+        "searchString"
+      ]
+    },
+    {
+      "name": "find-troubleshooting-guides",
+      "required": [
+        "searchStrings"
+      ]
+    },
+    {
+      "name": "get-dynatrace-compliance-findings",
+      "required": []
+    },
+    {
+      "name": "get-dynatrace-vulnerabilities",
+      "required": []
+    },
+    {
+      "name": "get-entity-id",
+      "required": [
+        "entityNameFilter"
+      ]
+    },
+    {
+      "name": "get-entity-name",
+      "required": [
+        "entityId"
+      ]
+    },
+    {
+      "name": "get-events-for-kubernetes-cluster",
+      "required": []
+    },
+    {
+      "name": "get-problem-by-id",
+      "required": [
+        "problemId"
+      ]
+    },
+    {
+      "name": "get-security-event-details",
+      "required": []
+    },
+    {
+      "name": "get-security-events-summary",
+      "required": []
+    },
+    {
+      "name": "log-pattern-extractor",
+      "required": [
+        "logQuery"
+      ]
+    },
+    {
+      "name": "query-problems",
+      "required": []
+    },
+    {
+      "name": "seasonal-baseline-anomaly-detector",
+      "required": [
+        "timeSeriesData",
+        "tolerance"
+      ]
+    },
+    {
+      "name": "static-threshold-analyzer",
+      "required": [
+        "timeSeriesData",
+        "threshold"
+      ]
+    },
+    {
+      "name": "timeseries-forecast",
+      "required": [
+        "query"
+      ]
+    },
+    {
+      "name": "timeseries-novelty-detection",
+      "required": [
+        "timeSeriesData",
+        "detectionMode"
+      ]
+    }
+  ]
+}

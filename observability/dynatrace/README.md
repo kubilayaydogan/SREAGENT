@@ -81,7 +81,7 @@ DT_URL=https://<env-id>.live.dynatrace.com
 DT_INGEST_TOKEN=<metrics.ingest + logs.ingest kapsamlı Api-Token>
 docker compose --profile observability up -d pg-lock-collector
 ```
-**Kabul:** `fetch logs | filter event.type == "airlab.pg.blocking_edge"` E2 deneyi sırasında kayıt döndürür;
+**Kabul:** `fetch logs | filter airlab.event == "airlab.pg.blocking_edge"` E2 deneyi sırasında kayıt döndürür;
 `airlab.pg.lock.waiters_total` metriği görünür.
 
 ## 3. Token kapsamları (en az yetki)
