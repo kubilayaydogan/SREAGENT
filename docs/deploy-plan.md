@@ -39,7 +39,7 @@ sudo sh -c 'install -d -m700 /root/ag-pkg && cp -p /var/lib/dynatrace/packages/D
 sudo sh -c 'cd /root/ag-pkg && env LANG=C LC_ALL=C /bin/bash ./Dynatrace-Remote-Plugin-Module-Linux-x86-*.sh'
 systemctl is-active dynatracegateway extensionsmodule
 ```
-Bilinen sorun (2026-11-21): PostgreSQL extension 3.0.10 / 3.1.0 / 3.2.10 bu ActiveGate'te (1.349, sqlPostgres 1.349.20261013)
+Bilinen sorun (2026-11-21): PostgreSQL extension 2.9.8 / 3.0.10 / 3.1.0 / 3.2.10 bu ActiveGate'te (1.349, sqlPostgres 1.349.20261013)
 `INVALID_CONFIG_ERROR` veriyor (`blocking_statements` log grubu, "Invalid attribute type string"); Locks'u kapatmak çözmüyor.
 Yapmayın: aynı installer'ı güncelleme kipinde yeniden çalıştırmak — indirilmiş bileşeni silip yeniden indirir.
 

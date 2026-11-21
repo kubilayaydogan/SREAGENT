@@ -37,7 +37,7 @@ Sorgular: `scripts/mcp-probe.py` → `GATE_QUERIES`; anahtar/biçim ayrıntısı
 | JVM heap/GC/thread | ☐ | ☐ | | sorgulanmadı (**AÇIK**) |
 | `airlab.app.hikaricp.connections.*` | ☐ | ✅ | | `by: service, pool` |
 | `airlab.app.http.server.requests` | ☐ | ✅ | | `rollup: count`; `.percentile` anahtarı **yok** |
-| `postgres.*` (extension) | ☐ | ❌ | | extension 3.0.10/3.1.0/3.2.10 ActiveGate 1.349'da `INVALID_CONFIG_ERROR` (`blocking_statements` grubu) — Dynatrace tarafı uyumsuzluk; PROJECT_STATE açık madde 1 |
+| `postgres.*` (extension) | ☐ | ❌ | | extension 2.9.8/3.0.10/3.1.0/3.2.10 ActiveGate 1.349'da `INVALID_CONFIG_ERROR` (`blocking_statements` grubu) — Dynatrace tarafı uyumsuzluk; PROJECT_STATE açık madde 1 |
 | `airlab.pg.*` metrikleri (collector) | ☐ | ✅ | | |
 | `airlab.pg.blocking_edge` logları | ☐ | ✅ | | gerçek kilit kenarı okundu; alan `airlab.event` |
 | PostgreSQL sunucu logları (lock wait) | ☐ | ✅ | | `db-vm`, `log_lock_waits` |
