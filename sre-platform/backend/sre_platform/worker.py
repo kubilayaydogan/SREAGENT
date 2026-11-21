@@ -72,6 +72,8 @@ async def health_check(rt, params: dict) -> dict[str, Any]:
         await rt.memory.remember_investigation(done, user_id=None, conversation_id=None)
     out: dict[str, Any] = {"investigation_id": str(done.id), "status": done.status.value,
                            "severity": done.severity.value, "mechanism": done.primary_mechanism}
+    if done.status == InvestigationStatus.FAILED:          # iş geçmişinde başarısız görünsün (araştırma kaydı da FAILED)
+        raise RuntimeError(f"sağlık kontrolü analizi başarısız (araştırma {done.id}): {done.error or '?'}"[:1500])
     # Yüksek/kritik ve mekanizması belli bulgu → incident (aynı mekanizma için tek açık kayıt). Watch açık bir
     # incident yürütüyorsa yalnız ona bağlanır (çift incident yok).
     if done.status == InvestigationStatus.COMPLETED and done.severity in (Severity.HIGH, Severity.CRITICAL) \

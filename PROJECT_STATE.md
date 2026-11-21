@@ -2,6 +2,17 @@
 
 Son güncelleme: 2026-11-21 · Aşama: **2 — SRE Agent yazıldı, testlendi, APP_VM'e dağıtılıyor** · Aşama 1: **tamam**
 
+## SRE Operations Platform (2026-11-21)
+
+| Bileşen | Durum |
+|---|---|
+| `sre-platform/` backend + frontend + worker, compose `platform` profili | ✅ APP_VM'de çalışıyor — UI `http://172.20.229.26:8090` |
+| sre-postgres 17.7 (internal ağ), Alembic 0001 + LangGraph checkpointer/Store | ✅ |
+| Watch: eski `airlab-sre-agent` (SQLite) durduruldu → `sre-worker` (PG durumlu) devraldı | ✅ gerçek MCP ile çalışıyor |
+| Eski 7 JSON rapor `import` araştırması olarak içe aktarıldı | ✅ |
+| Testler | backend 37/37 (PG), ajan çekirdeği 38/38, frontend 17/17 + tsc + build; gerçek MCP E2E (login → araştırma → SSE → kanıt) ✅ |
+| Trace/Davis ilişkilendirmesi canlı veriyle | ⏳ dağıtım anında iş trafiği yoktu (sorgular doğru, sonuç EMPTY) — deney sırasında doğrulanmalı |
+
 ## Özet
 
 | Durum | Kapsam | Sonuç |

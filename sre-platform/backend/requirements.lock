@@ -1,0 +1,13 @@
+# sre-platform backend: ajan kilidine (sre-agent/requirements.lock) EK sabitlenmiş bağımlılıklar.
+# Geliştirme ortamından üretildi (pip freeze − ajan kilidi − test paketleri).
+alembic==1.20.1
+annotated-doc==0.0.7
+fastapi==0.165.0
+greenlet==3.5.6
+langgraph-checkpoint-postgres==3.2.1
+Mako==1.4.3
+MarkupSafe==3.0.4
+psycopg==3.3.9
+psycopg-binary==3.3.9
+psycopg-pool==3.3.3
+SQLAlchemy==2.1.9

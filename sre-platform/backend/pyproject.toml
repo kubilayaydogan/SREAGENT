@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "airlab SRE Operations Platform — FastAPI backend, PostgreSQL kalıcılığı, ajan hafızası (airlab-agent çekirdeğini kullanır)"
 requires-python = ">=3.12"
 dependencies = [
-  "airlab-agent",                         # ../../sre-agent (mevcut çekirdek: MCP, sinyaller, puanlama, atıf, LangGraph)
+  "airlab-sre-agent",                       # ../../sre-agent (mevcut çekirdek: MCP, sinyaller, puanlama, atıf, LangGraph)
   "fastapi==0.165.0",
   "uvicorn==0.54.0",
   "sse-starlette==3.7.0",

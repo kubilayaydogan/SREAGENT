@@ -39,7 +39,7 @@ export function JobsCard() {
               <li key={j.id} className="px-4 py-2.5 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-ink">{JOB_TR[j.job_type] ?? j.name}</span>
-                  <span className="text-muted">her {fmtDuration(j.interval_seconds * 1000)}</span>
+                  <span className="text-muted">her {j.interval_seconds % 60 === 0 ? `${j.interval_seconds / 60} dk` : fmtDuration(j.interval_seconds * 1000)}</span>
                   {can("admin") ? (
                     <button
                       onClick={() => toggle.mutate(j)}

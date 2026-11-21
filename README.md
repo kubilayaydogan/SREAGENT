@@ -2,7 +2,8 @@
 
 Dört Java 21 / Spring Boot iş uygulaması (Reservation, Check-in, Flight Operations, Baggage), ortak PostgreSQL 17,
 yalnız HTTP ile yük veren **chaos-controller** ve Dynatrace gözlemlenebilirlik hazırlığı.
-Aşama 2 (Dynatrace MCP üzerinden çalışan Python SRE Agent) **henüz yazılmadı**.
+Aşama 2: Dynatrace MCP üzerinden çalışan salt-okunur Python SRE Agent — `sre-agent/`.
+SRE Operations Platform (PostgreSQL hafızası, FastAPI, React arayüz `:8090`, watch/zamanlanmış kontroller) — `sre-platform/README.md`.
 
 - Topoloji: APP_VM (Rocky 9/10, Docker) ↔ DB_VM (Rocky 9, postgresql-17 systemd) — `docs/architecture.md`
 - Tablo/transaction/kilit bağımlılıkları — `docs/sql-dependencies.md`

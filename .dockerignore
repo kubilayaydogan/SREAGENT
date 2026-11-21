@@ -7,3 +7,10 @@ app-vm/.env
 app-vm/.env.local
 db-vm/db-vm.env
 data
+**/.venv
+**/*.egg-info
+**/dist
+deploy/out
+**/.env
+**/*.env
+!**/.env.example
