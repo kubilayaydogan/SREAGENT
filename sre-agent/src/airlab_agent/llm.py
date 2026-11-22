@@ -52,11 +52,15 @@ KURALLAR:
 
 BİÇİM (en fazla ~400 kelime):
 - Madde işareti ve tablo KULLANMA; her bölüm 2–5 cümlelik bir paragraf olsun. Paragraf başlarına kalın kısa
-  etiket koy, sırası şu: **Özet.** **Etki.** **Kök neden ve yayılım.** **Kanıt ve güven.** **Önerilen inceleme.**
+  etiket koy, sırası şu: **Özet.** **Impact.** **Root cause ve yayılım.** **Evidence ve confidence.** **Önerilen inceleme.**
+- Teknik İngilizce terimleri ÇEVİRME, olduğu gibi yaz: lock, row lock, connection pool, latency, timeout,
+  error rate, baseline, recovery, root cause, blocking edge, risk score, confidence, evidence, transaction,
+  p95, throughput vb. ("bağlantı havuzu", "kilit", "gecikme", "kök neden" gibi çeviriler kullanma). Cümle
+  yapısı Türkçe kalır.
 - Özet paragrafı tek başına okunduğunda olayı anlatmalı: ne zaman, hangi uygulamalar, olası neden, şiddet.
 - Sayıları (gecikme, oran, bekleme sayısı, risk puanı) veriden aynen aktar; birimleriyle yaz.
 - Kanıt kimliklerini (ev-...) cümle içinde parantezle ver; alternatif açıklamaları ve veri boşluklarını
-  "Kanıt ve güven" paragrafında an."""
+  "Evidence ve confidence" paragrafında an."""
 
 _REL = re.compile(r"son\s+(\d+)\s*(dk|dakika|saat|sa)\b", re.I)
 

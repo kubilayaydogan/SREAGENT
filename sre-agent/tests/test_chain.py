@@ -53,7 +53,7 @@ def test_deterministic_report_is_paragraphs_with_chain():
          "human_review": ["Kaynak transaction'ları inceleyin."]}
     txt = deterministic_explanation(r)
     paras = txt.split("\n\n")
-    assert [p.split(".**")[0] for p in paras] == ["**Özet", "**Etki", "**Kök neden ve yayılım", "**Kanıt ve güven",
+    assert [p.split(".**")[0] for p in paras] == ["**Özet", "**Impact", "**Root cause ve yayılım", "**Evidence ve confidence",
                                                   "**Önerilen inceleme"]
     assert "- " not in txt                                           # madde işareti yok
     assert "20:45 UTC (23:45 TSİ)" in paras[0] and "78.0/100" in paras[0]
