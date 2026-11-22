@@ -112,6 +112,9 @@ def to_markdown(r: dict) -> str:
           f"- Etkilenen: {', '.join(c['affected_apps']) or 'yok'}"]
     for a, i in r["impacted"].items():
         L.append(f"  - {a}: {'; '.join(i['reasons'])}")
+    prim = next((m for m in r["mechanisms"] if m["id"] == c["primary_mechanism"]), None)
+    if prim and prim.get("chain_path"):
+        L.append(f"- Bekleme zinciri: {prim['chain_path']} ({prim['chain_depth']} halka)")
     L += ["", "## Mekanizmalar"]
     if not r["mechanisms"]:
         L.append("- Tespit edilen mekanizma yok.")
@@ -137,21 +140,92 @@ def to_markdown(r: dict) -> str:
     return "\n".join(L) + "\n"
 
 
+def _clock(iso_ts: str | None) -> str:
+    """'2026-11-21T20:42:00Z' → '20:42 UTC (23:42 TSİ)'."""
+    if not iso_ts:
+        return "?"
+    from datetime import datetime, timedelta
+    t = datetime.fromisoformat(str(iso_ts).replace("Z", "+00:00"))
+    return f"{t:%H:%M} UTC ({t + timedelta(hours=3):%H:%M} TSİ)"
+
+
+def _join(items: list[str]) -> str:
+    items = [i for i in items if i]
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " ve " + items[-1]
+
+
 def deterministic_explanation(r: dict) -> str:
-    """Claude yokken kural tabanlı Türkçe özet."""
+    """Claude yokken kural tabanlı, paragraf düzeninde Türkçe rapor. Yalnız rapordaki ölçülmüş değerleri kullanır."""
     o, c = r["risk"]["overall"], r["causality"]
-    parts = [f"Genel risk: {_fmt(o['score'])} ({o.get('band') or 'hesaplanamadı'})."]
-    if c["primary_mechanism"]:
-        m = next(x for x in r["mechanisms"] if x["id"] == c["primary_mechanism"])
-        parts.append(f"Birincil mekanizma: {m['title']} — kaynak {', '.join(m['source_apps']) or 'belirsiz'}, "
-                     f"etkilenen {', '.join(m['affected_apps']) or 'yok'} (güven: {CONF_TR[m['confidence']]}).")
+    win = next((w for w in r.get("windows") or [] if w.get("name") == "window"), None)
+    base = next((w for w in r.get("windows") or [] if w.get("name") == "baseline"), None)
+    period = (f"{_clock(win['start'])} – {_clock(win['end'])} aralığı" if win else "İncelenen aralık")
+    prim = next((m for m in r["mechanisms"] if m["id"] == c["primary_mechanism"]), None)
+    paras = []
+
+    # 1) Özet
+    if prim:
+        summary = (f"{period}, öncesindeki "
+                   + (f"{_clock(base['start'])} – {_clock(base['end'])} " if base else "")
+                   + f"normal dönemle karşılaştırıldı. Tespit edilen mekanizma: **{prim['title']}**. "
+                   f"Sorunun kaynağı {_join(prim['source_apps']) or 'belirlenemeyen bir uygulama'}, etkilenen "
+                   f"uygulamalar {_join(prim['affected_apps']) or 'yok'}. ")
     elif r["impacted"]:
-        parts.append(f"Etkilenen uygulamalar: {', '.join(r['impacted'])}; mekanizma belirlenemedi.")
+        summary = (f"{period}nda {_join(list(r['impacted']))} uygulamalarında kötüleşme ölçüldü, ancak eldeki "
+                   "kanıtlar tek bir mekanizmaya bağlanamadı. ")
     else:
-        parts.append("Baseline'a göre anlamlı bir kötüleşme yok.")
+        summary = f"{period}nda normal döneme göre anlamlı bir kötüleşme ölçülmedi. "
+    summary += (f"Genel risk puanı {_fmt(o['score'])}/100 ({o.get('band') or 'hesaplanamadı'}); bu puan şiddeti "
+                "gösterir, nedenselliğin kesinliğini değil.")
+    paras.append("**Özet.** " + summary)
+
+    # 2) Etki
+    if r["impacted"]:
+        parts = [f"{a} uygulamasında {', '.join(i['reasons'])}" for a, i in r["impacted"].items()]
+        unaffected = [a for a in r["risk"]["apps"] if a not in r["impacted"]]
+        txt = "Ölçülen etki şöyle: " + "; ".join(parts) + "."
+        if unaffected:
+            txt += f" {_join(unaffected)} uygulamalarında baseline'a göre anlamlı değişiklik görülmedi."
+        paras.append("**Etki.** " + txt)
+
+    # 3) Kök neden ve yayılım
+    if prim:
+        txt = prim["mechanism"]
+        if prim.get("chain_path"):
+            txt += (f" Bekleme zinciri {prim['chain_path']} biçiminde ({prim['chain_depth']} halka). "
+                    + prim.get("cascade", ""))
+            for h in prim.get("lock_chain", []):
+                if h["level"] > 0:
+                    txt += (f" {h['app']}, {_join([w['app'] for w in h['waits_on']])} uygulamasını "
+                            f"{int(h['n'])} kez bekledi.")
+        if prim.get("edges_total"):
+            txt += f" Pencerede toplam {int(prim['edges_total'])} kilit bekleme kaydı (blocking edge) var."
+        secondary = [m["title"] for m in r["mechanisms"] if m.get("secondary_to") == prim["id"]]
+        if secondary:
+            txt += f" Buna bağlı ikincil etkiler: {_join(secondary)}."
+        paras.append("**Kök neden ve yayılım.** " + txt.strip())
+
+    # 4) Kanıt ve güven
+    dc = r["data_coverage"]
+    txt = (f"Değerlendirme {dc['signals_ok']}/{dc['signals_total']} sinyalle yapıldı. Nedensellik güveni "
+           f"{CONF_TR.get(c['confidence'], c['confidence'])}")
+    if prim:
+        txt += f"; mekanizmayı destekleyen sinyaller: {', '.join(prim['signals'])}"
+        if prim.get("evidence_ids"):
+            txt += f" (kanıt: {', '.join(prim['evidence_ids'])})"
+    txt += "."
     if r["data_gaps"]:
-        parts.append(f"Veri boşluğu: {len(r['data_gaps'])} sinyal OK değil.")
-    return " ".join(parts)
+        txt += f" Veri boşlukları: {'; '.join(r['data_gaps'])}. Eksik veri sıfır olarak yorumlanmadı."
+    if r.get("alternatives"):
+        txt += " Dışlanamayan alternatif açıklamalar: " + " ".join(r["alternatives"])
+    paras.append("**Kanıt ve güven.** " + txt)
+
+    # 5) Öneri
+    paras.append("**Önerilen inceleme.** " + " ".join(r["human_review"])
+                 + " Ajan salt-okunurdur; değişiklik gerektiren adımlar onay akışından geçmelidir.")
+    return "\n\n".join(paras)
 
 
 def save(r: dict, reports_dir: Path) -> tuple[Path, Path]:

@@ -14,6 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -71,6 +72,31 @@ class FlightOpsIT {
         assertEquals(409, bad.statusCode());
         assertTrue(bad.body().contains("INVALID_TRANSITION"));
         assertEquals(400, call("POST", "/api/flights/" + id + "/status", "{\"status\":\"FLYING\"}").statusCode());
+    }
+
+    /** V5 zinciri: bagaj sayacı başka bir transaction'da kilitliyken uçuş durumu güncellemesi bekler. */
+    @Test
+    void statusUpdateWaitsForHeldBaggageCounter() throws Exception {
+        long id = JSON.readTree(call("GET", "/api/flights/sample?limit=1", null).body()).get(0).asLong();
+        try (Connection setup = LabPostgres.owner(); var st = setup.createStatement()) {   // satır commit'li var olmalı
+            st.executeUpdate("INSERT INTO baggage.flight_baggage_stats(flight_id) VALUES (" + id + ") ON CONFLICT DO NOTHING");
+        }
+        try (Connection holder = LabPostgres.owner()) {
+            holder.setAutoCommit(false);
+            try (var st = holder.createStatement()) {   // bagaj kaydı transaction'ını taklit: sayaç satırını kilitle
+                st.executeUpdate("UPDATE baggage.flight_baggage_stats SET updated_at = now() WHERE flight_id = " + id);
+            }
+            var pending = HTTP.sendAsync(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/flights/" + id + "/status"))
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"status\":\"DELAYED\",\"gate\":\"C7\",\"delayMin\":41}"))
+                    .header("Content-Type", "application/json").build(), HttpResponse.BodyHandlers.ofString());
+            Thread.sleep(1500);
+            assertFalse(pending.isDone(), "durum güncellemesi bagaj sayacı kilidini beklemeliydi");
+            holder.rollback();
+            var r = pending.get(10, TimeUnit.SECONDS);
+            assertEquals(200, r.statusCode(), r.body());
+            assertTrue(scalar("SELECT count(*) FROM flightops.ops_event WHERE flight_id = " + id
+                    + " AND detail LIKE '%delay=41 bags=%'") >= 1);
+        }
     }
 
     @Test

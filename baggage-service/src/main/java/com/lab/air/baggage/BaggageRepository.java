@@ -73,15 +73,20 @@ public class BaggageRepository {
 
     /** Bagaj kaydı yapılabilecek (check-in yapılmış, < 3 bagaj) gelecekteki rezervasyonlar. */
     public List<String> candidates(int limit) {
+        return candidates(limit, false);
+    }
+
+    /** hot=true → yalnız sıcak uçuşlar (zincirleme kilit deneyi: bagaj kaydı check-in sayacını bekler). */
+    public List<String> candidates(int limit, boolean hot) {
         return jdbc.sql(tag("""
                         SELECT b.pnr
                           FROM checkin.checkin c
                           JOIN reservation.booking b ON b.booking_id = c.booking_id
                           JOIN flightops.flight f ON f.flight_id = c.flight_id
-                         WHERE f.dep_time > now() AND b.status = 'CONFIRMED'
+                         WHERE f.dep_time > now() AND b.status = 'CONFIRMED' AND (f.is_hot OR NOT ?)
                            AND (SELECT count(*) FROM baggage.bag g WHERE g.booking_id = c.booking_id) < 3
                          ORDER BY random() LIMIT ?"""))
-                .param(limit).query(String.class).list();
+                .params(hot, limit).query(String.class).list();
     }
 
     /**

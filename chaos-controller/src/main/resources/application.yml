@@ -21,12 +21,15 @@ chaos:
   lab-token: ${LAB_TOKEN:}
   data-dir: ${CHAOS_DATA_DIR:./data/experiments}
   background: ${CHAOS_BACKGROUND_RPS:1.0}
+  continuous:                       # deneylerden bağımsız sürekli normal trafik (ContinuousTraffic)
+    enabled: ${CHAOS_CONTINUOUS_ENABLED:true}
+    rps-per-app: ${CHAOS_CONTINUOUS_RPS:4}
   auth:
     enabled: ${CHAOS_AUTH_ENABLED:true}
     user: ${CHAOS_USER:chaos}
     password: ${CHAOS_PASSWORD:}
   limits:
-    max-total-rps: ${CHAOS_MAX_TOTAL_RPS:250}
+    max-total-rps: ${CHAOS_MAX_TOTAL_RPS:600}
     max-rps-per-target: ${CHAOS_MAX_RPS_PER_TARGET:150}
     max-concurrency-per-target: ${CHAOS_MAX_CONCURRENCY_PER_TARGET:64}
     max-total-concurrency: ${CHAOS_MAX_TOTAL_CONCURRENCY:128}

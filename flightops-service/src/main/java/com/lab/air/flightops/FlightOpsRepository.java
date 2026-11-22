@@ -94,4 +94,24 @@ public class FlightOpsRepository {
                         rs.getLong(9), rs.getBigDecimal(10), rs.getInt(7) != rs.getLong(8)))
                 .list();
     }
+
+    /**
+     * LAB: sıcak (kilit deneyi) uçuşlarını her zaman ileri tarihte tutar. Kalkışı 2 günden yakın olan sıcak uçuşlar
+     * tam gün adımlarıyla en az 3 gün sonrasına kaydırılır; kapanmış durumdaysa SCHEDULED'a döner. Aksi halde
+     * kalkış saati geçince check-in / bagaj / rezervasyon adayları tükenir ve kilit deneyleri hedef bulamaz.
+     */
+    public int rollHotFlightsForward() {
+        return jdbc.sql(tag("""
+                        WITH d AS (
+                            SELECT flight_id,
+                                   make_interval(days => ceil(extract(epoch FROM (now() + interval '3 days' - dep_time)) / 86400)::int) AS shift
+                              FROM flightops.flight
+                             WHERE is_hot AND dep_time < now() + interval '2 days')
+                        UPDATE flightops.flight f
+                           SET dep_time = f.dep_time + d.shift, arr_time = f.arr_time + d.shift,
+                               status = CASE WHEN f.status IN ('DEPARTED','ARRIVED','CANCELLED') THEN 'SCHEDULED' ELSE f.status END,
+                               updated_at = now()
+                          FROM d WHERE d.flight_id = f.flight_id"""))
+                .update();
+    }
 }

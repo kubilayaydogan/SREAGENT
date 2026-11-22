@@ -67,12 +67,17 @@ public class FlightOpsService {
             if (!from.equals(req.status()) && !TRANSITIONS.get(from).contains(req.status())) {
                 throw BusinessException.conflict("INVALID_TRANSITION", from + " → " + req.status() + " geçersiz");
             }
+            // ---- V5 zinciri: kapı/kalkış kararı yüklü bagaj sayısına bağlı → bagaj sayacı tutarlı okunur (FOR SHARE).
+            //      Bir bagaj kaydı transaction'ı sayacı tutuyorsa burada beklenir (uçuş satırı kilitliyken).
+            int bags = jdbc.sql(tag("SELECT bags FROM baggage.flight_baggage_stats WHERE flight_id = ? FOR SHARE"))
+                    .param(flightId).query(Integer.class).optional().orElse(0);
             jdbc.sql(tag("""
                             UPDATE flightops.flight SET status = ?, gate = ?, delay_min = ?, updated_at = now()
                              WHERE flight_id = ?"""))
                     .params(req.status(), gate, delay, flightId).update();
             jdbc.sql(tag("INSERT INTO flightops.ops_event(flight_id, event_type, detail) VALUES (?, 'STATUS', ?)"))
-                    .params(flightId, from + "->" + req.status() + " gate=" + gate + " delay=" + delay).update();
+                    .params(flightId, from + "->" + req.status() + " gate=" + gate + " delay=" + delay + " bags=" + bags)
+                    .update();
             return false;
         }));
         return new Result(repo.get(flightId).orElseThrow(), replay);

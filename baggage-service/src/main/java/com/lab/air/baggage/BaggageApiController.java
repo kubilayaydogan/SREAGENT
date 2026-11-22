@@ -75,8 +75,9 @@ public class BaggageApiController {
 
     @Op("bag_candidates")
     @GetMapping("/bags/candidates")
-    public List<String> candidates(@RequestParam(defaultValue = "50") int limit) {
-        return repo.candidates(clamp(limit, 1, 500));
+    public List<String> candidates(@RequestParam(defaultValue = "50") int limit,
+                                   @RequestParam(defaultValue = "false") boolean hot) {
+        return repo.candidates(clamp(limit, 1, 500), hot);
     }
 
     @Op("bag_history_report")

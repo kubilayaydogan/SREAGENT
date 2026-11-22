@@ -19,11 +19,13 @@ import java.util.Set;
 import static com.lab.air.common.SqlTag.tag;
 
 /**
- * Bagaj işlemleri — BAĞIMSIZ yol.
+ * Bagaj işlemleri.
  * <ul>
- *   <li>register: booking + checkin KİLİTSİZ okunur (FK yok, FOR SHARE yok); yalnız baggage şemasına yazılır.
- *       Rezervasyon başına en fazla 3 bagaj kuralı, yalnız bu rezervasyona özgü
- *       pg_advisory_xact_lock ile serileştirilir (ortak kaynak değil).</li>
+ *   <li>register: booking + checkin kilitsiz okunur (FK yok). Ardından V5 zinciri: uçuş bagaj sayacı
+ *       (baggage.flight_baggage_stats) güncellenip kilitlenir, check-in sayacı (checkin.flight_checkin_stats)
+ *       FOR SHARE okunur → bir check-in transaction'ı sayacı tutuyorsa bagaj kaydı bekler; bekleyen bagaj kaydı
+ *       da kendi sayacını tuttuğu için Flight Ops durum güncellemesini bekletir. Rezervasyon başına en fazla 3
+ *       bagaj kuralı pg_advisory_xact_lock ile serileştirilir.</li>
  *   <li>event: yalnız ilgili bag satırı FOR UPDATE.</li>
  * </ul>
  */
@@ -98,6 +100,26 @@ public class BaggageService {
         }
         if (!(Boolean) b[3]) {
             throw BusinessException.conflict("NOT_CHECKED_IN", "bagaj için önce check-in gerekli");
+        }
+        long flightId = (Long) b[1];
+        // ---- Uçuş bagaj sayacı (V5). Satır transaction sonuna kadar kilitli: Flight Ops durum güncellemesi bu
+        //      sayacı FOR SHARE okur → Baggage beklerse Flight Ops da zincirleme bekler.
+        long bags = jdbc.sql(tag("""
+                        INSERT INTO baggage.flight_baggage_stats AS s(flight_id, bags, total_weight_kg, last_bag_at)
+                        VALUES (?, 1, ?, now())
+                        ON CONFLICT (flight_id) DO UPDATE
+                           SET bags = s.bags + 1, total_weight_kg = s.total_weight_kg + EXCLUDED.total_weight_kg,
+                               last_bag_at = now(), updated_at = now()
+                        RETURNING bags"""))
+                .params(flightId, weightKg).query(Long.class).single();
+        // ---- Check-in sayacını tutarlı oku (FOR SHARE): bir check-in transaction'ı sayacı tutuyorsa burada beklenir.
+        //      Kural: uçuştaki bagaj sayısı check-in yapan yolcu × limit'i aşamaz.
+        int checkedIn = jdbc.sql(tag("""
+                        SELECT checked_in FROM checkin.flight_checkin_stats WHERE flight_id = ? FOR SHARE"""))
+                .param(flightId).query(Integer.class).optional().orElse(0);
+        if (bags > (long) checkedIn * MAX_BAGS) {
+            throw BusinessException.conflict("FLIGHT_BAG_LIMIT",
+                    "uçuştaki bagaj sayısı check-in yapan yolcu sayısıyla tutarsız (" + bags + " > " + checkedIn + "×" + MAX_BAGS + ")");
         }
         // Rezervasyona özgü, yalnız baggage içinde kullanılan kısa kilit (bagaj limiti yarışını önler)
         jdbc.sql(tag("SELECT pg_advisory_xact_lock(hashtext('baggage'), ?::int)"))

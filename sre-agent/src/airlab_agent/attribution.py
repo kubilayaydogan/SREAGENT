@@ -45,6 +45,49 @@ def load_increase(cur: dict, base: dict, cfg: dict) -> dict[str, float]:
     return out
 
 
+def lock_chain(sources: list[str], edges: list[dict]) -> list[dict]:
+    """Kilit bekleme zinciri: kök engelleyiciden başlayıp her seviyede bir önceki halkayı bekleyen uygulamalar.
+
+    Kenarlar "waiter_app, blocker_app'i bekliyor" çiftleridir; uygulamanın kendi içindeki beklemeler (aynı uygulama)
+    zinciri oluşturmaz. Dönen liste kök ilk olmak üzere halkalardır:
+      [{"app", "level", "waits_on": [{"app", "n"}], "n"}]  (level 0 = kök, waits_on boş)
+    Bir uygulama birden fazla seviyeye bağlanıyorsa en kısa yoldaki seviyesi kullanılır (BFS).
+    """
+    pairs: dict[tuple[str, str], float] = {}
+    for e in edges:
+        w, b = e.get("waiter_app"), e.get("blocker_app")
+        if w and b and w != b:
+            pairs[(w, b)] = pairs.get((w, b), 0) + (e.get("n") or 0)
+    roots = [a for a in sources if a and a != "?"]
+    if not roots or not pairs:
+        return []
+    level = {a: 0 for a in roots}
+    out = [{"app": a, "level": 0, "waits_on": [], "n": 0} for a in roots]
+    frontier = list(roots)
+    while frontier:
+        nxt: dict[str, list] = {}
+        for (w, b), n in pairs.items():
+            if b in frontier and w not in level:
+                nxt.setdefault(w, []).append({"app": b, "n": n})
+        if not nxt:
+            break
+        depth = level[frontier[0]] + 1
+        for w in sorted(nxt, key=lambda a: -sum(x["n"] for x in nxt[a])):
+            level[w] = depth
+            out.append({"app": w, "level": depth, "waits_on": sorted(nxt[w], key=lambda x: -x["n"]),
+                        "n": sum(x["n"] for x in nxt[w])})
+        frontier = [w for w in nxt]
+    return out
+
+
+def chain_text(chain: list[dict]) -> str:
+    """'reservation → checkin → baggage' (aynı seviyedekiler '+' ile)."""
+    levels: dict[int, list[str]] = {}
+    for h in chain:
+        levels.setdefault(h["level"], []).append(h["app"])
+    return " → ".join(" + ".join(levels[k]) for k in sorted(levels))
+
+
 def _conf(n_sources: int, impact_seen: bool) -> str:
     if n_sources >= 2 and impact_seen:
         return "high"
@@ -94,14 +137,21 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
         affected = [a for a in sorted(by_waiter, key=lambda a: by_waiter[a], reverse=True)
                     if a not in sources or a in imp]
         blocker_states = sorted({e.get("blocker_state") for e in edges if e.get("blocker_state")})
+        chain_hops = lock_chain(sources, edges)
+        depth = max((h["level"] for h in chain_hops), default=0)
         mechs.append({
-            "id": "row_lock", "title": "Satır kilidi beklemesi",
+            "id": "row_lock",
+            "title": "Zincirleme satır kilidi beklemesi" if depth >= 2 else "Satır kilidi beklemesi",
             "source_apps": sources, "affected_apps": affected,
             "mechanism": "Kaynak uygulamanın açık transaction'ı satır kilidini tutarken etkilenen uygulamanın "
                          "UPDATE/SELECT FOR UPDATE işlemleri Lock/transactionid beklemesine düşüyor; bekleyen istekler "
                          "Hikari bağlantısını tuttuğu için havuz doluluğu ve gecikme artıyor.",
             "signals": lock_srcs, "edges_total": edges_total, "edge_pairs": edges[:10],
             "blocker_states": blocker_states, "chain_blockers": chain,
+            "lock_chain": chain_hops, "chain_depth": depth, "chain_path": chain_text(chain_hops) if depth else None,
+            **({"cascade": "Bekleyen her halka kendi transaction'ında tuttuğu satır kilidini ve Hikari bağlantısını "
+                           "bırakamadığı için bir sonraki uygulamayı bekletiyor; etki kaynak uygulamadan zincir "
+                           "boyunca yayılıyor."} if depth >= 2 else {}),
             "confidence": _conf(len(lock_srcs), any(a in imp for a in affected)),
             "evidence_ids": ev("edges", "collector", "lock_waiters", "pg_lock_logs"),
         })

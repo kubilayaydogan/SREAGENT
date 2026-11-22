@@ -233,7 +233,7 @@ class ChatOrchestrator:
                     human = prompts.analysis_human(q, prompts.analysis_payload(report), _hist_block(mem))
                     fallback = deterministic_explanation(report)
                     if mem:
-                        fallback += "\n\n## Geçmişle karşılaştırma\n" + _det_history(_hist_block(mem) or {})
+                        fallback += "\n\n**Geçmişle karşılaştırma.**\n" + _det_history(_hist_block(mem) or {})
                 else:
                     fallback = ("Analiz tamamlanamadı: " + ((inv or {}).get("error") or "bilinmeyen hata") +
                                 ". Dynatrace verisi alınamadığı için sonuç üretilmedi; sahte veri gösterilmez.")

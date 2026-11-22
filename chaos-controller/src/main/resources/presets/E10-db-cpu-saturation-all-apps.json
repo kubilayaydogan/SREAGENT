@@ -1,0 +1,91 @@
+{
+  "name": "DB CPU doygunluğu: maliyetli raporlar → dört uygulama birden yavaşlar",
+  "scenario": "E10-db-cpu-saturation-all-apps",
+  "warmupSec": 30,
+  "baselineSec": 180,
+  "loadSec": 240,
+  "recoverySec": 180,
+  "background": {
+    "enabled": true,
+    "rpsPerApp": 2.0,
+    "apps": null
+  },
+  "targets": [
+    {
+      "app": "flightops",
+      "role": "stress",
+      "mode": "CONCURRENCY",
+      "rps": 0,
+      "concurrency": 8,
+      "rampUpSec": 20,
+      "maxInFlight": 64,
+      "timeoutMs": 30000,
+      "mix": {
+        "load_factor_report": 100
+      },
+      "dataSize": 40,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "LOAD"
+    },
+    {
+      "app": "reservation",
+      "role": "stress",
+      "mode": "CONCURRENCY",
+      "rps": 0,
+      "concurrency": 6,
+      "rampUpSec": 20,
+      "maxInFlight": 64,
+      "timeoutMs": 30000,
+      "mix": {
+        "route_demand_report": 100
+      },
+      "dataSize": 40,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "LOAD"
+    },
+    {
+      "app": "checkin",
+      "role": "probe",
+      "mode": "RPS",
+      "rps": 15,
+      "concurrency": 0,
+      "rampUpSec": 0,
+      "maxInFlight": 64,
+      "timeoutMs": 10000,
+      "mix": {
+        "checkin": 40,
+        "lookup_booking": 40,
+        "assign_seat": 20
+      },
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "ALL"
+    },
+    {
+      "app": "baggage",
+      "role": "probe",
+      "mode": "RPS",
+      "rps": 15,
+      "concurrency": 0,
+      "rampUpSec": 0,
+      "maxInFlight": 64,
+      "timeoutMs": 10000,
+      "mix": {
+        "register_bag": 40,
+        "bag_status": 40,
+        "bag_event": 20
+      },
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": false,
+      "holdMs": 0,
+      "activePhases": "ALL"
+    }
+  ]
+}

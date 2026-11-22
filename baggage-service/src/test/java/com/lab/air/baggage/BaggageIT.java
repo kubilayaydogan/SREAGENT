@@ -15,8 +15,10 @@ import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -102,6 +104,31 @@ class BaggageIT {
             assertTrue(ms < 2000, "bagaj kaydı envanter kilidinde beklememeli, süre=" + ms);
             holder.rollback();
         }
+    }
+
+    /** V5 zinciri: check-in sayacı başka bir transaction'da kilitliyken bagaj kaydı bekler, kilit bırakılınca tamamlanır. */
+    @Test
+    void registerWaitsForHeldCheckinCounterThenCompletes() throws Exception {
+        String pnr = candidate();
+        long fid = scalar("SELECT flight_id FROM reservation.booking WHERE pnr='" + pnr + "'");
+        try (Connection setup = LabPostgres.owner(); var st = setup.createStatement()) {   // satır commit'li var olmalı
+            st.executeUpdate("INSERT INTO checkin.flight_checkin_stats(flight_id) VALUES (" + fid + ") ON CONFLICT DO NOTHING");
+        }
+        try (Connection holder = LabPostgres.owner()) {
+            holder.setAutoCommit(false);
+            try (var st = holder.createStatement()) {   // check-in transaction'ını taklit: sayaç satırını kilitle
+                st.executeUpdate("UPDATE checkin.flight_checkin_stats SET updated_at = now() WHERE flight_id = " + fid);
+            }
+            var pending = HTTP.sendAsync(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/bags"))
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"pnr\":\"" + pnr + "\",\"weightKg\":12}"))
+                    .header("Content-Type", "application/json").build(), HttpResponse.BodyHandlers.ofString());
+            Thread.sleep(1500);
+            assertFalse(pending.isDone(), "bagaj kaydı check-in sayacı kilidini beklemeliydi");
+            holder.rollback();
+            var r = pending.get(10, TimeUnit.SECONDS);
+            assertTrue(r.statusCode() == 201 || r.statusCode() == 409, r.body());
+        }
+        assertEquals(0, scalar("SELECT coalesce(sum(violations),0) FROM lab.integrity_check"));
     }
 
     @Test

@@ -31,6 +31,27 @@ Rol ayarları: `statement_timeout=15s`, `lock_timeout=8s`, `idle_in_transaction_
 | Baggage.bag_event | SELECT bag FOR UPDATE → UPDATE bag → INSERT bag_event | bag satırı | |
 | Baggage.bag_history | bag_event tam tarama (flight_id indeksi yok) | yok | I/O |
 
+## Zincirleme kilit (V5__flight_counters_chain.sql)
+
+Uçuş başına iki sayaç tablosu, etkinin PostgreSQL üzerinden servisten servise yayılmasını sağlar:
+
+| Servis | Transaction içindeki kilit sırası |
+|---|---|
+| Check-in | `checkin.flight_checkin_stats` (upsert) → `flightops.flight_inventory` (UPDATE) |
+| Baggage | `baggage.flight_baggage_stats` (upsert) → `checkin.flight_checkin_stats` (`FOR SHARE`, bagaj ≤ yolcu × limit) |
+| Flight Ops (durum) | `flightops.flight` (`FOR NO KEY UPDATE`) → `baggage.flight_baggage_stats` (`FOR SHARE`) |
+
+Reservation envanter satırını tuttuğunda Check-in bekler; bekleyen Check-in sayaç satırını tuttuğu için Baggage,
+bekleyen Baggage da kendi sayacını tuttuğu için Flight Ops bekler (**reservation → checkin → baggage → flightops**).
+Bekleyen istekler Hikari bağlantısını da tuttuğundan her servisin diğer işlemleri yavaşlar. Kilit grafiği döngüsüzdür
+(`inventory ← checkin_stats ← baggage_stats ← flight`), deadlock oluşmaz; her halkadaki bekleme `lock_timeout` (8 sn)
+ile sınırlıdır. Deney ön ayarı: `E9-chain-lock-cascade`. Sayaçların gerçek kayıtlarla tutarlılığı
+`lab.integrity_check` (`checkin_stats_mismatch`, `baggage_stats_mismatch`) ile denetlenir; `lab.seed` sayaçları
+`lab.rebuild_flight_counters()` ile yeniden hesaplar.
+
+Sıcak uçuşlar: chaos-controller her deney başında `POST /lab/flights/roll-hot` çağırır; kalkışı 2 günden yakın
+sıcak uçuşlar tam gün adımlarıyla ileri alınır (aksi halde aday havuzları kalkış saatinden sonra boşalır).
+
 ## Veri bütünlüğü kuralları
 
 | Kural | Mekanizma | Test |

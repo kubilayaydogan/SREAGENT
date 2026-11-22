@@ -1,0 +1,93 @@
+{
+  "name": "Zincirleme kilit: Reservation → Check-in → Baggage → Flight Ops (PostgreSQL)",
+  "scenario": "E9-chain-lock-cascade",
+  "warmupSec": 30,
+  "baselineSec": 180,
+  "loadSec": 240,
+  "recoverySec": 180,
+  "background": {
+    "enabled": true,
+    "rpsPerApp": 2.0,
+    "apps": null
+  },
+  "targets": [
+    {
+      "app": "reservation",
+      "role": "stress",
+      "mode": "CONCURRENCY",
+      "rps": 0,
+      "concurrency": 6,
+      "rampUpSec": 5,
+      "maxInFlight": 64,
+      "timeoutMs": 15000,
+      "mix": {
+        "lab_hold_booking": 100
+      },
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": true,
+      "holdMs": 3000,
+      "activePhases": "LOAD"
+    },
+    {
+      "app": "checkin",
+      "role": "probe",
+      "mode": "RPS",
+      "rps": 14,
+      "concurrency": 0,
+      "rampUpSec": 0,
+      "maxInFlight": 64,
+      "timeoutMs": 15000,
+      "mix": {
+        "checkin": 30,
+        "lookup_booking": 50,
+        "seat_map": 20
+      },
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": true,
+      "holdMs": 0,
+      "activePhases": "ALL"
+    },
+    {
+      "app": "baggage",
+      "role": "probe",
+      "mode": "RPS",
+      "rps": 13,
+      "concurrency": 0,
+      "rampUpSec": 0,
+      "maxInFlight": 64,
+      "timeoutMs": 15000,
+      "mix": {
+        "register_bag": 25,
+        "bag_status": 55,
+        "flight_bags": 20
+      },
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": true,
+      "holdMs": 0,
+      "activePhases": "ALL"
+    },
+    {
+      "app": "flightops",
+      "role": "probe",
+      "mode": "RPS",
+      "rps": 12,
+      "concurrency": 0,
+      "rampUpSec": 0,
+      "maxInFlight": 64,
+      "timeoutMs": 15000,
+      "mix": {
+        "update_status": 20,
+        "get_flight": 50,
+        "list_flights": 30
+      },
+      "dataSize": 1,
+      "readWriteRatio": null,
+      "hotRow": true,
+      "holdMs": 0,
+      "activePhases": "ALL"
+    }
+  ]
+}

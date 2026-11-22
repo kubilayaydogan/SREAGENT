@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -37,6 +38,13 @@ public class FlightOpsLabController {
                 ? repo.get(req.flightId()).orElseThrow(() -> BusinessException.notFound("FLIGHT_NOT_FOUND", "uçuş yok"))
                 : randomHot();
         return service.updateCapacity(flight.flightId(), flight.capacity(), req.holdMs());
+    }
+
+    /** Sıcak uçuşları ileri tarihe kaydırır (chaos-controller her deney başında çağırır; idempotent). */
+    @Op("lab_roll_hot_flights")
+    @PostMapping("/flights/roll-hot")
+    public Map<String, Integer> rollHot() {
+        return Map.of("rolled", repo.rollHotFlightsForward());
     }
 
     private Model.Flight randomHot() {

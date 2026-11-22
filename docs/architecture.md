@@ -49,7 +49,7 @@
 
 | Katman | Sınır |
 |---|---|
-| chaos-controller | toplam RPS ≤ 250, hedef RPS ≤ 150, concurrency ≤ 64/hedef, 128 toplam, maxInFlight ≤ 256, süre ≤ 3600 sn, holdMs ≤ 5000, timeout ≤ 30 sn; tek aktif deney; kuyruk yok |
+| chaos-controller | toplam RPS ≤ 600 (deney; sürekli trafik ayrıca ≤ 20 RPS/uygulama), hedef RPS ≤ 150, concurrency ≤ 64/hedef, 128 toplam, maxInFlight ≤ 256, süre ≤ 3600 sn, holdMs ≤ 5000, timeout ≤ 30 sn; tek aktif deney; kuyruk yok |
 | uygulama | `/lab/**` yalnız `lab` profili + `X-Lab-Token` (≥16 karakter, sabit zamanlı karşılaştırma) + CIDR allowlist; hold ≤ `LAB_MAX_HOLD_MS`; eşzamanlı hold ≤ 40; Tomcat 50 thread; tx timeout 10 sn; keyfi SQL yok |
 | PostgreSQL | rol bazlı `statement_timeout 15s`, `lock_timeout 8s`, `idle_in_transaction_session_timeout 30s`, `CONNECTION LIMIT 40`; global `client_connection_check_interval 2s`; reserved slotlar izleme rolleri için |
 | durdurma | stop-all → üretim durur → uçuştaki istekler kendi timeout'una kadar biter → her servise `/lab/cleanup` (kendi rolünün `lab:` işaretli backend'lerini `pg_cancel_backend`, pressure havuzunu kapat) |

@@ -15,8 +15,9 @@ EK KURALLAR:
 """
 
 ANALYSIS_SYSTEM = SYSTEM_EXPLAIN + COMMON + """
-- <history_data> verildiyse sona "Geçmişle karşılaştırma" başlığı ekle: benzer araştırma/incident/RCA ve kayıtlı
-  runbook/bilinen sorun varsa kimlikleriyle listele; yoksa "benzer kayıt bulunamadı" de.
+- <history_data> verildiyse sona **Geçmişle karşılaştırma.** etiketli bir paragraf ekle: benzer
+  araştırma/incident/RCA ve kayıtlı runbook/bilinen sorun varsa kimlikleriyle cümle içinde an; yoksa "benzer
+  kayıt bulunamadı" de.
 - Runbook öneriyorsan riskini ve onay gerekip gerekmediğini belirt. Hiçbir eylemi kendin uygulayamazsın (salt okunur).
 """
 

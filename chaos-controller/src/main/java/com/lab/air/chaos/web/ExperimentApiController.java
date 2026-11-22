@@ -1,6 +1,7 @@
 package com.lab.air.chaos.web;
 
 import com.lab.air.chaos.ChaosProperties;
+import com.lab.air.chaos.engine.ContinuousTraffic;
 import com.lab.air.chaos.engine.ExperimentService;
 import com.lab.air.chaos.engine.ExperimentService.StartResult;
 import com.lab.air.chaos.engine.ExperimentSpec;
@@ -32,11 +33,14 @@ public class ExperimentApiController {
 
     private final ExperimentService service;
     private final ChaosProperties props;
+    private final ContinuousTraffic continuous;
     private final Map<String, String> presets = new TreeMap<>();
 
-    public ExperimentApiController(ExperimentService service, ChaosProperties props) throws IOException {
+    public ExperimentApiController(ExperimentService service, ChaosProperties props, ContinuousTraffic continuous)
+            throws IOException {
         this.service = service;
         this.props = props;
+        this.continuous = continuous;
         for (Resource r : new PathMatchingResourcePatternResolver().getResources("classpath:presets/*.json")) {
             String n = r.getFilename();
             presets.put(n.substring(0, n.length() - 5), r.getContentAsString(StandardCharsets.UTF_8));
@@ -87,6 +91,20 @@ public class ExperimentApiController {
         return Map.of("result", service.stopAll("stop-all"));
     }
 
+    /** Sürekli "normal gün" trafiği (deneylerden bağımsız). */
+    @GetMapping("/continuous")
+    public Map<String, Object> continuousStatus() {
+        return continuous.status();
+    }
+
+    /** Gövde: {"enabled": true|false, "rpsPerApp": 0..20} — alanlar isteğe bağlı. */
+    @PostMapping("/continuous")
+    public Map<String, Object> continuousConfigure(@RequestBody Map<String, Object> body) {
+        Boolean en = body.get("enabled") instanceof Boolean b ? b : null;
+        Double rps = body.get("rpsPerApp") instanceof Number n ? n.doubleValue() : null;
+        return continuous.configure(en, rps);
+    }
+
     @GetMapping("/status")
     public Map<String, Object> status() {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -100,6 +118,8 @@ public class ExperimentApiController {
             m.put("live", run.live());
             m.put("cleanup", rec.cleanup());
         }, () -> m.put("experimentId", null));
+        m.put("continuous", Map.of("enabled", continuous.status().get("enabled"),
+                "rpsPerApp", continuous.status().get("rpsPerApp")));
         return m;
     }
 

@@ -86,6 +86,9 @@ public final class Catalog {
                         String pnr = field(c, body, "/checkin/pnr");
                         c.pools().checkedIn.offer(pnr);
                         c.pools().bagCandidates.offer(pnr);
+                        if (c.params().hotRow()) {
+                            c.pools().hotBagCandidates.offer(pnr);   // zincir: bu yolcunun bagajı sıcak uçuşa yazılır
+                        }
                     }
                 }));
         add(new OpDef("checkin", "assign_seat", Kind.WRITE, "Koltuk atama (yalnız checkin şeması; envantere dokunmaz)",
@@ -114,9 +117,10 @@ public final class Catalog {
                 c -> HttpCall.get("/api/flights?hoursAhead=" + Math.min(1440, 24 * c.params().dataSize()) + "&limit=50"), null));
         add(new OpDef("flightops", "get_flight", Kind.READ, "Uçuş ayrıntısı + operasyon olayları",
                 c -> id(c.pools().opsFlights.peek(), "/api/flights/%d"), null));
-        add(new OpDef("flightops", "update_status", Kind.WRITE, "Uçuş gecikme/kapı güncelleme (flight satırı)",
+        add(new OpDef("flightops", "update_status", Kind.WRITE,
+                "Uçuş gecikme/kapı güncelleme: flight satırı + bagaj sayacı FOR SHARE (hotRow → sıcak uçuş, zincirin 4. halkası)",
                 c -> {
-                    Long id = c.pools().opsFlights.peek();
+                    Long id = c.params().hotRow() ? c.pools().hotFlights.peek() : c.pools().opsFlights.peek();
                     var r = ThreadLocalRandom.current();
                     return id == null ? null : HttpCall.post("/api/flights/" + id + "/status",
                             "{\"status\":\"DELAYED\",\"gate\":\"" + "ABCDEF".charAt(r.nextInt(6)) + r.nextInt(1, 40)
@@ -151,9 +155,10 @@ public final class Catalog {
                 c -> pnr(c.pools().bagTags.peek(), "/api/bags/%s"), null));
         add(new OpDef("baggage", "flight_bags", Kind.READ, "Uçuşa ait bagajlar (indeksli)",
                 c -> id(c.pools().resFlights.peek(), "/api/flights/%d/bags?limit=100"), null));
-        add(new OpDef("baggage", "register_bag", Kind.WRITE, "Bagaj kaydı (yalnız baggage şemasına yazar)",
+        add(new OpDef("baggage", "register_bag", Kind.WRITE,
+                "Bagaj kaydı: uçuş bagaj sayacı + check-in sayacı FOR SHARE (hotRow → sıcak uçuş, zincirin 3. halkası)",
                 c -> {
-                    String p = c.pools().bagCandidates.peek();
+                    String p = c.params().hotRow() ? c.pools().hotBagCandidates.peek() : c.pools().bagCandidates.peek();
                     return p == null ? null : HttpCall.post("/api/bags",
                             "{\"pnr\":\"" + p + "\",\"weightKg\":" + ThreadLocalRandom.current().nextInt(5, 32) + "}");
                 },
@@ -164,7 +169,7 @@ public final class Catalog {
                         c.pools().bagProgress.offer(new String[]{tag, "0"});
                     } else if (status == 409 && body != null && body.contains("BAG_LIMIT")) {
                         String pnr = call.jsonBody().replaceAll(".*\"pnr\":\"([A-Z0-9]+)\".*", "$1");
-                        c.pools().bagCandidates.take();   // havuzu yavaşça tazele
+                        (c.params().hotRow() ? c.pools().hotBagCandidates : c.pools().bagCandidates).take();   // havuzu yavaşça tazele
                         c.pools().pnrs.offer(pnr);
                     }
                 }));

@@ -32,6 +32,7 @@ public final class DataPools {
     public final BoundedPool<String> hotCheckinCandidates = new BoundedPool<>(5000);
     public final BoundedPool<String> checkedIn = new BoundedPool<>(2000);
     public final BoundedPool<String> bagCandidates = new BoundedPool<>(2000);
+    public final BoundedPool<String> hotBagCandidates = new BoundedPool<>(2000);   // sıcak uçuşta check-in yapmış PNR
     public final BoundedPool<String> bagTags = new BoundedPool<>(1000);
     /** [etiket, sıradaki olay] — yalnız bu üreticinin kaydettiği bagajlar. */
     public final BoundedPool<String[]> bagProgress = new BoundedPool<>(2000);
@@ -58,13 +59,17 @@ public final class DataPools {
         replace(opsFlights, "flightops", "/api/flights/sample?limit=200", JsonNode::asLong);
         replace(bagTags, "baggage", "/api/bags/sample?limit=300", JsonNode::asString);
         add(bagCandidates, "baggage", "/api/bags/candidates?limit=300", JsonNode::asString);
+        if (hotBagCandidates.size() < 300) {
+            add(hotBagCandidates, "baggage", "/api/bags/candidates?hot=true&limit=300", JsonNode::asString);
+        }
     }
 
     public String summary() {
         return "resFlights=" + resFlights.size() + " hotFlights=" + hotFlights.size() + " opsFlights=" + opsFlights.size()
                 + " pnrs=" + pnrs.size() + " checkinCandidates=" + checkinCandidates.size()
                 + " hotCheckinCandidates=" + hotCheckinCandidates.size() + " checkedIn=" + checkedIn.size()
-                + " bagCandidates=" + bagCandidates.size() + " bagTags=" + bagTags.size()
+                + " bagCandidates=" + bagCandidates.size() + " hotBagCandidates=" + hotBagCandidates.size()
+                + " bagTags=" + bagTags.size()
                 + " bagProgress=" + bagProgress.size() + " cancellable=" + cancellable.size();
     }
 

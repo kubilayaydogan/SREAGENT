@@ -147,6 +147,9 @@ public final class ExperimentRun {
 
     private void runClock() {
         try {
+            // Platform thread'de: ExperimentService.start synchronized; orada bloklayan HTTP çağrısı sanal thread'i
+            // taşıyıcıya sabitler ve 1 CPU'lu container'da HttpClient yanıtı işlenemez (tüm istekler kilitlenir).
+            rollHotFlights();
             pools.refresh();
             log.info("deney {} başladı; veri havuzları: {}", id, pools.summary());
             event("start", planSummary());
@@ -273,6 +276,23 @@ public final class ExperimentRun {
         event("end", "Deney bitti: " + state + (stopReason == null ? "" : " (" + stopReason + ")"));
         persister.accept(record());
         log.info("deney {} bitti: {} {}", id, state, stopReason == null ? "" : stopReason);
+    }
+
+    /** Sıcak uçuşların kalkışı geçmişte kalmasın (aksi halde kilit deneylerinin adayları tükenir). */
+    private void rollHotFlights() {
+        String base = baseUrls.get("flightops");
+        if (labToken == null || labToken.isBlank() || base == null) {
+            return;
+        }
+        try {
+            var res = http.send(HttpRequest.newBuilder(URI.create(base + "/lab/flights/roll-hot"))
+                    .timeout(Duration.ofSeconds(5)).header("X-Lab-Token", labToken)
+                    .header("X-Experiment-Id", id).POST(HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            event("setup", "sıcak uçuş tarih kontrolü: " + res.statusCode() + " " + res.body());
+        } catch (Exception e) {
+            event("setup", "sıcak uçuş tarih kontrolü başarısız: " + e);
+        }
     }
 
     /** Sunucu tarafı temizliği: her uygulamanın kendi lab oturumlarını iptal etmesi. */

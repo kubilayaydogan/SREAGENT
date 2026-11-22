@@ -28,6 +28,12 @@
       <button class="danger" onclick="stopAll()">STOP-ALL (tüm yükü durdur + cleanup)</button>
     </div>
     <p class="muted" id="phases"></p>
+    <div class="row">
+      <span>Sürekli trafik (deney dışında da): <b id="contState">-</b></span>
+      <label>RPS / uygulama <input id="contRps" type="number" min="0" max="20" step="1" style="width:5em"></label>
+      <button onclick="setContinuous(true)">Aç / uygula</button>
+      <button onclick="setContinuous(false)">Kapat</button>
+    </div>
     <table id="live">
       <thead><tr><th>Kaynak</th><th>Uygulama</th><th>Mod</th><th>Aktif</th><th>Uçuşta</th>
         <th>Hedeflenen</th><th>Gönderilen</th><th>Tamamlanan</th><th>Hata/timeout</th><th>Gönderilemeyen (dropped)</th>
@@ -188,6 +194,16 @@ async function stopAll() {
   document.getElementById('result').textContent = 'stop-all: ' + (await r.json()).result;
 }
 
+async function setContinuous(enabled) {
+  const rps = Number(document.getElementById('contRps').value);
+  const body = { enabled };
+  if (enabled && !Number.isNaN(rps)) body.rpsPerApp = rps;
+  const r = await fetch('/api/continuous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const c = await r.json();
+  document.getElementById('result').textContent = 'sürekli trafik: ' + (c.enabled ? 'açık, ' + c.rpsPerApp + ' RPS/uygulama' : 'kapalı');
+  poll();
+}
+
 async function poll() {
   try {
     const s = await (await fetch('/api/status')).json();
@@ -196,6 +212,11 @@ async function poll() {
     if (s.experimentId) { wl.href = '/experiments/' + s.experimentId + '/watch'; wl.style.display = ''; } else { wl.style.display = 'none'; }
     document.getElementById('phase').textContent = s.phase || '-';
     document.getElementById('state').textContent = s.state || '-';
+    if (s.continuous) {
+      document.getElementById('contState').textContent = s.continuous.enabled ? 'açık (' + s.continuous.rpsPerApp + ' RPS/uygulama)' : 'kapalı';
+      const inp = document.getElementById('contRps');
+      if (document.activeElement !== inp) inp.value = s.continuous.rpsPerApp;
+    }
     document.getElementById('phases').textContent = s.phases ? Object.entries(s.phases).map(([k, v]) => k + ': ' + v[0] + ' → ' + (v[1] || '…')).join('   ') : '';
     const tb = document.querySelector('#live tbody'); tb.innerHTML = '';
     for (const r of (s.live || [])) {

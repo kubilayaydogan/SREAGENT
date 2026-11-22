@@ -39,7 +39,7 @@ public record ChaosProperties(Map<String, String> apps, String labToken, String 
                          int maxTotalConcurrency, int maxInFlightPerTarget, int maxDurationSec, long maxHoldMs,
                          int maxTimeoutMs) {
         public Limits {
-            maxTotalRps = maxTotalRps <= 0 ? 250 : maxTotalRps;
+            maxTotalRps = maxTotalRps <= 0 ? 600 : maxTotalRps;
             maxRpsPerTarget = maxRpsPerTarget <= 0 ? 150 : maxRpsPerTarget;
             maxConcurrencyPerTarget = maxConcurrencyPerTarget <= 0 ? 64 : maxConcurrencyPerTarget;
             maxTotalConcurrency = maxTotalConcurrency <= 0 ? 128 : maxTotalConcurrency;

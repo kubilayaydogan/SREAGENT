@@ -22,6 +22,7 @@ import static com.lab.air.common.SqlTag.tag;
  * <ol>
  *   <li>SELECT booking ... FOR SHARE OF b — eşzamanlı iptal (FOR UPDATE) ile serileşir</li>
  *   <li>INSERT checkin ON CONFLICT (booking_id) DO NOTHING — tekrar gönderim güvenli</li>
+ *   <li>UPSERT checkin.flight_checkin_stats (uçuş sayacı) — satır kilidi transaction sonuna kadar tutulur (V5 zinciri)</li>
  *   <li><b>UPDATE flightops.flight_inventory SET checked_in = checked_in + 1</b> — ORTAK SATIR;
  *       Reservation create/cancel veya FlightOps kapasite güncellemesi aynı satırı tutuyorsa burada bekler
  *       (wait_event_type=Lock, wait_event=transactionid).</li>
@@ -79,6 +80,14 @@ public class CheckinService {
             if (!inserted) {
                 return true;
             }
+            // ---- Uçuş check-in sayacı (V5). Bu satır transaction sonuna kadar kilitli kalır: aşağıdaki envanter
+            //      güncellemesi beklerse, sayacı FOR SHARE okuyan Baggage da zincirleme bekler.
+            jdbc.sql(tag("""
+                            INSERT INTO checkin.flight_checkin_stats AS s(flight_id, checked_in, last_checkin_at)
+                            VALUES (?, 1, now())
+                            ON CONFLICT (flight_id) DO UPDATE
+                               SET checked_in = s.checked_in + 1, last_checkin_at = now(), updated_at = now()"""))
+                    .param(flightId).update();
             // ---- ORTAK SATIR KİLİDİ: Reservation/FlightOps tutuyorsa burada beklenir ----
             jdbc.sql(tag("""
                             UPDATE flightops.flight_inventory
