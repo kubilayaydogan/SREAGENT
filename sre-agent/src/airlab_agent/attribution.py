@@ -80,6 +80,28 @@ def lock_chain(sources: list[str], edges: list[dict]) -> list[dict]:
     return out
 
 
+def root_sources(rank: dict[str, float], edges: list[dict], max_ratio: float = 0.5) -> list[str]:
+    """Kök aday listesinden, kendisi başka uygulamaları yoğun bekleyen ara halkaları ayıklar.
+
+    Ara halkanın tuttuğu oturum örnekleme anında Lock dışında (ör. ClientRead, CPU) yakalanabilir; bu yüzden
+    "blocker_wait != Lock" tek başına kök kanıtı değildir. Bir aday, uygulamalar arası beklediği sayı (W)
+    kendisinin beklettiği sayının (B) max_ratio katından azsa kök kalır. Hiçbiri kalmazsa W/B oranı en düşük olan
+    seçilir. Sıralama rank (kilit dışı engelleme sayısı) azalan.
+    """
+    waits: dict[str, float] = {}
+    waited: dict[str, float] = {}
+    for e in edges:
+        w, b, n = e.get("waiter_app"), e.get("blocker_app"), e.get("n") or 0
+        if w and b and w != b:
+            waits[w] = waits.get(w, 0) + n
+            waited[b] = waited.get(b, 0) + n
+    ordered = sorted(rank, key=rank.get, reverse=True)
+    keep = [a for a in ordered if waits.get(a, 0) < max_ratio * waited.get(a, 0) or not waits.get(a)]
+    if keep:
+        return keep
+    return [min(ordered, key=lambda a: waits.get(a, 0) / max(waited.get(a, 0), 1))] if ordered else []
+
+
 def chain_text(chain: list[dict]) -> str:
     """'reservation → checkin → baggage' (aynı seviyedekiler '+' ile)."""
     levels: dict[int, list[str]] = {}
@@ -131,7 +153,7 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
             if e.get("blocker_wait") != "Lock":
                 root[e.get("blocker_app") or "?"] = root.get(e.get("blocker_app") or "?", 0) + e["n"]
         rank = root or by_blocker
-        sources = sorted(rank, key=rank.get, reverse=True)
+        sources = root_sources(rank, edges)
         chain = sorted(set(by_blocker) - set(sources))
         # Etkilenen: bekleyen uygulamalar; kaynak uygulama yalnız kendisinde de etki ölçüldüyse etkilenen sayılır
         affected = [a for a in sorted(by_waiter, key=lambda a: by_waiter[a], reverse=True)

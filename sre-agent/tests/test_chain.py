@@ -59,3 +59,27 @@ def test_deterministic_report_is_paragraphs_with_chain():
     assert "20:45 UTC (23:45 TSİ)" in paras[0] and "78.0/100" in paras[0]
     assert "baggage-service, checkin-service uygulamasını 80 kez bekledi" in paras[2]
     assert "3 halka" in paras[2]
+
+
+def test_intermediate_link_with_non_lock_blocker_is_not_root():
+    """E9 ikinci koşu: baggage'ın tuttuğu oturumlar bazen Lock dışı yakalanır ve check-in de baggage'ı
+    (FOR SHARE yüzünden) az da olsa bekler; yine de zincir reservation'dan başlamalı."""
+    from airlab_agent.attribution import root_sources
+    edges = [
+        E("checkin-service", "reservation-service", 127, bw="Timeout"),
+        E("checkin-service", "baggage-service", 4, bw="ClientRead"),
+        E("baggage-service", "checkin-service", 112),
+        E("flightops-service", "baggage-service", 104),
+        E("flightops-service", "baggage-service", 4, bw="ClientRead"),
+        E("baggage-service", "baggage-service", 267, bw="ClientRead"),
+    ]
+    rank = {"reservation-service": 127, "baggage-service": 275}
+    assert root_sources(rank, edges) == ["reservation-service"]
+    assert chain_text(lock_chain(["reservation-service"], edges)) == \
+        "reservation-service → checkin-service → baggage-service → flightops-service"
+
+
+def test_root_fallback_when_all_candidates_wait():
+    from airlab_agent.attribution import root_sources
+    edges = [E("a", "b", 10, "Idle"), E("b", "a", 8, "Idle")]
+    assert root_sources({"a": 8, "b": 10}, edges) == ["b"]
