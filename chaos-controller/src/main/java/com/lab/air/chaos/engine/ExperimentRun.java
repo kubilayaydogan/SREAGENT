@@ -154,11 +154,14 @@ public final class ExperimentRun {
             log.info("deney {} başladı; veri havuzları: {}", id, pools.summary());
             event("start", planSummary());
             event("data", "Veri havuzları yenilendi: " + pools.summary());
+            // Faz sınırları MONOTON saatle (nanoTime) hesaplanır: NTP/chrony duvar saatini ileri-geri adımlarsa
+            // (ör. Hyper-V VM'de 214 sn'lik adım) fazlar kısalmaz/uzamaz. Kayıtlardaki zaman damgaları duvar saatidir.
             Instant t0 = Instant.now();
-            Instant warmEnd = t0.plusSeconds(spec.warmupSec());
-            Instant baseEnd = warmEnd.plusSeconds(spec.baselineSec());
-            Instant loadEnd = baseEnd.plusSeconds(spec.loadSec());
-            Instant end = loadEnd.plusSeconds(spec.recoverySec());
+            long n0 = System.nanoTime();
+            long warmEnd = spec.warmupSec() * 1_000_000_000L;
+            long baseEnd = warmEnd + spec.baselineSec() * 1_000_000_000L;
+            long loadEnd = baseEnd + spec.loadSec() * 1_000_000_000L;
+            long end = loadEnd + spec.recoverySec() * 1_000_000_000L;
             enter(Phase.WARMUP, t0);
             background.forEach(Generator::start);
             if (!background.isEmpty()) {
@@ -171,13 +174,27 @@ public final class ExperimentRun {
             }
             long lastSample = 0;
             long lastTimeline = 0;
-            prevSampleMs = System.currentTimeMillis();
-            long lastPersist = System.currentTimeMillis();
-            long lastRefresh = System.currentTimeMillis();
+            prevSampleMs = monoMs();
+            long lastPersist = monoMs();
+            long lastRefresh = monoMs();
+            long prevWall = System.currentTimeMillis();
+            long prevMono = System.nanoTime();
             while (!stopRequested) {
+                long el = System.nanoTime() - n0;
+                long wallNow = System.currentTimeMillis();
+                long monoNow = System.nanoTime();
+                long skewMs = (wallNow - prevWall) - (monoNow - prevMono) / 1_000_000L;
+                if (Math.abs(skewMs) >= 2000) {
+                    event("clock", String.format("Sistem saati %+.1f sn adımlandı (NTP/chrony). Fazlar monoton saatle "
+                            + "sürdürülüyor; bu andan sonraki duvar saati zaman damgaları ve Dynatrace pencereleri kaymış olabilir.",
+                            skewMs / 1000.0));
+                    log.warn("deney {}: sistem saati {} ms adımlandı", id, skewMs);
+                }
+                prevWall = wallNow;
+                prevMono = monoNow;
                 Instant now = Instant.now();
-                Phase want = now.isBefore(warmEnd) ? Phase.WARMUP : now.isBefore(baseEnd) ? Phase.BASELINE
-                        : now.isBefore(loadEnd) ? Phase.LOAD : now.isBefore(end) ? Phase.RECOVERY : Phase.DONE;
+                Phase want = el < warmEnd ? Phase.WARMUP : el < baseEnd ? Phase.BASELINE
+                        : el < loadEnd ? Phase.LOAD : el < end ? Phase.RECOVERY : Phase.DONE;
                 if (want != phase) {
                     Phase old = phase;
                     enter(want, now);
@@ -197,7 +214,7 @@ public final class ExperimentRun {
                         break;
                     }
                 }
-                long ms = System.currentTimeMillis();
+                long ms = monoMs();   // aralık zamanlayıcıları monoton (saat adımından etkilenmez)
                 if (ms - lastSample >= 1000) {
                     sampleProducer();
                     lastSample = ms;
@@ -265,7 +282,7 @@ public final class ExperimentRun {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        sampleTimeline(System.currentTimeMillis());
+        sampleTimeline(monoMs());
         flushErrorEvents(true);
         callCleanup();
         cleanup.forEach((app, res) -> event("cleanup", "Cleanup " + app + ": " + res));
@@ -313,6 +330,10 @@ public final class ExperimentRun {
                 cleanup.put(app, "HATA " + e);
             }
         }
+    }
+
+    private static long monoMs() {
+        return System.nanoTime() / 1_000_000L;
     }
 
     private void sampleProducer() {
@@ -519,7 +540,7 @@ public final class ExperimentRun {
             pe[1] += dd;
         }
         Map<String, Object> point = new LinkedHashMap<>();
-        point.put("t", Instant.ofEpochMilli(nowMs).toString());
+        point.put("t", Instant.now().toString());   // nowMs monotondur; kayıt zamanı duvar saati
         point.put("phase", phase.name());
         point.put("series", series);
         synchronized (this) {
@@ -533,7 +554,7 @@ public final class ExperimentRun {
 
     /** Hata/düşen istekleri olay günlüğüne özetler (anahtar başına en fazla 30 sn'de bir). */
     private void flushErrorEvents(boolean force) {
-        long now = System.currentTimeMillis();
+        long now = monoMs();
         pendingErr.forEach((key, pe) -> {
             if ((pe[0] > 0 || pe[1] > 0) && (force || now - pe[2] >= ERROR_EVENT_EVERY_MS)) {
                 List<String> parts = new ArrayList<>();
