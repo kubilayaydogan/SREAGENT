@@ -10,7 +10,7 @@
     </parent>
     <artifactId>chaos-controller</artifactId>
     <name>chaos-controller</name>
-    <description>Yalnız HTTP ile yük/kaos üreten deney yöneticisi (DB bağlantısı YOK)</description>
+    <description>HTTP ile yük/kaos üreten deney yöneticisi; DB'ye yalnız read-only lab_monitor ile gözlem için bağlanır</description>
 
     <dependencies>
         <dependency>
@@ -40,6 +40,11 @@
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+        <!-- Chaos v2 gözlem: YALNIZ read-only lab_monitor rolüyle pg_stat_* okuma (workload üretmez) -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

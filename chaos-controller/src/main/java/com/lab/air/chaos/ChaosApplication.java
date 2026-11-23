@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
  * Veritabanı sürücüsü bağımlılığı yoktur; DB'ye bağlanamaz.
  */
 @SpringBootApplication
-@EnableConfigurationProperties(ChaosProperties.class)
+@EnableConfigurationProperties({ChaosProperties.class, com.lab.air.chaos.v2.V2Properties.class})
 public class ChaosApplication {
 
     public static void main(String[] args) {

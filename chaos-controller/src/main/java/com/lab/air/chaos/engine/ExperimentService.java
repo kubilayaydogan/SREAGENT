@@ -1,5 +1,7 @@
 package com.lab.air.chaos.engine;
 
+import com.lab.air.chaos.RunGate;
+
 import com.lab.air.chaos.ChaosProperties;
 import com.lab.air.chaos.ops.Catalog;
 import com.lab.air.chaos.ops.DataPools;
@@ -55,6 +57,13 @@ public class ExperimentService {
     private final MeterRegistry meters;
     private volatile ExperimentRun active;
 
+    private RunGate gate;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setGate(RunGate gate) {
+        this.gate = gate;
+    }
+
     public ExperimentService(ChaosProperties props, MeterRegistry meters) {
         this.props = props;
         this.meters = meters;
@@ -93,6 +102,10 @@ public class ExperimentService {
         }
         if (cur != null && cur.isActive()) {
             return new StartResult.Rejected(409, List.of("aktif deney var: " + cur.id() + " (önce durdurun)"));
+        }
+        String v2 = gate == null ? null : gate.v2Busy();
+        if (v2 != null) {
+            return new StartResult.Rejected(409, List.of("chaos v2 deneyi aktif: " + v2));
         }
         String id = "exp-" + ZonedDateTime.now(ZoneOffset.UTC).format(ID_TS) + "-"
                 + Integer.toHexString(ThreadLocalRandom.current().nextInt(0x1000, 0xFFFF));
