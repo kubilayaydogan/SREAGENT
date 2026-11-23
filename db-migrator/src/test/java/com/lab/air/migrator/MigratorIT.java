@@ -25,7 +25,9 @@ class MigratorIT {
     @BeforeAll
     static void up() throws Exception {
         pg = new PostgreSQLContainer("postgres:17").withDatabaseName("postgres")
-                .withCopyFileToContainer(MountableFile.forHostPath(Path.of("..", "db-vm", "create-roles.sql")), "/tmp/r.sql");
+                .withCopyFileToContainer(MountableFile.forHostPath(Path.of("..", "db-vm", "create-roles.sql")), "/tmp/r.sql")
+                .withCopyFileToContainer(MountableFile.forHostPath(Path.of("..", "db-vm", "chaos-v2-superuser.sql")),
+                        "/tmp/chaos-v2-superuser.sql");
         pg.withCommand("postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "reserved_connections=3");
         pg.start();
         Container.ExecResult r = pg.execInContainer("psql", "-v", "ON_ERROR_STOP=1", "-U", pg.getUsername(), "-d", "postgres",

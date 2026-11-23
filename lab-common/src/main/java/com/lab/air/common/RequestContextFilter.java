@@ -27,6 +27,19 @@ public class RequestContextFilter extends OncePerRequestFilter {
     public static final String MDC_OPERATION = "operation";
     public static final String MDC_DB_ROLE = "db_role";
 
+    /**
+     * Chaos v2 korelasyon metadata'sı: başlık → MDC anahtarı. ECS JSON loglarında ayrı alan olarak çıkar
+     * (Dynatrace log ingest'te `chaos.scenario` vb. ile filtrelenebilir). Değerler {@link #SAFE_ID} ile doğrulanır.
+     * Bu alanlar DEĞERLENDİRME içindir; SRE Agent'ın kanıt toplama sorguları bunları kullanmaz.
+     */
+    public static final java.util.Map<String, String> CHAOS_HEADERS = java.util.Map.of(
+            "X-Chaos-Scenario", "chaos.scenario",
+            "X-Chaos-Initiator", "chaos.initiator",
+            "X-Chaos-Target", "chaos.target",
+            "X-Chaos-Intensity", "chaos.intensity",
+            "X-Chaos-Phase", "chaos.phase");
+    public static final String MDC_CHAOS_EXPERIMENT_ID = "chaos.experiment.id";
+
     /** SQL yorumuna da girdiği için '*' ve '/' gibi karakterler kabul edilmez. */
     /**
      * İstek başına bir yapısal log satırı (logger "airlab.access"). Kapatmak için:
@@ -57,6 +70,17 @@ public class RequestContextFilter extends OncePerRequestFilter {
         if (exp != null) {
             MDC.put(MDC_EXPERIMENT_ID, exp);
         }
+        boolean chaos = false;
+        for (var h : CHAOS_HEADERS.entrySet()) {
+            String v = safe(req.getHeader(h.getKey()));
+            if (v != null) {
+                MDC.put(h.getValue(), v);
+                chaos = true;
+            }
+        }
+        if (chaos && exp != null) {
+            MDC.put(MDC_CHAOS_EXPERIMENT_ID, exp);
+        }
         res.setHeader(REQUEST_ID, rid);
         long t0 = System.nanoTime();
         try {
@@ -77,6 +101,8 @@ public class RequestContextFilter extends OncePerRequestFilter {
             MDC.remove(MDC_EXPERIMENT_ID);
             MDC.remove(MDC_OPERATION);
             MDC.remove(MDC_DB_ROLE);
+            MDC.remove(MDC_CHAOS_EXPERIMENT_ID);
+            CHAOS_HEADERS.values().forEach(MDC::remove);
         }
     }
 

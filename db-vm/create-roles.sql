@@ -62,3 +62,6 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 CREATE SCHEMA IF NOT EXISTS dynatrace;
 GRANT USAGE ON SCHEMA dynatrace TO dynatrace;
 ALTER ROLE dynatrace SET search_path TO dynatrace, public;
+
+-- Chaos v2: /proc host istatistikleri (lab_monitor) + temp_file_limit
+\ir chaos-v2-superuser.sql

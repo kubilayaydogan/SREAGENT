@@ -36,13 +36,16 @@ public class LabController {
     private final LabHolds holds;
     private final LabProperties props;
     private final Environment env;
+    private final ChaosWorkloads chaos;
 
-    public LabController(DataSource ds, LabPressurePool pressure, LabHolds holds, LabProperties props, Environment env) {
+    public LabController(DataSource ds, LabPressurePool pressure, LabHolds holds, LabProperties props, Environment env,
+                         ChaosWorkloads chaos) {
         this.ds = ds;
         this.pressure = pressure;
         this.holds = holds;
         this.props = props;
         this.env = env;
+        this.chaos = chaos;
     }
 
     /**
@@ -77,6 +80,9 @@ public class LabController {
     @PostMapping("/cleanup")
     public Map<String, Object> cleanup() {
         Map<String, Object> out = new LinkedHashMap<>();
+        if (chaos != null) {
+            out.put("chaos", chaos.cleanup());      // burn/long-tx döngüleri biter, ballast bırakılır, write_sink boşalır
+        }
         boolean wasOpen = pressure.isOpen();
         pressure.close();
         out.put("pressurePoolClosed", wasOpen);

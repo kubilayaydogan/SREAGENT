@@ -32,7 +32,9 @@ public final class LabPostgres {
                 .withDatabaseName("postgres")
                 .withUsername("postgres")
                 .withPassword("postgres")
-                .withCopyFileToContainer(MountableFile.forClasspathResource("create-roles.sql"), "/tmp/create-roles.sql");
+                .withCopyFileToContainer(MountableFile.forClasspathResource("create-roles.sql"), "/tmp/create-roles.sql")
+                .withCopyFileToContainer(MountableFile.forClasspathResource("chaos-v2-superuser.sql"),
+                        "/tmp/chaos-v2-superuser.sql");
         c.withCommand("postgres",
                 "-c", "shared_preload_libraries=pg_stat_statements",
                 "-c", "compute_query_id=on",

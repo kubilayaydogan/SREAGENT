@@ -30,6 +30,7 @@
                 <directory>${project.basedir}/../db-vm</directory>
                 <includes>
                     <include>create-roles.sql</include>
+                    <include>chaos-v2-superuser.sql</include>
                 </includes>
             </resource>
         </resources>

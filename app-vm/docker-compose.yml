@@ -33,6 +33,27 @@ x-app: &app
     TOMCAT_MAX_THREADS: ${TOMCAT_MAX_THREADS:-50}
     LOG_FORMAT: ${LOG_FORMAT:-ecs}
     TZ: UTC
+    # Chaos v2 dependency-call allowlist'i (app → app). Uygulamalar normal akışta birbirini çağırmaz.
+    LAB_CHAOS_PEERS_RESERVATION: http://reservation:8081
+    LAB_CHAOS_PEERS_CHECKIN: http://checkin:8082
+    LAB_CHAOS_PEERS_FLIGHTOPS: http://flightops:8083
+    LAB_CHAOS_PEERS_BAGGAGE: http://baggage:8084
+
+# Chaos v2 netem sidecar: uygulamanın network namespace'ini paylaşır; yalnız o container'ın egress'ine,
+# yalnız NETEM_TARGETS allowlist'indeki hedeflere tc netem uygular. Yalnız CAP_NET_ADMIN; port yayımlanmaz.
+x-netem: &netem
+  restart: unless-stopped
+  image: airlab/netem-agent:${IMAGE_TAG:-1.0.0}
+  build: { context: ../observability/netem-agent }
+  cap_drop: [ALL]
+  cap_add: [NET_ADMIN]
+  security_opt: ["no-new-privileges:true"]
+  read_only: true
+  mem_limit: 48m
+  cpus: 0.1
+  logging:
+    driver: json-file
+    options: { max-size: "5m", max-file: "2" }
 
 services:
   reservation:
@@ -95,6 +116,38 @@ services:
     mem_limit: ${APP_MEM_LIMIT:-640m}
     cpus: ${APP_CPUS:-1.0}
 
+  netem-reservation:
+    <<: *netem
+    container_name: airlab-netem-reservation
+    network_mode: "service:reservation"
+    environment: &netem-env
+      NETEM_APP: reservation
+      LAB_TOKEN: ${LAB_TOKEN}
+      NETEM_ALLOWED_CIDRS: 172.28.0.50/32
+      NETEM_TARGETS: db=${DB_HOST}:${DB_PORT:-5432},reservation=reservation,checkin=checkin,flightops=flightops,baggage=baggage
+    depends_on: [reservation]
+
+  netem-checkin:
+    <<: *netem
+    container_name: airlab-netem-checkin
+    network_mode: "service:checkin"
+    environment: { <<: *netem-env, NETEM_APP: checkin }
+    depends_on: [checkin]
+
+  netem-flightops:
+    <<: *netem
+    container_name: airlab-netem-flightops
+    network_mode: "service:flightops"
+    environment: { <<: *netem-env, NETEM_APP: flightops }
+    depends_on: [flightops]
+
+  netem-baggage:
+    <<: *netem
+    container_name: airlab-netem-baggage
+    network_mode: "service:baggage"
+    environment: { <<: *netem-env, NETEM_APP: baggage }
+    depends_on: [baggage]
+
   chaos:
     restart: unless-stopped
     image: airlab/chaos-controller:${IMAGE_TAG:-1.0.0}
@@ -117,7 +170,13 @@ services:
       LOG_FORMAT: ${LOG_FORMAT:-ecs}
       DT_TAGS: "airlab airlab_service=chaos"
       TZ: UTC
-    # Bilinçli olarak DB_* değişkeni YOK: chaos-controller DB'ye bağlanmaz.
+      # Chaos v2 gözlem: YALNIZ read-only lab_monitor (pg_monitor) rolü — pg_stat_* + lab_os.host_stats().
+      # Workload'lar DB'ye chaos-controller'dan değil, uygulamaların kendi rolleriyle gider.
+      MONITOR_DB_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT:-5432}/${DB_NAME:-airlab}?ApplicationName=chaos-observer&connectTimeout=3&socketTimeout=10
+      MONITOR_DB_USER: lab_monitor
+      MONITOR_DB_PASSWORD: ${MONITOR_DB_PASSWORD}
+      NETEM_PORT: "9190"
+      DT_UI_URL: ${DT_UI_URL:-${DT_URL:-}}
     volumes: ["chaos-data:/data"]
     ports: ["${APP_BIND_IP:-127.0.0.1}:8080:8080"]
     mem_limit: ${CHAOS_MEM_LIMIT:-512m}

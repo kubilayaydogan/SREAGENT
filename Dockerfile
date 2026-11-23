@@ -13,7 +13,7 @@ COPY checkin-service/pom.xml checkin-service/
 COPY flightops-service/pom.xml flightops-service/
 COPY baggage-service/pom.xml baggage-service/
 COPY chaos-controller/pom.xml chaos-controller/
-COPY db-vm/create-roles.sql db-vm/
+COPY db-vm/create-roles.sql db-vm/chaos-v2-superuser.sql db-vm/
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -q dependency:go-offline -DexcludeReactor=true || true
 COPY . .
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -q -DskipTests package \

@@ -19,6 +19,7 @@ import java.util.Map;
  *   seed  --scale=N [--events-per-bag=N] [--hot-flights=N] [--hot-bookings=N]
  *   reset --confirm=&lt;veritabanı adı&gt;          (LAB_ALLOW_RESET=true gerekir) veriyi siler
  *   check                                     lab.integrity_check görünümünü yazdırır
+ *   chaos-seed --rows=N                       chaos.synthetic_data boyutu (10k..5M, chaos v2 workload hedefi)
  * </pre>
  * Bağlantı: DB_HOST, DB_PORT, DB_NAME, DB_OWNER_USER, DB_OWNER_PASSWORD ortam değişkenleri.
  */
@@ -87,6 +88,20 @@ public final class Migrator {
                 System.out.println("reset tamam: tüm iş verisi silindi. Yeniden seed çalıştırın.");
                 return 0;
             }
+            case "chaos-seed" -> {
+                int rows = intOpt(opts, "rows", 400_000);
+                try (Connection c = connect(cfg);
+                     PreparedStatement ps = c.prepareStatement("SELECT chaos.resize_synthetic(?)")) {
+                    ps.setInt(1, rows);
+                    long t0 = System.nanoTime();
+                    try (ResultSet rs = ps.executeQuery()) {
+                        rs.next();
+                        System.out.printf("chaos-seed tamam (%.1fs): chaos.synthetic_data = %d satır%n",
+                                (System.nanoTime() - t0) / 1e9, rs.getLong(1));
+                    }
+                }
+                return 0;
+            }
             case "check" -> {
                 int bad = 0;
                 try (Connection c = connect(cfg); var st = c.createStatement();
@@ -142,7 +157,7 @@ public final class Migrator {
     }
 
     private static void usage() {
-        System.err.println("kullanım: migrate | info | check | seed --scale=N [--events-per-bag=N] | reset --confirm=<db>");
+        System.err.println("kullanım: migrate | info | check | seed --scale=N [--events-per-bag=N] | chaos-seed --rows=N | reset --confirm=<db>");
     }
 
     public record Config(String host, int port, String dbName, String user, String password) {

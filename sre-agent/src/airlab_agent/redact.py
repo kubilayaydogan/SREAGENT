@@ -41,4 +41,10 @@ def redact(obj: Any) -> Any:
 def strip_fields(records: list[dict], fields: list[str]) -> list[dict]:
     """Değerlendirme/kaos etiketlerini gözlem verisinden çıkarır (ör. experiment_id, lab_hold)."""
     drop = set(fields)
-    return [{k: v for k, v in r.items() if k not in drop and k.split(".")[-1] not in drop} for r in records]
+
+    def hidden(k: str) -> bool:
+        # tam ad, son segment veya iç içe sonek (waiter.chaos.scenario) eşleşmesi; chaos.* her zaman gizlenir
+        return (k in drop or k.split(".")[-1] in drop or any(k.endswith("." + f) for f in drop)
+                or k.startswith("chaos.") or ".chaos." in k)
+
+    return [{k: v for k, v in r.items() if not hidden(k)} for r in records]

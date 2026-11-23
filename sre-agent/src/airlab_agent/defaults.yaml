@@ -29,7 +29,8 @@ container_image_to_app:     # Dynatrace container adı (imaj) → uygulama
   airlab/sre-agent: sre-agent
 latency_exclude_path_prefixes: ["/actuator", "/lab"]   # gecikme = kullanıcıya dönük işlemler; /lab bakım/yük uçları
 # Telemetride gelen ama gözlem verisinden ATILAN alanlar (değerlendirme/kaos etiketi sızmasın):
-strip_fields: ["waiter.experiment_id", "blocker.experiment_id", "blocker.lab_hold", "experiment_id", "lab_hold"]
+strip_fields: ["waiter.experiment_id", "blocker.experiment_id", "blocker.lab_hold", "experiment_id", "lab_hold",
+               "chaos.experiment.id", "chaos.scenario", "chaos.initiator", "chaos.target", "chaos.intensity", "chaos.phase"]
 
 windows:
   default_minutes: 15        # analyze/ask için varsayılan pencere

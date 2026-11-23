@@ -13,7 +13,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import javax.sql.DataSource;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(LabProperties.class)
+@EnableConfigurationProperties({LabProperties.class, ChaosLabProperties.class})
 public class LabConfig {
 
     @Bean
@@ -43,8 +43,19 @@ public class LabConfig {
         }
 
         @Bean
-        LabController labController(DataSource ds, LabPressurePool pressure, LabHolds holds, Environment env) {
-            return new LabController(ds, pressure, holds, props, env);
+        ChaosWorkloads chaosWorkloads(DataSource ds, ChaosLabProperties chaosProps, Environment env) {
+            return new ChaosWorkloads(ds, chaosProps, env);
+        }
+
+        @Bean
+        ChaosLabController chaosLabController(ChaosWorkloads w) {
+            return new ChaosLabController(w);
+        }
+
+        @Bean
+        LabController labController(DataSource ds, LabPressurePool pressure, LabHolds holds, Environment env,
+                                    ChaosWorkloads chaos) {
+            return new LabController(ds, pressure, holds, props, env, chaos);
         }
     }
 }
