@@ -58,7 +58,7 @@ def test_full_run_report_separates_three_dimensions(settings):
     assert r["explanation_source"].startswith("Claude")
     with open(st["report_paths"][1], encoding="utf-8") as f:
         md = f.read()
-    assert "FIXTURE / SENTETİK VERİ" in md and "Nedensellik güveni" in md
+    assert "FIXTURE / SENTETİK VERİ" in md and "Causality confidence" in md
     assert ["edges_detail"] in gw.calls and len(gw.calls) == 2     # row_lock için ek kanıt turu
 
 
@@ -84,7 +84,7 @@ def test_claude_outage_falls_back_to_deterministic(settings):
     st, _ = _run(settings, llm=FakeLlm(fail=True))
     r = _report(st)
     assert r["explanation_source"] == "deterministik (Claude erişilemedi)"
-    assert "Satır kilidi" in r["explanation"]
+    assert "Row lock wait" in r["explanation"]
     assert any("Claude erişilemedi" in e for e in r["errors"])
     assert r["status"] == "complete"                                # veri tam; yalnız açıklama deterministik
 

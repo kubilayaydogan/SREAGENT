@@ -21,23 +21,23 @@ def human_review(attr: dict, quality: dict, scores: dict) -> list[str]:
     out = []
     for m in attr.get("mechanisms", []):
         if m["id"] == "row_lock":
-            out.append("Kaynak uygulamanın uzun süren/boşta açık transaction'larını (blocker_state, xact_age) inceleyin; "
-                       "pg_stat_activity'de 'idle in transaction' oturumları ve uygulama transaction sınırlarını doğrulayın.")
+            out.append("Source uygulamanın long-running/idle transaction'larını (blocker_state, xact_age) inceleyin; "
+                       "pg_stat_activity'de 'idle in transaction' session'ları ve uygulamanın transaction boundary'lerini doğrulayın.")
         if m["id"] == "pool_saturation" and not m.get("secondary_to"):
-            out.append(f"{m['affected_apps'][0]} için havuz boyutu ve gelen yükün beklenen olup olmadığını teyit edin.")
+            out.append(f"{m['affected_apps'][0]} için connection pool size'ı ve gelen load'un beklenen olup olmadığını teyit edin.")
         if m["id"] == "global_connection_pressure":
-            out.append("max_connections / uygulama havuz boyutlarının toplamını ve bağlantı sızıntısını kontrol edin.")
+            out.append("max_connections / uygulama pool size toplamını ve connection leak olup olmadığını kontrol edin.")
         if m["id"] == "db_cpu":
-            out.append("DB_VM'de en pahalı sorguların planlarını (EXPLAIN) ve bakım işlerini inceleyin.")
+            out.append("DB_VM'de en pahalı query'lerin execution plan'larını (EXPLAIN) ve maintenance job'larını inceleyin.")
         if m["id"] == "app_vm_cpu":
             if m.get("self_is_source"):
-                out.append("CPU artışının bir kısmı SRE Agent'ın kendisinden; watch aralığını/eşzamanlılığı gözden geçirin.")
+                out.append("CPU artışının bir kısmı SRE Agent'ın kendisinden; watch interval'ını/concurrency'yi gözden geçirin.")
             out.append("APP_VM'de CPU tüketen container'ları doğrulayın; DB tarafı normal mi kontrol edin.")
     if scores["overall"]["score"] is None:
-        out.append("Puan hesaplanamadı (veri kapsamı yetersiz): telemetri hattını (OneAgent, collector, ingest) kontrol edin.")
+        out.append("Risk score hesaplanamadı (data coverage yetersiz): telemetry pipeline'ını (OneAgent, collector, ingest) kontrol edin.")
     if any(q["status"] in ("PERMISSION",) for q in quality.values()):
-        out.append("Platform token kapsamlarını (storage:*:read) kontrol edin; bazı sorgular yetki hatası verdi.")
-    return out or ["Belirgin bir risk yok; rutin izleme yeterli."]
+        out.append("Platform token scope'larını (storage:*:read) kontrol edin; bazı query'ler permission hatası verdi.")
+    return out or ["Belirgin bir risk yok; rutin monitoring yeterli."]
 
 
 def build(state: dict) -> dict:
@@ -85,57 +85,57 @@ def to_markdown(r: dict) -> str:
     L = []
     if r.get("fixture"):
         L.append("> **FIXTURE / SENTETİK VERİ** — bu rapor test verisiyle üretildi, gerçek bir ölçüm değildir.\n")
-    L.append(f"# airlab SRE raporu `{r['id']}`")
-    L.append(f"- Tür: {r['kind']} · Durum: **{r['status']}** · Üretim: {r['generated_at']}")
+    L.append(f"# airlab SRE report `{r['id']}`")
+    L.append(f"- Kind: {r['kind']} · Status: **{r['status']}** · Generated: {r['generated_at']}")
     for w in r.get("windows") or []:
-        L.append(f"- Pencere `{w['name']}`: {w['start']} → {w['end']}")
+        L.append(f"- Window `{w['name']}`: {w['start']} → {w['end']}")
     if r.get("question"):
         L.append(f"- Soru: {r['question']}")
     for n in r.get("notes", []):
         L.append(f"- Not: {n}")
     c = r["causality"]
-    L += ["", "## Üç ayrı değerlendirme", "| Boyut | Değer |", "|---|---|",
-          f"| Risk şiddeti (0–100) | {_fmt(o['score'])} ({o.get('band') or 'hesaplanamadı'}) |",
-          f"| Veri kapsamı | {r['data_coverage']['signals_ok']}/{r['data_coverage']['signals_total']} sinyal OK, "
-          f"puan kapsamı ort. {_fmt(o.get('coverage'), pct=True)} |",
-          f"| Nedensellik güveni | {CONF_TR.get(c['confidence'], c['confidence'])} "
-          f"({c['primary_mechanism'] or 'mekanizma yok'}) |", ""]
-    L += ["## Uygulama puanları", "| Uygulama | Puan | Bant | Kapsam | Gecikme oranı | Eksik bileşen |", "|---|---|---|---|---|---|"]
+    L += ["", "## Üç ayrı değerlendirme", "| Boyut | Value |", "|---|---|",
+          f"| Risk score (0–100) | {_fmt(o['score'])} ({o.get('band') or 'hesaplanamadı'}) |",
+          f"| Data coverage | {r['data_coverage']['signals_ok']}/{r['data_coverage']['signals_total']} signal OK, "
+          f"score coverage ort. {_fmt(o.get('coverage'), pct=True)} |",
+          f"| Causality confidence | {c['confidence'] or '—'} "
+          f"({c['primary_mechanism'] or 'mechanism yok'}) |", ""]
+    L += ["## Uygulama risk score'ları", "| Uygulama | Score | Band | Coverage | Latency ratio | Eksik component |", "|---|---|---|---|---|---|"]
     for a, s in r["risk"]["apps"].items():
         comp = s.get("components", {})
         lr, src = comp.get("_latency_ratio"), comp.get("_latency_source")
         lat = f"×{lr:.2f} ({src})" if lr else "veri yok"
         L.append(f"| {a} | {_fmt(s['score'])} | {s.get('band') or '—'} | {_fmt(s['coverage'], pct=True)} | {lat} | "
                  f"{', '.join(s.get('missing', [])) or '—'} |")
-    L += ["", "## Kaynak → Etkilenen",
-          f"- Kaynak: {', '.join(c['source_apps']) or 'belirlenemedi'}",
+    L += ["", "## Source → Etkilenen",
+          f"- Source: {', '.join(c['source_apps']) or 'belirlenemedi'}",
           f"- Etkilenen: {', '.join(c['affected_apps']) or 'yok'}"]
     for a, i in r["impacted"].items():
         L.append(f"  - {a}: {'; '.join(i['reasons'])}")
     prim = next((m for m in r["mechanisms"] if m["id"] == c["primary_mechanism"]), None)
     if prim and prim.get("chain_path"):
-        L.append(f"- Lock wait zinciri: {prim['chain_path']} ({prim['chain_depth']} halka)")
-    L += ["", "## Mekanizmalar"]
+        L.append(f"- Lock wait chain: {prim['chain_path']} ({prim['chain_depth']} halka)")
+    L += ["", "## Mechanism'ler"]
     if not r["mechanisms"]:
-        L.append("- Tespit edilen mekanizma yok.")
+        L.append("- Tespit edilen mechanism yok.")
     for m in r["mechanisms"]:
-        L.append(f"- **{m['title']}** (`{m['id']}`, güven: {CONF_TR.get(m['confidence'])}"
-                 + (f", ikincil → {m['secondary_to']}" if m.get("secondary_to") else "") + ")")
-        L.append(f"  - Kaynak: {', '.join(m['source_apps']) or '—'} · Etkilenen: {', '.join(m['affected_apps']) or '—'}")
+        L.append(f"- **{m['title']}** (`{m['id']}`, confidence: {m['confidence']}"
+                 + (f", secondary → {m['secondary_to']}" if m.get("secondary_to") else "") + ")")
+        L.append(f"  - Source: {', '.join(m['source_apps']) or '—'} · Etkilenen: {', '.join(m['affected_apps']) or '—'}")
         L.append(f"  - {m['mechanism']}")
-        L.append(f"  - Sinyaller: {', '.join(m['signals'])} · Kanıt: {', '.join(m['evidence_ids']) or '—'}")
+        L.append(f"  - Signal'ler: {', '.join(m['signals'])} · Evidence: {', '.join(m['evidence_ids']) or '—'}")
     L += ["", "## Alternatif açıklamalar"] + ([f"- {x}" for x in r["alternatives"]] or ["- —"])
-    L += ["", "## Veri boşlukları"] + ([f"- {x}" for x in r["data_gaps"]] or ["- Yok"])
-    L += ["", "## Önerilen insan incelemesi"] + [f"- {x}" for x in r["human_review"]]
+    L += ["", "## Data gap'ler"] + ([f"- {x}" for x in r["data_gaps"]] or ["- Yok"])
+    L += ["", "## Önerilen human review"] + [f"- {x}" for x in r["human_review"]]
     if r.get("explanation"):
         L += ["", f"## Açıklama ({r.get('explanation_source')})", r["explanation"]]
     if r.get("errors"):
-        L += ["", "## Hatalar"] + [f"- {e}" for e in r["errors"]]
-    L += ["", "## Kanıtlar", "| ID | Sinyal | Durum | Kayıt | Dynatrace queryId |", "|---|---|---|---|---|"]
+        L += ["", "## Error'lar"] + [f"- {e}" for e in r["errors"]]
+    L += ["", "## Evidence", "| ID | Signal | Status | Record | Dynatrace queryId |", "|---|---|---|---|---|"]
     for e in r["evidence"]:
         L.append(f"| {e['id']} | {e['signal']} | {e['status']} | {e['records']} | {e.get('dynatrace_query_id') or '—'} |")
     b = r.get("budget") or {}
-    L += ["", f"_Bütçe: {b.get('queries_used', 0)} sorgu, LLM {b.get('llm_calls', 0)} çağrı / "
+    L += ["", f"_Budget: {b.get('queries_used', 0)} query, LLM {b.get('llm_calls', 0)} call / "
               f"{b.get('input_tokens', 0)}+{b.get('output_tokens', 0)} token, süre {b.get('elapsed_s', 0)} sn._"]
     return "\n".join(L) + "\n"
 
@@ -169,14 +169,14 @@ def deterministic_explanation(r: dict) -> str:
     if prim:
         summary = (f"{period}, öncesindeki "
                    + (f"{_clock(base['start'])} – {_clock(base['end'])} " if base else "")
-                   + f"normal dönemle karşılaştırıldı. Tespit edilen mekanizma: **{prim['title']}**. "
-                   f"Sorunun kaynağı {_join(prim['source_apps']) or 'belirlenemeyen bir uygulama'}, etkilenen "
+                   + f"baseline ile karşılaştırıldı. Tespit edilen mechanism: **{prim['title']}**. "
+                   f"Root cause source'u {_join(prim['source_apps']) or 'belirlenemeyen bir uygulama'}, etkilenen "
                    f"uygulamalar {_join(prim['affected_apps']) or 'yok'}. ")
     elif r["impacted"]:
         summary = (f"{period}nda {_join(list(r['impacted']))} uygulamalarında kötüleşme ölçüldü, ancak eldeki "
-                   "kanıtlar tek bir mekanizmaya bağlanamadı. ")
+                   "evidence tek bir mechanism'e bağlanamadı. ")
     else:
-        summary = f"{period}nda normal döneme göre anlamlı bir kötüleşme ölçülmedi. "
+        summary = f"{period}nda baseline'a göre anlamlı bir kötüleşme ölçülmedi. "
     summary += (f"Genel risk score {_fmt(o['score'])}/100 ({o.get('band') or 'hesaplanamadı'}); bu puan şiddeti "
                 "gösterir, nedenselliğin kesinliğini değil.")
     paras.append("**Özet.** " + summary)
@@ -212,7 +212,7 @@ def deterministic_explanation(r: dict) -> str:
     txt = (f"Değerlendirme {dc['signals_ok']}/{dc['signals_total']} signal ile yapıldı. Causality confidence "
            f"{c['confidence'] or '—'}")
     if prim:
-        txt += f"; mekanizmayı destekleyen signal'ler: {', '.join(prim['signals'])}"
+        txt += f"; mechanism'i destekleyen signal'ler: {', '.join(prim['signals'])}"
         if prim.get("evidence_ids"):
             txt += f" (evidence: {', '.join(prim['evidence_ids'])})"
     txt += "."
