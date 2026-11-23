@@ -165,7 +165,7 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
                                  "dynatrace_query_id": r.query_id, "dql": r.dql, "error": r.error})
             used = gw.queries_used
         except McpUnavailable as e:
-            errors.append(f"Ek kanıt toplanamadı (MCP): {e}")
+            errors.append(f"Ek evidence toplanamadı (MCP): {e}")
             for k in keys:
                 extra[k] = {"status": "UNAVAILABLE", "records": []}
         return {"extra": extra, "evidence": evidence, "errors": errors, "iterations": state["iterations"] + 1,

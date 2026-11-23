@@ -193,7 +193,7 @@ async def complete(s: AsyncSession, inv: Investigation, report: dict[str, Any], 
     if primary:
         inv.root_cause_hypothesis = redact_text(f"{primary['title']}: {primary.get('mechanism', '')}")
     elif report.get("impacted"):
-        inv.root_cause_hypothesis = "Etki var ancak tanımlı mekanizmalarla açıklanamadı (insan incelemesi gerekli)."
+        inv.root_cause_hypothesis = "Impact var ancak tanımlı mechanism'lerle açıklanamadı (human review gerekli)."
     else:
         inv.root_cause_hypothesis = None
     inv.explanation = report.get("explanation")

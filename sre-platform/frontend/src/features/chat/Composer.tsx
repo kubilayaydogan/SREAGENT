@@ -106,7 +106,7 @@ export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app
           )}
         </div>
         <p className="mt-1.5 text-[11px] text-muted">
-          Ajan yalnız okuma yapar (Dynatrace MCP sorguları). Sonuçlar korelasyon temelli hipotezdir; kritik aksiyonlar onay akışından geçer.
+          Ajan yalnız okuma yapar (Dynatrace MCP query'leri). Sonuçlar correlation temelli hipotezdir; kritik aksiyonlar onay akışından geçer.
         </p>
       </div>
     </div>

@@ -98,14 +98,14 @@ export default function RcaDetailPage() {
         <Section n={4} title="Etki analizi">
           <Markdown>{r.impact_analysis ?? "—"}</Markdown>
         </Section>
-        <Section n={5} title="Kanıtlar">
+        <Section n={5} title="Evidence">
           {r.supporting_evidence.length ? (
             <table className="w-full text-xs">
               <thead className="text-left text-muted">
                 <tr className="border-b border-line">
                   <th className="py-1.5 pr-3 font-medium">Anahtar</th>
                   <th className="py-1.5 pr-3 font-medium">Tür</th>
-                  <th className="py-1.5 pr-3 font-medium">Mekanizma</th>
+                  <th className="py-1.5 pr-3 font-medium">Mechanism</th>
                   <th className="py-1.5 pr-3 font-medium">Özet</th>
                   <th className="py-1.5 font-medium">Referans</th>
                 </tr>
@@ -126,11 +126,11 @@ export default function RcaDetailPage() {
               </tbody>
             </table>
           ) : (
-            <p className="text-muted">Mekanizmayı destekleyen kanıt yok.</p>
+            <p className="text-muted">Mechanism için destekleyen evidence yok.</p>
           )}
         </Section>
-        <Section n={6} title="Kök neden hipotezi">
-          <p className="text-ink">{r.suspected_root_cause ?? "Tanımlı mekanizmalarla açıklanamadı."}</p>
+        <Section n={6} title="Root Cause hipotezi">
+          <p className="text-ink">{r.suspected_root_cause ?? "Tanımlı mechanism'lerle açıklanamadı."}</p>
         </Section>
         <Section n={7} title="Katkıda bulunan faktörler">
           <List items={r.contributing_factors} />

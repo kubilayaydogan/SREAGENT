@@ -1,0 +1,79 @@
+# Merkezi terminology policy verisi. Tüm prompt katmanları (SRE Agent, platform chat/history/follow-up, RCA özeti)
+# ve deterministik rapor metinleri buna göre denetlenir. Genişletmek için:
+#   - domains: modele "bu alanlardaki standart terimleri İngilizce koru" demek için alan + örnek terimler.
+#     Liste örnektir, kapalı küme DEĞİLDİR; policy metni modelden alanın tüm standart terimlerini korumasını ister.
+#   - calques: kelime kelime Türkçe çeviriler (pattern: regex, büyük/küçük harf duyarsız; tr: okunur örnek) → term.
+#     Hem prompt'taki "yanlış → doğru" örneklerine hem de otomatik testlerdeki violation taramasına girer.
+#     Regex'ler Türkçe ekleri de yakalayacak şekilde yazılır; anlamı belirsiz genel kelimeler (ör. "iz", "olay",
+#     "bekleme", "ağ") false positive üretmemek için yalnızca teknik bağlamdaki kalıplarıyla eklenir.
+
+domains:
+  SRE / Incident Management: [RCA, Incident Analysis, Root Cause, Bottleneck, Error Budget, SLO, SLI, SLA, MTTR, Runbook, Postmortem, On-call, Escalation, Blast Radius, Toil]
+  Observability: [metric, log, trace, span, Distributed Tracing, Latency, p95, p99, Throughput, Error Rate, Baseline, Threshold, Alert, Dashboard, Evidence, Confidence, Anomaly, Saturation]
+  PostgreSQL / Database: [Lock Wait, Row Lock, Deadlock, Transaction, Commit, Rollback, Query, Query Latency, Execution Plan, Index, Vacuum, Checkpoint, WAL, Replication Lag, Connection, Session, max_connections, idle in transaction, pg_stat_activity, pg_stat_statements]
+  JVM / Application Runtime: [Thread, Thread Pool, Virtual Thread, Pinning, Heap, Heap Dump, Thread Dump, Garbage Collection, GC Pause, OutOfMemoryError, Connection Pool, HikariCP, Pool Timeout, Exception, Stack Trace]
+  Distributed Systems / Resilience: [Timeout, Retry, Backoff, Circuit Breaker, Rate Limit, Backpressure, Cascade, Failover, Idempotency, Consistency, Leader Election, Partition]
+  Kafka / Messaging: [Topic, Partition, Offset, Consumer, Consumer Group, Consumer Lag, Producer, Broker, Rebalance, Dead Letter Queue]
+  Kubernetes / Cloud / DevOps: [Pod, Node, Container, Deployment, ReplicaSet, Namespace, Ingress, Service, HPA, Liveness Probe, Readiness Probe, OOMKilled, CrashLoopBackOff, Deploy, Build, Rollout, Canary, Load Balancer, Autoscaling]
+  Linux / Networking: [CPU, Load Average, Memory, Swap, I/O Wait, File Descriptor, Socket, Packet Loss, DNS, TLS, TCP Retransmit, Bandwidth, Network Latency, Clock Step, NTP]
+  Dynatrace: [OneAgent, ActiveGate, Grail, DQL, Davis, Problem, Entity, Smartscape, Service Flow, PurePath]
+
+calques:
+  - {pattern: 'kilit beklemes\w*', term: Lock Wait, tr: kilit beklemesi}
+  - {pattern: 'satır kilid\w*|satır kilit\w*', term: Row Lock, tr: satır kilidi}
+  - {pattern: 'kilitlenme\w*|ölümcül kilit\w*', term: Deadlock, tr: kilitlenme}
+  - {pattern: 'kilit kenar\w*|engelleme kenar\w*', term: blocking edge, tr: kilit kenarı}
+  - {pattern: 'kilit\w*', term: lock, tr: kilit}
+  - {pattern: 'iş parçacığı havuz\w*|iş parçacık havuz\w*', term: Thread Pool, tr: iş parçacığı havuzu}
+  - {pattern: 'iş parçacı\w*', term: thread, tr: iş parçacığı}
+  - {pattern: 'bağlantı havuz\w*', term: Connection Pool, tr: bağlantı havuzu}
+  - {pattern: 'cpu baskı\w*', term: CPU pressure, tr: CPU baskısı}
+  - {pattern: 'bağımsız yük\w*|yük artış\w*|yük test\w*', term: load / load test, tr: bağımsız yük}
+  - {pattern: 'havuz doygunluğ\w*|havuz zaman aşım\w*', term: pool saturation / pool timeout, tr: havuz doygunluğu}
+  - {pattern: 'kök neden analiz\w*', term: RCA (Root Cause Analysis), tr: kök neden analizi}
+  - {pattern: 'kök neden\w*', term: Root Cause, tr: kök neden}
+  - {pattern: 'darboğaz\w*', term: Bottleneck, tr: darboğaz}
+  - {pattern: 'zaman aşım\w*', term: Timeout, tr: zaman aşımı}
+  - {pattern: 'yeniden deneme\w*', term: Retry, tr: yeniden deneme}
+  - {pattern: 'geri alma\w*|geri sarma\w*', term: Rollback, tr: geri alma}
+  - {pattern: 'devre kesic\w*', term: Circuit Breaker, tr: devre kesici}
+  - {pattern: 'hata bütçe\w*', term: Error Budget, tr: hata bütçesi}
+  - {pattern: 'hizmet seviyesi hedef\w*', term: SLO, tr: hizmet seviyesi hedefi}
+  - {pattern: 'hizmet seviyesi gösterge\w*', term: SLI, tr: hizmet seviyesi göstergesi}
+  - {pattern: 'tüketici gecikme\w*', term: Consumer Lag, tr: tüketici gecikmesi}
+  - {pattern: 'tüketici grub\w*', term: Consumer Group, tr: tüketici grubu}
+  - {pattern: 'yığın döküm\w*', term: Heap Dump, tr: yığın dökümü}
+  - {pattern: 'iş parçacığı döküm\w*', term: Thread Dump, tr: iş parçacığı dökümü}
+  - {pattern: 'çöp toplay\w*|çöp toplam\w*', term: Garbage Collection, tr: çöp toplayıcı}
+  - {pattern: 'bellek sızıntı\w*', term: memory leak, tr: bellek sızıntısı}
+  - {pattern: 'bağlantı sızıntı\w*', term: connection leak, tr: bağlantı sızıntısı}
+  - {pattern: 'gecikme\w*', term: latency, tr: gecikme}
+  - {pattern: 'doygunluk\w*|doygunluğ\w*', term: saturation, tr: doygunluk}
+  - {pattern: 'hata oran\w*', term: error rate, tr: hata oranı}
+  - {pattern: 'metrik\w*|metriğ\w*', term: metric, tr: metrik}
+  - {pattern: 'işlem hacm\w*|iş hacm\w*', term: throughput, tr: işlem hacmi}
+  - {pattern: 'yanıt süre\w*', term: response time, tr: yanıt süresi}
+  - {pattern: 'toparlanma\w*', term: recovery, tr: toparlanma}
+  - {pattern: 'normal dönem\w*|karşılaştırma dönem\w*', term: baseline, tr: normal dönem}
+  - {pattern: 'eşik değer\w*|eşiğ\w*', term: threshold, tr: eşik değeri}
+  - {pattern: 'kanıt(?!la(?!r))\w*', term: evidence, tr: kanıt}     # "kanıtlamak/kanıtlandı" (prove) fiili serbest
+  - {pattern: 'güven düzey\w*|nedensellik güven\w*', term: confidence / causality confidence, tr: güven düzeyi}
+  - {pattern: 'veri kapsam\w*', term: data coverage, tr: veri kapsamı}
+  - {pattern: 'veri boşlu\w*', term: data gap, tr: veri boşluğu}
+  - {pattern: 'risk puan\w*|risk şiddet\w*', term: risk score, tr: risk puanı}
+  - {pattern: 'istek izi\w*|izleme verisi\w*|dağıtık izleme\w*', term: trace / Distributed Tracing, tr: istek izi}
+  - {pattern: 'sorgu\w*', term: query, tr: sorgu}
+  - {pattern: 'yürütme plan\w*', term: Execution Plan, tr: yürütme planı}
+  - {pattern: 'yürütme süre\w*', term: execution time, tr: yürütme süresi}
+  - {pattern: 'mekanizma\w*', term: mechanism, tr: mekanizma}
+  - {pattern: 'bağlantı kullanım\w*|bağlantı baskı\w*', term: connection usage / connection pressure, tr: bağlantı kullanımı}
+  - {pattern: 'dağıtık iz\w*', term: Distributed Tracing / trace, tr: dağıtık iz}
+  - {pattern: 'bakım iş\w*', term: maintenance job, tr: bakım işi}
+  - {pattern: 'önbelle\w*', term: cache, tr: önbellek}
+  - {pattern: 'yük dengeley\w*', term: Load Balancer, tr: yük dengeleyici}
+  - {pattern: 'kapsayıcı\w*', term: container, tr: kapsayıcı}
+  - {pattern: 'saat atlama\w*|saat sıçrama\w*', term: clock step, tr: saat atlaması}
+  - {pattern: 'olay raporu\w*|olay analiz\w*', term: Incident report / Incident Analysis, tr: olay raporu}
+  - {pattern: 'izleme\w*', term: monitoring, tr: izleme}
+  - {pattern: 'günlük kayd\w*|günlük kayıt\w*', term: log, tr: günlük kaydı}
+  - {pattern: 'yığın izi\w*', term: Stack Trace, tr: yığın izi}

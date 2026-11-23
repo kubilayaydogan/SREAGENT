@@ -135,7 +135,7 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
     if (edges_total or 0) >= m["lock_min_edges"]:
         lock_srcs.append("blocking_edge logları")
     if (db.get("lock_waiters_avg") or 0) >= m["lock_min_waiters_avg"]:
-        lock_srcs.append("pg lock waiters metriği")
+        lock_srcs.append("pg lock waiters metric'i")
     if (db.get("pg_lock_wait_logs") or 0) > 0:
         lock_srcs.append("PostgreSQL log_lock_waits")
     if lock_srcs:
@@ -272,7 +272,7 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
                 "id": "independent_load", "title": f"{app} bağımsız load artışı",
                 "source_apps": [app], "affected_apps": [app] if app in imp else [],
                 "mechanism": "Request rate arttı; paylaşılan resource'ta (lock, DB connection, CPU) pressure ölçülmedi. "
-                             + ("Başka uygulamalarda da impact var — ilişki kanıtlanamadı." if others else
+                             + ("Başka uygulamalarda da impact var — ilişki için evidence yok." if others else
                                 "Diğer uygulamalara yayılma gözlenmedi."),
                 "rpm_ratio": round(r, 2), "unexplained_impact": others,
                 "signals": ["Micrometer istek hızı"], "confidence": "medium" if not others else "low",

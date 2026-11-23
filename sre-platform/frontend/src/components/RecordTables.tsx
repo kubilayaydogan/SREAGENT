@@ -30,7 +30,7 @@ export function ToolTable({ rows }: { rows: ToolExecution[] }) {
             <th className="px-3 py-2 font-medium">Durum</th>
             <th className="px-3 py-2 text-right font-medium">Kayıt</th>
             <th className="px-3 py-2 text-right font-medium">Süre</th>
-            <th className="px-3 py-2 font-medium">Kanıt / queryId</th>
+            <th className="px-3 py-2 font-medium">Evidence / queryId</th>
           </tr>
         </thead>
         <tbody>
@@ -83,7 +83,7 @@ export function ToolTable({ rows }: { rows: ToolExecution[] }) {
 }
 
 export function EvidenceTable({ rows }: { rows: Evidence[] }) {
-  if (!rows.length) return <EmptyState title="Kanıt kaydı yok" description="Bu araştırmada Dynatrace'ten kanıt toplanamadı." />;
+  if (!rows.length) return <EmptyState title="Evidence kaydı yok" description="Bu araştırmada Dynatrace'ten evidence toplanamadı." />;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">

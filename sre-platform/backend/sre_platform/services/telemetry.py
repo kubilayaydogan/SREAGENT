@@ -178,17 +178,17 @@ def compute(results: dict[str, Any], sp: Span, cfg: dict, *, open_keys: set[str]
         err_rate = e / n if n else None
         status = "healthy" if has else "unknown"
         if containers_ok and a not in reporting:
-            status, reasons = "down", ["container metriği gelmiyor"]
+            status, reasons = "down", ["container metric'i gelmiyor"]
         elif n >= min_req and err_rate is not None and err_rate >= 0.5:
-            status, reasons = "down", [f"hata oranı %{err_rate * 100:.0f}"]
+            status, reasons = "down", [f"error rate %{err_rate * 100:.0f}"]
         elif has:
             if n >= min_req and err_rate is not None and err_rate >= thr["error_rate"]["open"]:
-                reasons.append(f"hata oranı %{err_rate * 100:.1f}")
+                reasons.append(f"error rate %{err_rate * 100:.1f}")
             if p95 and p95_prev and num(sp_t.get("n") or 0) >= 30 and p95 >= thr["latency_ratio"]["open"] * p95_prev:
                 reasons.append(f"p95 {p95:.0f} ms (önceki dönem {p95_prev:.0f} ms)")
             pr = (pool.get(a) or {}).get("last_ratio")
             if pr is not None and pr >= thr["pool_ratio"]["open"]:
-                reasons.append(f"bağlantı havuzu %{pr * 100:.0f}")
+                reasons.append(f"Connection Pool %{pr * 100:.0f}")
             if {k for k in open_keys if k.endswith(":" + a)}:
                 reasons.append("açık watch koşulu: " + ", ".join(sorted(k for k in open_keys if k.endswith(":" + a))))
             if reasons:

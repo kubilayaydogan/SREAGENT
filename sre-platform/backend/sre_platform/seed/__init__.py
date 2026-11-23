@@ -56,7 +56,7 @@ async def import_report(s, r: dict[str, Any]) -> bool:
         return False
     base = wins.get("baseline")
     kind = r.get("kind", "analyze")
-    title = {"watch-incident": "İçe aktarılan watch olayı analizi", "watch-recovery": "İçe aktarılan toparlanma analizi"}.get(
+    title = {"watch-incident": "İçe aktarılan watch olayı analizi", "watch-recovery": "İçe aktarılan recovery analizi"}.get(
         kind, "İçe aktarılan analiz") + f" ({run_id})"
     inv = await investigations.create(s, run_id=run_id, trigger=Trigger.IMPORT, title=title,
                                       window_start=_ts(win["start"]), window_end=_ts(win["end"]),

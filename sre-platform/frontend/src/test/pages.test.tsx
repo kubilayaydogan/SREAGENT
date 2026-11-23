@@ -70,13 +70,13 @@ const unavailable: DashboardSummary = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("DashboardPage", () => {
-  it("Dynatrace verisi yoksa bunu açıkça söyler ve metrikleri '—' gösterir (sahte değer yok)", async () => {
+  it("Dynatrace verisi yoksa bunu açıkça söyler ve metric'leri '—' gösterir (sahte değer yok)", async () => {
     tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
     mockFetch({ "/api/auth/me": USER, "/api/dashboard/summary": unavailable, "/api/applications": [] });
     wrap(<DashboardPage />);
     expect(await screen.findByText(/Dynatrace verisi alınamadı\./)).toBeInTheDocument();
     expect(screen.getByText("McpUnavailable: outage")).toBeInTheDocument();
-    for (const label of ["P95 (en kötü uygulama)", "P99 (en kötü uygulama)", "Throughput", "Hata oranı", "Ortalama yanıt", "PostgreSQL bağlantı kullanımı"]) {
+    for (const label of ["P95 (en kötü uygulama)", "P99 (en kötü uygulama)", "Throughput", "Error rate", "Ortalama yanıt", "PostgreSQL connection kullanımı"]) {
       expect(within(screen.getByRole("group", { name: label })).getByText("—")).toBeInTheDocument();
     }
     expect(screen.queryByText("0 ms")).not.toBeInTheDocument();
@@ -116,7 +116,7 @@ describe("ActivityTimeline", () => {
     expect(steps).toMatchObject({ app_metrics: "done", db_metrics: "failed" });
     render(<ActivityTimeline steps={steps} tools={tools} />);
     expect(screen.getByLabelText("hata")).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: /PostgreSQL metrikleri/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /PostgreSQL metric'leri/ }));
     expect(screen.getByText("MCP timeout")).toBeInTheDocument();
   });
 });

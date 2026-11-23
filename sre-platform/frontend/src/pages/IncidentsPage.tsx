@@ -133,7 +133,7 @@ export default function IncidentsPage() {
         })}
       </div>
       <div className="mb-3 flex flex-wrap gap-2">
-        <SearchInput value={g("q")} onChange={(v) => set("q", v)} placeholder="Başlık, açıklama, kök neden…" />
+        <SearchInput value={g("q")} onChange={(v) => set("q", v)} placeholder="Başlık, açıklama, Root Cause…" />
         <AppSelect value={g("app")} onChange={(v) => set("app", v)} />
         <Select aria-label="önem" value={g("severity")} onChange={(e) => set("severity", e.target.value)} className="w-36">
           <option value="">Tüm önemler</option>

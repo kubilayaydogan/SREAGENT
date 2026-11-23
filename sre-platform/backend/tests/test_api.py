@@ -189,7 +189,7 @@ def test_incident_rca_feedback_approval_flow(api_settings, tmp_path):
         g = await c.post(f"/api/rca/{inv_id}/generate", headers=sre, json={"incident_id": inc["id"]})
         assert g.status_code == 201, g.text
         rc = g.json()
-        assert rc["suspected_root_cause"].startswith("Satır kilidi") and rc["confidence"] == "high"
+        assert rc["suspected_root_cause"].startswith("Row lock wait") and rc["confidence"] == "high"
         assert rc["timeline"] and rc["supporting_evidence"] and "## Güven / belirsizlik" in rc["markdown"]
         md = await c.get(f"/api/rca/{rc['id']}/markdown", headers=sre)
         assert md.status_code == 200 and md.text.startswith("# RCA:") and "attachment" in md.headers["content-disposition"]
@@ -278,11 +278,11 @@ def test_telemetry_compute_math_and_status():
     ck, rs, fo, bg = (out["apps"][a] for a in ("checkin-service", "reservation-service", "flightops-service",
                                                "baggage-service"))
     assert ck["throughput_rpm"] == 63.0 and ck["error_rate"] == round(3 / 63, 4) and ck["mean_ms"] == 10.0
-    assert ck["status"] == "degraded" and any("hata oranı" in x for x in ck["reasons"]) \
+    assert ck["status"] == "degraded" and any("error rate" in x for x in ck["reasons"]) \
         and any("p95 90 ms" in x for x in ck["reasons"])
     assert rs["status"] == "degraded" and rs["pool"]["last_ratio"] == 1.0 and rs["pool"]["pending_max"] == 2.0
     assert fo["status"] == "unknown" and fo["throughput_rpm"] is None      # container var, istek yok → veri yok
-    assert bg["status"] == "down" and bg["reasons"] == ["container metriği gelmiyor"]
+    assert bg["status"] == "down" and bg["reasons"] == ["container metric'i gelmiyor"]
     assert out["overall"]["p95_ms_worst"] == 90 and out["overall"]["p99_ms_worst"] == 150
     assert out["db"]["last_ratio"] == 0.4 and out["db"]["max_ratio"] == 0.4 and len(ck["series"]) == 15
     assert out["status_counts"] == {"degraded": 2, "unknown": 1, "down": 1}

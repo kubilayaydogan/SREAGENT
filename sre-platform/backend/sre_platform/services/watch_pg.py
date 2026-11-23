@@ -30,8 +30,8 @@ from ..repositories.base import Conflict
 
 log = logging.getLogger("sre.watch")
 WATCH_DEDUP = "watch"
-KIND_TR = {"latency": "gecikme artışı", "errors": "hata oranı artışı", "pool": "bağlantı havuzu doygunluğu",
-           "lock": "kilit bekleyen oturumlar", "db_conn": "PostgreSQL bağlantı baskısı", "cpu": "host CPU baskısı"}
+KIND_TR = {"latency": "latency artışı", "errors": "error rate artışı", "pool": "Connection Pool saturation",
+           "lock": "Lock Wait'teki session'lar", "db_conn": "PostgreSQL connection pressure", "cpu": "host CPU pressure"}
 
 
 def describe(key: str) -> str:
@@ -200,7 +200,7 @@ class PlatformWatcher(Watcher):
             inc_id, opened = inc.id, inc.detected_at
         start = opened - timedelta(minutes=self.cfg["watch"]["analysis_minutes"])
         done, _ = await self._investigate(inc_id, start, w.end, relation="recovery", mode="watch-recovery", app=None,
-                                          title="Watch toparlanma analizi", use_llm=False,
+                                          title="Watch recovery analizi", use_llm=False,
                                           notes=[f"tüm watch koşulları normale döndü ({iso(w.end)})"])
         async with transaction(self.rt.sm) as s:
             inc = await incidents.get(s, inc_id)

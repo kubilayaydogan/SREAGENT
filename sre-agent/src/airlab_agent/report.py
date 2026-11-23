@@ -7,7 +7,6 @@ from typing import Any
 
 from .redact import redact
 
-CONF_TR = {"high": "yüksek", "medium": "orta", "low": "düşük", None: "—"}
 
 
 def coverage_summary(quality: dict) -> dict:

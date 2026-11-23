@@ -29,7 +29,7 @@ def setup_tracing(settings) -> list:
         return [LangChainTracer(project_name=settings.langsmith_project, client=client,
                                 tags=["airlab", "sre-agent"])]
     except Exception as e:  # noqa: BLE001
-        log.warning("LangSmith izleme başlatılamadı, izlemesiz devam: %s", type(e).__name__)
+        log.warning("LangSmith tracing başlatılamadı, tracing olmadan devam: %s", type(e).__name__)
         return []
 
 

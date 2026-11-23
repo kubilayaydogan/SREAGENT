@@ -119,7 +119,7 @@ function ToolRow({ t }: { t: ToolItem }) {
         {t.records != null && t.state !== "failed" && <span className="text-muted">{t.records} kayıt</span>}
         {t.durationMs != null && <span className="text-muted">{fmtDuration(t.durationMs)}</span>}
         {t.queryId && (
-          <span className="font-mono text-[10px] text-muted" title="Dynatrace queryId (kanıt referansı)">
+          <span className="font-mono text-[10px] text-muted" title="Dynatrace queryId (evidence referansı)">
             q:{t.queryId.slice(0, 12)}
           </span>
         )}

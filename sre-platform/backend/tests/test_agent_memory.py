@@ -155,7 +155,7 @@ def test_analyze_turn_persists_everything(settings, lg_ready, tmp_path):
     assert all(tl.duration_ms is not None for tl in inv.tools)
     assert [m.role for m in msgs] == [MessageRole.USER, MessageRole.ASSISTANT]
     assert msgs[1].investigation_id == inv.id and msgs[1].meta["intent"] == "analyze"
-    assert res["suggestions"] and "Satır kilidi" in res["answer"]
+    assert res["suggestions"] and "Row lock wait" in res["answer"]
     assert [m["role"] for m in snap.values["messages"]] == ["user", "assistant"] and not snap.next
     # çekirdek analiz grafiğinin checkpoint'i de PostgreSQL'de
     eng = sa.create_engine(settings.database_url)
@@ -244,7 +244,7 @@ def test_llm_outage_falls_back_to_deterministic(settings, lg_ready, tmp_path):
             await rt.close()
     res, em = run(go)
     msgs = " ".join(e["data"].get("message", "") for e in em.events if e["type"] == "agent_thinking")
-    assert "kural tabanlı" in msgs and "deterministik" in msgs and "Satır kilidi" in res["answer"]
+    assert "kural tabanlı" in msgs and "deterministik" in msgs and "Row lock wait" in res["answer"]
 
 
 def test_cancel_marks_investigation_cancelled(settings, lg_ready, tmp_path):

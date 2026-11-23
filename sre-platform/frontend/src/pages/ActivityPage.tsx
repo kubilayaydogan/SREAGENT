@@ -71,7 +71,7 @@ function ManualInvestigation() {
         </div>
         <div>
           <Label>Başlık (isteğe bağlı)</Label>
-          <Input value={title} maxLength={300} onChange={(e) => setTitle(e.target.value)} placeholder="örn. Check-in gecikmesi 14:20" />
+          <Input value={title} maxLength={300} onChange={(e) => setTitle(e.target.value)} placeholder="örn. Check-in latency 14:20" />
         </div>
         <label className="flex items-center gap-2 text-xs text-ink-2">
           <input type="checkbox" checked={useLlm} onChange={(e) => setUseLlm(e.target.checked)} className="accent-[#3987e5]" />
@@ -154,7 +154,7 @@ function InvestigationActivity({ id }: { id: string }) {
           <div className="space-y-2 text-sm">
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div className="rounded-md border border-line p-2">
-                <div className="text-muted">Sorgu</div>
+                <div className="text-muted">Query</div>
                 <div className="text-lg text-ink tabular-nums">{tools.data?.length ?? "—"}</div>
               </div>
               <div className="rounded-md border border-line p-2">
@@ -164,13 +164,13 @@ function InvestigationActivity({ id }: { id: string }) {
                 </div>
               </div>
               <div className="rounded-md border border-line p-2">
-                <div className="text-muted">Toplam sorgu süresi</div>
+                <div className="text-muted">Toplam query süresi</div>
                 <div className="text-lg text-ink tabular-nums">{fmtDuration(totalMs)}</div>
               </div>
             </div>
             {inv.data?.primary_mechanism && (
               <p className="text-xs text-ink-2">
-                Olası mekanizma: <b className="text-ink">{mechanismLabel(inv.data.primary_mechanism)}</b>
+                Olası mechanism: <b className="text-ink">{mechanismLabel(inv.data.primary_mechanism)}</b>
               </p>
             )}
             {inv.data?.error && <p className="font-mono text-xs text-[#f08a8a]">{inv.data.error}</p>}
@@ -191,7 +191,7 @@ export default function ActivityPage() {
   const recent = useInvestigations({ size: 15 });
   return (
     <div className="mx-auto max-w-[1500px] p-4 lg:p-6">
-      <PageHeader title="Agent Activity" description="Ajanın çalışma adımları: araç, durum, süre, hata ve kanıt referansları" />
+      <PageHeader title="Agent Activity" description="Ajanın çalışma adımları: araç, durum, süre, error ve evidence referansları" />
       <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
         <div className="space-y-4">
           <Card>

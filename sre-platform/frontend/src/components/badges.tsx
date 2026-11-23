@@ -54,7 +54,7 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
     unknown: [ST.unknown, <CircleHelp key="i" />],
   };
   return (
-    <Pill cls={m[severity][0]} icon={m[severity][1]} title={severity === "unknown" ? "Veri kapsamı yetersiz; risk hesaplanamadı" : undefined}>
+    <Pill cls={m[severity][0]} icon={m[severity][1]} title={severity === "unknown" ? "Data coverage yetersiz; risk score hesaplanamadı" : undefined}>
       {SEVERITY_LABEL[severity]}
     </Pill>
   );

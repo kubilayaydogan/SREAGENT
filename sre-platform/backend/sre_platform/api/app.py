@@ -122,7 +122,7 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
 
     @app.exception_handler(PoolTimeout)
     async def _pt(_, e):
-        return _err(503, "db_busy", "veritabanı bağlantı havuzu dolu; kısa süre sonra tekrar deneyin")
+        return _err(503, "db_busy", "veritabanı Connection Pool dolu; kısa süre sonra tekrar deneyin")
 
     @app.exception_handler(OperationalError)
     async def _oe(_, e):

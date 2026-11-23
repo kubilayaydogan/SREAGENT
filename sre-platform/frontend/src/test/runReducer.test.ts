@@ -17,7 +17,7 @@ describe("runReducer", () => {
       ev("tool_completed", { id: "t1", tool: "execute-dql", signal: "http", step: "app_metrics", status: "OK", records: 12, duration_ms: 340, dynatrace_query_id: "q-1" }),
       ev("evidence_found", { evidence_key: "E1", signal: "http", records: 12 }),
       ev("tool_failed", { id: "t2", tool: "execute-dql", signal: "db_conn", step: "db_metrics", status: "ERROR", error: "timeout" }),
-      ev("agent_thinking", { step: "correlate", node: "analyze", message: "Kanıtlar ilişkilendirildi." }),
+      ev("agent_thinking", { step: "correlate", node: "analyze", message: "Evidence ilişkilendirildi." }),
       ev("token", { text: "Merhaba " }),
       ev("token", { text: "dünya" }),
       ev("suggestions", { items: ["Önceki araştırmalarla karşılaştır"] }),
@@ -39,7 +39,7 @@ describe("runReducer", () => {
     expect(s.investigation?.status).toBe("PARTIAL");
   });
 
-  it("bütçe nedeniyle atlanan ve boş dönen sorguları ayırt eder", () => {
+  it("budget nedeniyle atlanan ve boş dönen query'leri ayırt eder", () => {
     const s = play([
       ev("tool_completed", { id: "a", signal: "spans", step: "traces", status: "EMPTY", records: 0 }),
       ev("tool_completed", { id: "b", signal: "hosts", step: "infra", status: "SKIPPED_BUDGET" }),

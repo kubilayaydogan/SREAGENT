@@ -89,7 +89,7 @@ def cmd_doctor(a):
             print(f"  {s.claude_model}: ERİŞİLEMEDİ ({e}) — agent deterministik açıklamayla çalışır")
     print("== LangSmith")
     p, why = langsmith_ping(s)
-    print(f"  izleme={'açık' if s.langsmith_tracing else 'kapalı'}  erişim={'OK' if p else 'yok'} ({why})"
+    print(f"  tracing={'açık' if s.langsmith_tracing else 'kapalı'}  erişim={'OK' if p else 'yok'} ({why})"
           " — LangSmith yoksa agent çalışmaya devam eder")
     print("\nSONUÇ:", "OK" if ok else "UYARI (bazı sinyaller OK/EMPTY değil)")
     return 0 if ok else 1

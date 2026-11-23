@@ -12,13 +12,13 @@ EventType = Literal["investigation_started", "tool_started", "tool_completed", "
 # Agent Activity ekranındaki adımlar (sinyal → adım)
 STEPS = [
     ("start", "Araştırma başladı"),
-    ("app_metrics", "Uygulama metrikleri"),
-    ("db_metrics", "PostgreSQL metrikleri"),
-    ("logs", "Hata / kilit logları"),
-    ("traces", "Dağıtık izler (trace)"),
+    ("app_metrics", "Uygulama metric'leri"),
+    ("db_metrics", "PostgreSQL metric'leri"),
+    ("logs", "Error / lock logları"),
+    ("traces", "Distributed Tracing (trace)"),
     ("infra", "Host ve container kaynakları"),
-    ("extra", "Ek kanıt"),
-    ("correlate", "Kanıt ilişkilendirme"),
+    ("extra", "Ek evidence"),
+    ("correlate", "Evidence correlation"),
     ("memory", "Geçmiş kayıtlar"),
     ("rca", "RCA / yanıt üretimi"),
     ("save", "Kaydetme"),
@@ -30,8 +30,8 @@ SIGNAL_STEP = {"http": "app_metrics", "hikari": "app_metrics", "jvm_gc": "app_me
                "edges_detail": "extra", "top_statements": "extra", "slow_traces": "traces", "problems": "extra"}
 NODE_MESSAGE = {"plan": "Analiz penceresi ve karşılaştırma (baseline) penceresi belirlendi.",
                 "collect": "Dynatrace verileri toplandı.",
-                "analyze": "Kanıtlar ilişkilendirildi ve risk puanı hesaplandı.",
-                "extra_evidence": "Mekanizmayı doğrulamak için ek kanıt toplandı.",
+                "analyze": "Evidence ilişkilendirildi ve risk score hesaplandı.",
+                "extra_evidence": "Mechanism'i doğrulamak için ek evidence toplandı.",
                 "explain": "Bulgular özetlendi.",
                 "finalize": "Analiz raporu hazırlandı."}
 

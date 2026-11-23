@@ -100,7 +100,7 @@ export function FeedbackBar({ investigationId, rcaId, className }: { investigati
             </label>
           </div>
           <label className="block text-xs text-ink-2">
-            Yorum (gerçek kök neden, eksik kanıt…)
+            Yorum (gerçek Root Cause, eksik evidence…)
             <Textarea className="mt-1" rows={4} maxLength={4000} value={comment} onChange={(e) => setComment(e.target.value)} />
           </label>
         </div>

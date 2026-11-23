@@ -107,7 +107,7 @@ class McpGateway:
     # ---- sorgu
     async def _one(self, session, key: str, dql: str) -> QueryResult:
         if self.queries_used >= self.max_queries:
-            r = QueryResult(key, dql, "SKIPPED_BUDGET", error="sorgu bütçesi doldu")
+            r = QueryResult(key, dql, "SKIPPED_BUDGET", error="query budget doldu")
             self._emit({"phase": "end", "key": key, "dql": dql, "status": r.status, "records": 0, "query_id": None,
                         "elapsed_ms": 0, "error": r.error, "evidence_id": r.evidence_id})
             return r

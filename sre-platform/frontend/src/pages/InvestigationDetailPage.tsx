@@ -26,16 +26,16 @@ function Summary({ inv }: { inv: InvestigationDetail }) {
       </Card>
       <div className="space-y-4">
         <Card>
-          <CardHeader title="Kök neden hipotezi" />
+          <CardHeader title="Root Cause hipotezi" />
           <CardBody className="space-y-2 text-sm">
-            <p className="text-ink">{inv.root_cause_hypothesis ?? "Tanımlı mekanizmalarla açıklanamadı."}</p>
+            <p className="text-ink">{inv.root_cause_hypothesis ?? "Tanımlı mechanism'lerle açıklanamadı."}</p>
             <ConfidenceBadge confidence={inv.confidence} />
             <p className="text-[11px] text-muted">Korelasyon temelli hipotezdir; doğrulama gerektirir.</p>
           </CardBody>
         </Card>
         {!!r.data_gaps?.length && (
           <Card>
-            <CardHeader title="Veri boşlukları" />
+            <CardHeader title="Data gap'ler" />
             <CardBody>
               <ul className="space-y-1 text-xs text-ink-2">
                 {r.data_gaps.map((g) => (
@@ -50,7 +50,7 @@ function Summary({ inv }: { inv: InvestigationDetail }) {
         )}
       </div>
       <Card className="xl:col-span-2">
-        <CardHeader title="Mekanizmalar" description="Deterministik ilişkilendirme sonucu" />
+        <CardHeader title="Mechanism'ler" description="Deterministik ilişkilendirme sonucu" />
         {mechs.length ? (
           <ul className="divide-y divide-line">
             {mechs.map((m) => (
@@ -58,13 +58,13 @@ function Summary({ inv }: { inv: InvestigationDetail }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-ink">{m.title}</span>
                   {m.id === inv.primary_mechanism && <span className="rounded bg-accent/15 px-1.5 text-[11px] text-[#8ab8f0]">birincil</span>}
-                  {m.secondary_to && <span className="text-[11px] text-muted">ikincil: {mechanismLabel(m.secondary_to)}</span>}
+                  {m.secondary_to && <span className="text-[11px] text-muted">secondary: {mechanismLabel(m.secondary_to)}</span>}
                 </div>
                 {m.mechanism && <p className="mt-1 text-xs text-ink-2">{m.mechanism}</p>}
                 <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
                   {!!m.source_apps?.length && (
                     <span className="inline-flex items-center gap-1.5">
-                      kaynak: {m.source_apps.map((a) => <AppTag key={a} id={a} />)}
+                      source: {m.source_apps.map((a) => <AppTag key={a} id={a} />)}
                     </span>
                   )}
                   {!!m.affected_apps?.length && (
@@ -78,7 +78,7 @@ function Summary({ inv }: { inv: InvestigationDetail }) {
             ))}
           </ul>
         ) : (
-          <EmptyState title="Mekanizma tespit edilmedi" description="Baseline'a göre anlamlı bir bozulma veya tanımlı bir mekanizma bulunamadı." />
+          <EmptyState title="Mechanism tespit edilmedi" description="Baseline'a göre anlamlı bir bozulma veya tanımlı bir mechanism bulunamadı." />
         )}
       </Card>
       <Card>
@@ -121,7 +121,7 @@ function Compare({ inv }: { inv: InvestigationDetail }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
-        <CardHeader title="Benzer geçmiş araştırmalar" description="Aynı mekanizma ve uygulama kümesi, yakınlığa göre" />
+        <CardHeader title="Benzer geçmiş araştırmalar" description="Aynı mechanism ve uygulama kümesi, yakınlığa göre" />
         {sim.isLoading ? (
           <Skeleton className="m-4 h-32" />
         ) : sim.error ? (
@@ -131,7 +131,7 @@ function Compare({ inv }: { inv: InvestigationDetail }) {
             <thead className="text-left text-xs text-muted">
               <tr className="border-b border-line">
                 <th className="px-4 py-2 font-medium">Araştırma</th>
-                <th className="px-4 py-2 font-medium">Mekanizma</th>
+                <th className="px-4 py-2 font-medium">Mechanism</th>
                 <th className="px-4 py-2 text-right font-medium">Risk</th>
                 <th className="px-4 py-2 font-medium">Önem</th>
               </tr>
@@ -163,7 +163,7 @@ function Compare({ inv }: { inv: InvestigationDetail }) {
             </tbody>
           </table>
         ) : (
-          <EmptyState icon={<GitCompare className="size-7" />} title="Benzer geçmiş kayıt yok" description="Bu mekanizma/uygulama kombinasyonu ilk kez görülüyor." />
+          <EmptyState icon={<GitCompare className="size-7" />} title="Benzer geçmiş kayıt yok" description="Bu mechanism/uygulama kombinasyonu ilk kez görülüyor." />
         )}
       </Card>
       <Card>
@@ -276,7 +276,7 @@ export default function InvestigationDetailPage() {
       </div>
       {d?.status === "PARTIAL" && (
         <div role="status" className="mb-4 flex gap-2 rounded-md border border-st-warning/40 bg-st-warning/10 px-4 py-2.5 text-xs text-ink-2">
-          <AlertTriangle className="size-4 shrink-0 text-st-warning" /> Kısmi veri: bazı Dynatrace sorguları başarısız oldu veya veri dönmedi. Sonuçlar eksik kanıtla üretildi.
+          <AlertTriangle className="size-4 shrink-0 text-st-warning" /> Kısmi veri: bazı Dynatrace query'leri başarısız oldu veya veri dönmedi. Sonuçlar eksik evidence ile üretildi.
         </div>
       )}
       {d?.error && <div className="mb-4 rounded-md border border-st-critical/40 bg-st-critical/10 px-4 py-2.5 font-mono text-xs text-ink">{d.error}</div>}
@@ -285,7 +285,7 @@ export default function InvestigationDetailPage() {
         onValueChange={setTab}
         tabs={[
           { value: "summary", label: "Özet" },
-          { value: "evidence", label: "Kanıtlar" },
+          { value: "evidence", label: "Evidence" },
           { value: "tools", label: "Araç çalıştırmaları" },
           { value: "compare", label: "Geçmişle karşılaştır" },
           { value: "rca", label: `RCA raporları${rcas.data?.total ? ` (${rcas.data.total})` : ""}` },

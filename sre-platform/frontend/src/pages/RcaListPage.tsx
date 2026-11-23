@@ -19,9 +19,9 @@ export default function RcaListPage() {
   const { data, isLoading, error, refetch } = useRcas({ q: g("q"), application_id: g("app"), page: Number(g("page") || 1), size: 25 });
   return (
     <div className="mx-auto max-w-[1500px] p-4 lg:p-6">
-      <PageHeader title="RCA Raporları" description="Kaydedilmiş kök neden analizleri; tekrar açılabilir ve Markdown olarak dışa aktarılabilir" />
+      <PageHeader title="RCA Raporları" description="Kaydedilmiş RCA (Root Cause Analysis) raporları; tekrar açılabilir ve Markdown olarak dışa aktarılabilir" />
       <div className="mb-3 flex flex-wrap gap-2">
-        <SearchInput value={g("q")} onChange={(v) => set("q", v)} placeholder="Başlık, özet, kök neden…" />
+        <SearchInput value={g("q")} onChange={(v) => set("q", v)} placeholder="Başlık, özet, Root Cause…" />
         <AppSelect value={g("app")} onChange={(v) => set("app", v)} />
       </div>
       <Card>

@@ -43,7 +43,7 @@ export default function HistoryPage() {
     <div className="mx-auto max-w-[1500px] p-4 lg:p-6">
       <PageHeader title="Araştırma Geçmişi" description="PostgreSQL'de saklanan tüm araştırmalar (sohbet, manuel, zamanlanmış, watch)" />
       <Card className="mb-4 flex flex-wrap items-end gap-2 p-3">
-        <SearchInput value={g("q")} onChange={(v) => set("q", v)} placeholder="Başlık, kök neden, açıklama…" />
+        <SearchInput value={g("q")} onChange={(v) => set("q", v)} placeholder="Başlık, Root Cause, açıklama…" />
         <AppSelect value={g("app")} onChange={(v) => set("app", v)} />
         <Select aria-label="durum" value={g("status")} onChange={(e) => set("status", e.target.value)} className="w-36">
           <option value="">Tüm durumlar</option>
@@ -61,8 +61,8 @@ export default function HistoryPage() {
             </option>
           ))}
         </Select>
-        <Select aria-label="mekanizma" value={g("mechanism")} onChange={(e) => set("mechanism", e.target.value)} className="w-48">
-          <option value="">Tüm mekanizmalar</option>
+        <Select aria-label="mechanism" value={g("mechanism")} onChange={(e) => set("mechanism", e.target.value)} className="w-48">
+          <option value="">Tüm mechanism türleri</option>
           {Object.entries(MECHANISM_LABEL).map(([k, l]) => (
             <option key={k} value={k}>
               {l}
@@ -107,7 +107,7 @@ export default function HistoryPage() {
                   <tr className="border-b border-line">
                     <th className="px-4 py-2 font-medium">Araştırma</th>
                     <th className="px-4 py-2 font-medium">Uygulamalar</th>
-                    <th className="px-4 py-2 font-medium">Mekanizma</th>
+                    <th className="px-4 py-2 font-medium">Mechanism</th>
                     <th className="px-4 py-2 font-medium">Önem</th>
                     <th className="px-4 py-2 text-right font-medium">Risk</th>
                     <th className="px-4 py-2 text-right font-medium">Kapsam</th>

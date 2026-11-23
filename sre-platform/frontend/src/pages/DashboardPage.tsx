@@ -102,17 +102,17 @@ export default function DashboardPage() {
                   {counts.down ?? 0}
                 </span>
               }
-              sub={counts.unknown ? `${counts.unknown} uygulamada veri yok` : "durum Dynatrace metriklerinden"}
+              sub={counts.unknown ? `${counts.unknown} uygulamada veri yok` : "durum Dynatrace metric'lerinden"}
             />
             <StatTile label="Aktif incident" icon={<Siren />} loading={loading} value={fmtNum(d?.active_incidents)} sub={<Link to="/incidents?status=OPEN,INVESTIGATING,MITIGATED" className="hover:text-ink">listeyi aç →</Link>} />
             <StatTile label="Açık araştırma" icon={<Search />} loading={loading} value={fmtNum(d?.open_investigations)} sub={`7 günde ${d?.investigation_stats_7d.total ?? 0} araştırma`} />
             <StatTile label="Ortalama yanıt" icon={<Timer />} loading={loading} value={fmtMs(o.mean_ms)} missing={o.mean_ms == null} sub="HTTP, istek ağırlıklı" />
             <StatTile label="Throughput" icon={<TrendingUp />} loading={loading} value={o.throughput_rpm == null ? "—" : `${fmtNum(o.throughput_rpm, 1)}/dk`} missing={o.throughput_rpm == null} sub="istek / dakika" />
-            <StatTile label="P95 (en kötü uygulama)" loading={loading} value={fmtMs(o.p95_ms_worst)} missing={o.p95_ms_worst == null} sub="span gecikmesi" />
-            <StatTile label="P99 (en kötü uygulama)" loading={loading} value={fmtMs(o.p99_ms_worst)} missing={o.p99_ms_worst == null} sub="span gecikmesi" />
-            <StatTile label="Hata oranı" loading={loading} value={fmtPct(o.error_rate, 2)} missing={o.error_rate == null} sub="5xx / toplam" />
+            <StatTile label="P95 (en kötü uygulama)" loading={loading} value={fmtMs(o.p95_ms_worst)} missing={o.p95_ms_worst == null} sub="span latency" />
+            <StatTile label="P99 (en kötü uygulama)" loading={loading} value={fmtMs(o.p99_ms_worst)} missing={o.p99_ms_worst == null} sub="span latency" />
+            <StatTile label="Error rate" loading={loading} value={fmtPct(o.error_rate, 2)} missing={o.error_rate == null} sub="5xx / toplam" />
             <StatTile
-              label="PostgreSQL bağlantı kullanımı"
+              label="PostgreSQL connection kullanımı"
               icon={<Database />}
               loading={loading}
               value={fmtPct(o.db_connection_ratio, 0)}
@@ -125,16 +125,16 @@ export default function DashboardPage() {
           <div className="mt-4 grid gap-4 xl:grid-cols-3">
             <Card className="xl:col-span-2">
               <CardHeader
-                title="Uygulama metrikleri"
+                title="Uygulama metric'leri"
                 description="Tek eksen; boşluk = o aralıkta veri yok"
                 actions={
-                  <div role="radiogroup" aria-label="metrik" className="inline-flex rounded-md border border-line-strong bg-surface-2 p-0.5">
+                  <div role="radiogroup" aria-label="metric" className="inline-flex rounded-md border border-line-strong bg-surface-2 p-0.5">
                     {(
                       [
                         ["p95_ms", "P95"],
                         ["mean_ms", "Ortalama"],
                         ["rpm", "Throughput"],
-                        ["error_rate", "Hata oranı"],
+                        ["error_rate", "Error rate"],
                       ] as [Metric, string][]
                     ).map(([k, l]) => (
                       <button key={k} role="radio" aria-checked={metric === k} onClick={() => setMetric(k)} className={`rounded px-2 py-0.5 text-xs ${metric === k ? "bg-surface-3 text-ink" : "text-muted hover:text-ink"}`}>
@@ -221,7 +221,7 @@ export default function DashboardPage() {
                     {!Object.keys(d?.applications ?? {}).length && (
                       <tr>
                         <td colSpan={9}>
-                          <EmptyState title="Uygulama metriği yok" description={d?.available === false ? "Dynatrace'e ulaşılamıyor." : "Bu aralıkta telemetri gelmedi."} />
+                          <EmptyState title="Uygulama metric'i yok" description={d?.available === false ? "Dynatrace'e ulaşılamıyor." : "Bu aralıkta telemetri gelmedi."} />
                         </td>
                       </tr>
                     )}

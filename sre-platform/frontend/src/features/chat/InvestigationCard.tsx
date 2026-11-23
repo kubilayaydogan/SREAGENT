@@ -31,15 +31,15 @@ export function InvestigationCard({ inv }: { inv: InvestigationSummary }) {
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 px-3 py-2 text-xs sm:grid-cols-4">
         <div>
-          <dt className="text-muted">Olası mekanizma</dt>
+          <dt className="text-muted">Olası mechanism</dt>
           <dd className="text-ink">{inv.mechanism ? mechanismLabel(inv.mechanism) : "tespit edilmedi"}</dd>
         </div>
         <div>
-          <dt className="text-muted">Risk puanı</dt>
+          <dt className="text-muted">Risk score</dt>
           <dd className="text-ink tabular-nums">{inv.risk_score == null ? "hesaplanamadı" : fmtNum(inv.risk_score, 1)}</dd>
         </div>
         <div>
-          <dt className="text-muted">Veri kapsamı</dt>
+          <dt className="text-muted">Data coverage</dt>
           <dd className={inv.data_coverage != null && inv.data_coverage < 0.6 ? "text-st-warning" : "text-ink"}>{fmtPct(inv.data_coverage, 0)}</dd>
         </div>
         <div>

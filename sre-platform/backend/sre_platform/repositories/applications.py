@@ -8,12 +8,12 @@ from ..db.models import Application
 from .base import NotFound
 
 DESCRIPTIONS = {
-    "reservation-service": ("Reservation", "Rezervasyon oluşturma/sorgulama (hot-row kilit senaryolarının kaynağı olabilir)"),
+    "reservation-service": ("Reservation", "Rezervasyon oluşturma/görüntüleme (hot-row lock senaryolarının source'u olabilir)"),
     "checkin-service": ("Check-in", "Yolcu check-in işlemleri"),
     "flightops-service": ("Flight Ops", "Uçuş operasyonları"),
     "baggage-service": ("Baggage", "Bagaj takibi"),
     "chaos-controller": ("Chaos Controller", "Kontrollü yük/kaos üreticisi (araç)"),
-    "pg-lock-collector": ("PG Lock Collector", "PostgreSQL kilit/oturum toplayıcısı (araç)"),
+    "pg-lock-collector": ("PG Lock Collector", "PostgreSQL lock/session collector (araç)"),
     "sre-agent": ("SRE Agent", "Bu platformun analiz çekirdeği (araç)"),
 }
 

@@ -87,7 +87,7 @@ async def health_check(rt, params: dict) -> dict[str, Any]:
                         s, title=f"Sağlık kontrolü: {done.root_cause_hypothesis or done.primary_mechanism}"[:300],
                         source=IncidentSource.AGENT, severity=done.severity, investigation_id=done.id,
                         application_id=done.application_id, dedup_key=f"health:{done.primary_mechanism}",
-                        description="Zamanlanmış sağlık kontrolü yüksek riskli bir mekanizma tespit etti.")
+                        description="Zamanlanmış health check yüksek riskli bir mechanism tespit etti.")
                     out["incident_created"] = True
                 except Conflict:
                     target = await incidents.open_by_dedup(s, f"health:{done.primary_mechanism}")

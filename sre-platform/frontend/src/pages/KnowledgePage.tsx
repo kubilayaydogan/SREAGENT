@@ -46,7 +46,7 @@ function IssueDetail({ id }: { id: string }) {
       {[
         ["Açıklama", k.description],
         ["Belirtiler", k.symptoms],
-        ["Kök neden", k.root_cause],
+        ["Root Cause", k.root_cause],
         ["Çözüm", k.resolution],
       ].map(([t, v]) =>
         v ? (
@@ -75,7 +75,7 @@ function IssueDetail({ id }: { id: string }) {
         )}
       </div>
       <div>
-        <div className="mb-1 text-xs font-medium text-ink">Aynı mekanizmalı araştırmalar</div>
+        <div className="mb-1 text-xs font-medium text-ink">Aynı mechanism ile araştırmalar</div>
         {k.related_investigations.length ? (
           <ul className="divide-y divide-line rounded-md border border-line">
             {k.related_investigations.map((i) => (
@@ -168,7 +168,7 @@ function NewIssue({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boo
             <AppSelect value={f.application_id} onChange={(v) => setF({ ...f, application_id: v })} allLabel="—" className="w-full" />
           </div>
           <div>
-            <Label>Mekanizma</Label>
+            <Label>Mechanism</Label>
             <Select value={f.mechanism} onChange={(e) => setF({ ...f, mechanism: e.target.value })}>
               <option value="">—</option>
               {Object.entries(MECHANISM_LABEL).map(([k, l]) => (
@@ -181,7 +181,7 @@ function NewIssue({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boo
         </div>
         {(["symptoms", "root_cause", "resolution"] as const).map((k) => (
           <div key={k}>
-            <Label>{{ symptoms: "Belirtiler", root_cause: "Kök neden", resolution: "Çözüm" }[k]}</Label>
+            <Label>{{ symptoms: "Belirtiler", root_cause: "Root Cause", resolution: "Çözüm" }[k]}</Label>
             <Textarea rows={3} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
           </div>
         ))}
@@ -240,8 +240,8 @@ export default function KnowledgePage() {
         <div className="mb-3 flex flex-wrap gap-2">
           <SearchInput value={g("q")} onChange={(v) => set({ q: v, page: "" })} placeholder="Ara…" />
           <AppSelect value={g("app")} onChange={(v) => set({ app: v, page: "" })} />
-          <Select aria-label="mekanizma" value={g("mechanism")} onChange={(e) => set({ mechanism: e.target.value, page: "" })} className="w-52">
-            <option value="">Tüm mekanizmalar</option>
+          <Select aria-label="mechanism" value={g("mechanism")} onChange={(e) => set({ mechanism: e.target.value, page: "" })} className="w-52">
+            <option value="">Tüm mechanism türleri</option>
             {Object.entries(MECHANISM_LABEL).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}

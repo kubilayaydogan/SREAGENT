@@ -107,7 +107,7 @@ function EditDialog({ inc, open, onOpenChange }: { inc: IncidentDetail; open: bo
           <Textarea rows={3} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
         </div>
         <div>
-          <Label>Kök neden</Label>
+          <Label>Root Cause</Label>
           <Textarea rows={3} value={f.root_cause} onChange={(e) => setF({ ...f, root_cause: e.target.value })} />
         </div>
         <div>
@@ -230,11 +230,11 @@ export default function IncidentDetailPage() {
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
           <Card>
-            <CardHeader title="Açıklama ve kök neden" />
+            <CardHeader title="Açıklama ve Root Cause" />
             <CardBody className="space-y-3 text-sm">
               {inc.description ? <Markdown>{inc.description}</Markdown> : <p className="text-muted">Açıklama yok.</p>}
               <div>
-                <div className="mb-1 text-xs font-medium text-ink">Kök neden</div>
+                <div className="mb-1 text-xs font-medium text-ink">Root Cause</div>
                 <p className={inc.root_cause ? "text-ink-2" : "text-muted"}>{inc.root_cause ?? "Henüz belirlenmedi."}</p>
               </div>
               <div>

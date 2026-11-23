@@ -21,7 +21,7 @@ const EXAMPLES = [
   "Reservation uygulaması neden yavaşladı?",
   "Son 30 dakikada PostgreSQL bağlantı sorunları var mı?",
   "Bu incident daha önce yaşandı mı?",
-  "Son 24 saatin hata oranlarını analiz et.",
+  "Son 24 saatin error rate'lerini analiz et.",
 ];
 
 function Suggestions({ items, onPick, disabled }: { items: string[]; onPick: (s: string) => void; disabled?: boolean }) {
@@ -99,7 +99,7 @@ function LiveAnswer({ s }: { s: RunState }) {
         <details open={!s.text} className="mb-2 rounded-md border border-line bg-page/40 px-3 py-2">
           <summary className="cursor-pointer text-xs text-ink-2">
             Ajan adımları · {s.tools.filter((t) => t.state !== "running").length}/{s.tools.length} sorgu
-            {s.evidence.length > 0 && ` · ${s.evidence.length} kanıt`}
+            {s.evidence.length > 0 && ` · ${s.evidence.length} evidence`}
           </summary>
           <div className="mt-2">
             <ActivityTimeline steps={s.steps} tools={s.tools} compact hideEmpty />
@@ -111,7 +111,7 @@ function LiveAnswer({ s }: { s: RunState }) {
         <div role="alert" className="mt-2 flex items-start gap-2 rounded-md border border-st-critical/40 bg-st-critical/10 px-3 py-2 text-xs text-ink">
           <AlertTriangle className="mt-px size-4 shrink-0 text-st-critical" />
           <span>
-            {s.error.code === "cancelled" ? "Çalıştırma iptal edildi." : s.error.code === "timeout" ? "Zaman aşımı: analiz süre sınırını aştı." : s.error.message}
+            {s.error.code === "cancelled" ? "Çalıştırma iptal edildi." : s.error.code === "timeout" ? "Timeout: analiz süre sınırını aştı." : s.error.message}
           </span>
         </div>
       )}
@@ -241,7 +241,7 @@ export default function InvestigatePage() {
               <EmptyState
                 icon={<Sparkles className="size-9 text-accent" />}
                 title="airlab SRE Agent'a soru sorun"
-                description="Ajan Dynatrace MCP üzerinden uygulama, PostgreSQL, log ve trace verilerini toplar; kanıtları ilişkilendirir ve geçmiş araştırmalarla karşılaştırır."
+                description="Ajan Dynatrace MCP üzerinden uygulama, PostgreSQL, log ve trace verilerini toplar; evidence'ı ilişkilendirir ve geçmiş araştırmalarla karşılaştırır."
                 action={canRun ? <Suggestions items={EXAMPLES} onPick={(s) => send(s, null)} /> : undefined}
               />
             )}

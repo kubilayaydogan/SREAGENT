@@ -76,7 +76,7 @@ def suggestions_for(route: dict, inv: dict | None, memory: dict | None) -> list[
             out.append("Bu araştırma için RCA raporu oluştur.")
     else:
         out.append("Son 30 dakikayı analiz et.")
-        out.append("Son 24 saatin hata oranlarını analiz et.")
+        out.append("Son 24 saatin error rate'lerini analiz et.")
         if memory and memory.get("incidents"):
             out.append("Önceki incident nasıl çözülmüştü?")
     return out[:4]
@@ -105,7 +105,7 @@ def _det_history(memory: dict) -> str:
             lines.append(f"- `{i.get('ref', '')}` {i.get('title') or i.get('excerpt', '')} {when} {extra}".rstrip())
     if memory.get("last_investigation"):
         li = memory["last_investigation"]
-        lines.append(f"\nSon araştırma: `{li['ref']}` {li['title']} — {li.get('mechanism') or 'mekanizma yok'}")
+        lines.append(f"\nSon araştırma: `{li['ref']}` {li['title']} — {li.get('mechanism') or 'mechanism yok'}")
         any_ = True
     return "\n".join(lines) if any_ else ("Bu soruya uyan kayıt bulunamadı. Güncel durum için örneğin "
                                           "\"Son 30 dakikayı analiz et\" diye sorabilirsiniz.")
@@ -121,7 +121,7 @@ def data_banner(report: dict | None) -> str:
     if report.get("status") == "partial" or errs:
         parts.append("Dynatrace verisi eksik; sonuç KISMİ." + (" " + " ".join(e[:200] for e in errs[:2]) if errs else ""))
     if cov is not None and cov < 0.6:
-        parts.append(f"Veri kapsamı düşük (%{cov * 100:.0f}); risk puanı güvenilir değil veya hesaplanmadı.")
+        parts.append(f"Data coverage düşük (%{cov * 100:.0f}); risk score güvenilir değil veya hesaplanmadı.")
     return ("> **Uyarı:** " + " ".join(parts) + "\n\n") if parts else ""
 
 
@@ -159,7 +159,7 @@ class ChatOrchestrator:
                 d["intent"] = "analyze"           # takip edilecek önceki yanıt yok
             await ctx.emit("agent_thinking", {"step": "start", "message": {
                 "analyze": "Güncel telemetri analizi yapılacak.", "compare": "Güncel analiz yapılıp geçmişle karşılaştırılacak.",
-                "history": "Geçmiş kayıtlar aranacak (yeni telemetri sorgusu yok).",
+                "history": "Geçmiş kayıtlar aranacak (yeni telemetry query yok).",
                 "followup": "Önceki yanıt üzerinden devam ediliyor.", "smalltalk": "Genel soru."}[d["intent"]]})
             return {"route": d, "investigation": None, "memory": None}
 

@@ -53,7 +53,7 @@ class InvestigationRunner:
                                              "window": [start.isoformat(), end.isoformat()],
                                              "baseline": [b.isoformat() for b in baseline] if baseline else None})
         await emit("agent_thinking", {"step": "start", "message": "Dynatrace MCP üzerinden uygulama, PostgreSQL, log, "
-                                                                  "trace ve host sinyalleri sorgulanıyor."})
+                                                                  "trace ve host signal'leri için query çalıştırılıyor."})
         loop = asyncio.get_running_loop()
         q: asyncio.Queue = asyncio.Queue()
 
@@ -97,7 +97,7 @@ class InvestigationRunner:
 
         error, cancelled, state = None, False, None
         if timed_out:
-            error = f"araştırma zaman aşımı ({self.rt.ps.investigation_timeout_s} sn)"
+            error = f"investigation timeout ({self.rt.ps.investigation_timeout_s} sn)"
             fut.add_done_callback(lambda f: f.exception())          # arka plandaki thread'in sonucu yok sayılır
         else:
             try:
@@ -125,7 +125,7 @@ class InvestigationRunner:
             try:
                 await self._correlate(inv_id, start, end, emit)
             except Exception:  # noqa: BLE001 — ek kanıt toplanamazsa analiz sonucu geçerli kalır
-                log.exception("kanıt ilişkilendirme başarısız")
+                log.exception("evidence correlation başarısız")
         if error:
             await emit("error", {"code": "cancelled" if cancelled else "timeout" if timed_out else "analysis_failed",
                                  "message": error, "investigation_id": str(inv_id)})
@@ -135,7 +135,7 @@ class InvestigationRunner:
         """Yavaş trace kimlikleri + Davis problemleri → ek kanıt (puanlamayı değiştirmez)."""
         from ..services import correlation
         await emit("agent_thinking", {"step": "traces", "message": "En yavaş isteklerin trace kimlikleri ve Davis "
-                                                                   "problemleri kanıtlara ekleniyor."})
+                                                                   "problem'leri evidence'a ekleniyor."})
         events: list[dict] = []
         gw = self.rt.gateway_factory(on_event=events.append)
         res = await asyncio.to_thread(gw.run_many, correlation.queries(start, end, self.rt.agent.cfg))

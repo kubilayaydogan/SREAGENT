@@ -8,7 +8,7 @@ import { useAuth } from "@/services/auth";
 import { cn, fmtDuration, fmtRelative } from "@/lib/utils";
 import type { Job, JobRun } from "@/types/api";
 
-const JOB_TR: Record<string, string> = { watch: "Watch (sürekli izleme)", health_check: "Sağlık kontrolü", retention: "Saklama / temizlik" };
+const JOB_TR: Record<string, string> = { watch: "Watch (sürekli monitoring)", health_check: "Health check", retention: "Retention / cleanup" };
 
 /** Zamanlanmış işler (sre-worker). Kiralama sayesinde bir iş aynı anda tek worker'da çalışır. */
 export function JobsCard() {

@@ -15,10 +15,19 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
 
-from airlab_agent.llm import LlmUnavailable
+from airlab_agent.llm import LlmUnavailable, _log_terminology
+from airlab_agent.terminology import with_policy
 
 MECHANISMS = ("row_lock", "pool_saturation", "global_connection_pressure", "db_cpu", "app_vm_cpu", "independent_load")
 SCOPES = ("investigations", "incidents", "rca", "runbooks", "known_issues", "conversations")
+
+
+# Kullanıcı girdisini sınıflandırmak için Türkçe eş anlamlılar bilerek verilir (çıktı metni değil).
+_MECH_DESC = ("Soruda ima edilen mechanism; kullanıcı Türkçe yazabilir "
+              "(bağlantı havuzu/Connection Pool → pool_saturation, kilit/lock → row_lock)")  # term-ok
+# Arama yalnız iç kullanım içindir; eski kayıtlarda Türkçe karşılıklar da geçtiğinden recall için ikisi birden aranır.
+_SEARCH_DESC = ("Geçmiş tam metin araması için 1-4 anahtar kelime; teknik terimi İngilizce adıyla ve eski kayıtlar "
+                "için Türkçe karşılığıyla birlikte ver (ör. 'lock kilit')")  # term-ok
 
 
 class ChatRoute(BaseModel):
@@ -36,9 +45,8 @@ class ChatRoute(BaseModel):
         Field(default_factory=list, description="Geçmiş sorularında aranacak kayıt türleri")
     since_days: int | None = Field(None, description="Geçmiş araması için gün sınırı (ör. 'geçen hafta' → 7)")
     mechanism: Literal["row_lock", "pool_saturation", "global_connection_pressure", "db_cpu", "app_vm_cpu",
-                       "independent_load"] | None = Field(None, description="Soruda ima edilen mekanizma "
-                                                                            "(bağlantı havuzu → pool_saturation, kilit → row_lock)")
-    search_terms: str | None = Field(None, description="Geçmiş tam metin araması için 1-4 anahtar kelime (Türkçe)")
+                       "independent_load"] | None = Field(None, description=_MECH_DESC)
+    search_terms: str | None = Field(None, description=_SEARCH_DESC)
 
 
 ROUTE_SYSTEM = """Sen airlab SRE platformunun istek yönlendiricisisin. Kullanıcının Türkçe sorusunu yapılandırılmış
@@ -79,6 +87,8 @@ class ClaudePort:
             raise LlmUnavailable(f"{type(e).__name__}: {str(e)[:300]}") from None
 
     async def astream(self, system: str, human: str) -> AsyncIterator[str]:
+        # Merkezi garanti: kullanıcıya akan her yanıtın system prompt'unda terminology policy bulunur (idempotent).
+        system = with_policy(system)
         try:
             last = None
             async for chunk in self.llm.chat.astream([("system", system), ("human", human)],
@@ -94,6 +104,8 @@ class ClaudePort:
                             yield part["text"]
             if last is not None:
                 self.llm._track(last)
+                _log_terminology(last.text if isinstance(getattr(last, "text", None), str) else str(last.content),
+                                 "answer_stream")
         except Exception as e:  # noqa: BLE001
             raise LlmUnavailable(f"{type(e).__name__}: {str(e)[:300]}") from None
 
@@ -116,7 +128,7 @@ def heuristic_route(question: str, apps: list[str], app: str | None = None) -> C
         minutes = int(m.group(1)) * (1440 if unit == "gün" else 60 if unit.startswith("sa") else 1)
     focus = [a for a in apps if a.split("-")[0] in low] or ([app] if app else [])
     mech = ("pool_saturation" if ("havuz" in low or "connection pool" in low) else
-            "row_lock" if "kilit" in low or "lock" in low else
+            "row_lock" if "kilit" in low or "lock" in low else  # term-ok: kullanıcı girdisi
             "global_connection_pressure" if "bağlantı" in low else None)
     scope: list = []
     if "rca" in low:
