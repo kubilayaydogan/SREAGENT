@@ -205,8 +205,12 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
                 "evidence_ids": ev("hikari", "http"),
             })
 
-    # 3) Global bağlantı baskısı
-    if conn_ratio is not None and conn_ratio >= m["db_conn_ratio"]:
+    # 3) Global bağlantı baskısı: mutlak eşik VEYA belirgin göreli artış (ör. %31 → %63; 2026-11-24 chaos eval S10)
+    base_conn = _g(base["db"], "conn_ratio")
+    conn_rise = (conn_ratio - base_conn) if (conn_ratio is not None and base_conn is not None) else None
+    conn_rel = (conn_ratio is not None and conn_rise is not None and conn_ratio >= m["db_conn_ratio_rel_min"]
+                and conn_rise >= m["db_conn_rise"])
+    if conn_ratio is not None and (conn_ratio >= m["db_conn_ratio"] or conn_rel):
         deltas = {}
         for app in cfg["apps"]:
             cs, bs = _g(cur["apps"].get(app), "db_sessions"), _g(base["apps"].get(app), "db_sessions")
@@ -218,7 +222,10 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
             "source_apps": sources, "affected_apps": sorted(imp),
             "mechanism": "max_connections'a yaklaşıldı; yeni connection açmak isteyen tüm uygulamalar etkilenebilir "
                          "(connection pool'u zaten dolu olanlar daha az).",
-            "conn_ratio": round(conn_ratio, 3), "session_delta_by_app": {k: round(v, 2) for k, v in deltas.items()},
+            "conn_ratio": round(conn_ratio, 3),
+            "baseline_conn_ratio": round(base_conn, 3) if base_conn is not None else None,
+            "trigger": "absolute" if conn_ratio >= m["db_conn_ratio"] else "relative_rise",
+            "session_delta_by_app": {k: round(v, 2) for k, v in deltas.items()},
             "signals": ["airlab.pg.connections.used_ratio_normal"] + (["session artışı (uygulama bazında)"] if sources else []),
             "confidence": _conf(1 + bool(sources), bool(imp)), "evidence_ids": ev("db_conn", "db_sessions"),
         })
@@ -262,6 +269,57 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
             "signals": ["dt.host.cpu.usage (app-vm)"] + (["container CPU"] if top else []),
             "confidence": _conf(1 + bool(top), bool(imp)), "evidence_ids": ev("hosts", "containers"),
         })
+
+    # 5b) Tek uygulama container CPU'su: host eşiği aşılmasa da bir iş uygulamasının container'ı belirgin CPU harcıyor
+    #     (2026-11-24 chaos eval S11: baggage 0.03 → 0.74 core, host yalnız +11 puan). Yayılma beklenmez.
+    cc, bc = cur["containers"], base["containers"]
+    host_rise = (aph.get("cpu") - baph.get("cpu")) if (aph.get("cpu") is not None and baph.get("cpu") is not None) \
+        else None
+    for app in cfg["apps"]:
+        cores, bcores = _g(cc.get(app), "cpu_cores"), _g(bc.get(app), "cpu_cores")
+        if cores is None or bcores is None or cores - bcores < m["container_cpu_rise_cores"]:
+            continue
+        srcs = ["container CPU (dt.containers.cpu)"] + (["APP_VM CPU artışı"] if (host_rise or 0) >= 5 else [])
+        mechs.append({
+            "id": "app_container_cpu", "title": f"{app} container CPU saturation",
+            "source_apps": [app], "affected_apps": [app] if app in imp else [],
+            "mechanism": "Uygulamanın kendi container'ı CPU harcıyor (ör. CPU-bound iş, sıkışmış thread'ler, GC). "
+                         "Host CPU threshold'un altında olduğu için diğer uygulamalara yayılma beklenmez; DB ile ilgisizdir.",
+            "cpu_cores": round(cores, 3), "baseline_cpu_cores": round(bcores, 3),
+            "app_vm_cpu_rise_pp": round(host_rise, 1) if host_rise is not None else None,
+            "signals": srcs, "confidence": _conf(len(srcs), app in imp), "evidence_ids": ev("containers", "hosts"),
+        })
+
+    # 5c) Network path latency (app ↔ PostgreSQL): uygulamada latency artıyor, DB server-side execution süresi artmıyor,
+    #     uygulamanın oturumları transaction içinde "idle" (DB client'ı bekliyor) ve paylaşılan resource baskısı yok.
+    #     (2026-11-24 chaos eval S13: idle-in-transaction 0 → 2.65, exec/call sabit.)
+    shared_now = {x["id"] for x in mechs} & {"row_lock", "global_connection_pressure", "db_cpu", "app_vm_cpu"}
+    if not shared_now:
+        for app in sorted(imp):
+            c, b = cur["apps"].get(app, {}), base["apps"].get(app, {})
+            idle_rise = (c.get("db_sessions_idle_tx") or 0.0) - (b.get("db_sessions_idle_tx") or 0.0)
+            ce, cn = c.get("db_exec_ms_per_min"), c.get("db_calls_per_min")
+            be, bn = b.get("db_exec_ms_per_min"), b.get("db_calls_per_min")
+            if None in (ce, cn, be, bn) or not cn or not bn or not be:
+                continue
+            exec_ratio = (ce / cn) / max(be / bn, 1e-9)
+            if idle_rise < m["net_idle_tx_sessions"] or exec_ratio >= m["net_max_exec_ratio"]:
+                continue
+            if any(x["id"] == "app_container_cpu" and app in x["source_apps"] for x in mechs):
+                continue
+            mechs.append({
+                "id": "network_path_latency", "title": f"{app} ↔ PostgreSQL network path latency",
+                "source_apps": [app], "affected_apps": [app],
+                "mechanism": "Uygulamanın DB çağrıları yavaşladı ama PostgreSQL server-side execution süresi değişmedi; "
+                             "oturumlar transaction içinde client'ı bekliyor (idle in transaction). Latency DB'de değil, "
+                             "uygulama ile DB arasındaki network path'inde (veya client tarafında) oluşuyor.",
+                "idle_in_tx_rise": round(idle_rise, 2), "db_exec_per_call_ratio": round(exec_ratio, 2),
+                "signals": ["pg sessions idle in transaction", "pg_stat_statements exec/call sabit", "uygulama latency"],
+                "confidence": "medium", "evidence_ids": ev("db_sessions", "statements", "http", "spans"),
+            })
+            for x in mechs:                      # aynı uygulamadaki pool doluluğu bu gecikmenin sonucudur
+                if x["id"] == "pool_saturation" and app in x["affected_apps"] and not x.get("secondary_to"):
+                    x["secondary_to"] = "network_path_latency"
 
     # 6) Bağımsız yük: yük artan uygulama var ama başka uygulamaya yayılma ve paylaşılan kaynak mekanizması yok
     shared = {x["id"] for x in mechs} & {"row_lock", "global_connection_pressure", "db_cpu", "app_vm_cpu"}

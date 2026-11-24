@@ -32,6 +32,12 @@ def human_review(attr: dict, quality: dict, scores: dict) -> list[str]:
             if m.get("self_is_source"):
                 out.append("CPU artışının bir kısmı SRE Agent'ın kendisinden; watch interval'ını/concurrency'yi gözden geçirin.")
             out.append("APP_VM'de CPU tüketen container'ları doğrulayın; DB tarafı normal mi kontrol edin.")
+        if m["id"] == "app_container_cpu":
+            out.append(f"{m['source_apps'][0]} container'ında CPU harcayan thread'leri (thread dump, profiler) ve GC "
+                       "aktivitesini inceleyin; container CPU limitini ve son deploy'u kontrol edin.")
+        if m["id"] == "network_path_latency":
+            out.append(f"{m['source_apps'][0]} ile PostgreSQL arasındaki network path'ini doğrulayın (RTT, packet loss, "
+                       "tc/qdisc, MTU, DNS); DB server-side süreleri normal olduğu için query tuning çözüm değildir.")
     if scores["overall"]["score"] is None:
         out.append("Risk score hesaplanamadı (data coverage yetersiz): telemetry pipeline'ını (OneAgent, collector, ingest) kontrol edin.")
     if any(q["status"] in ("PERMISSION",) for q in quality.values()):

@@ -119,6 +119,8 @@ def extract(results: dict[str, Any], ws: list[Window], cfg: dict) -> dict[str, d
 
     for rec in ts("db_sessions"):
         app, state, wt = rec.get("app"), rec.get("state"), rec.get("wait_type")
+        if app not in apps:            # havuz dışı bağlantı (farklı application_name): DB role → uygulama; ham ad tutulmaz
+            app = cfg["db_role_to_app"].get(rec.get("db.role"))
         for wn, v in split_series(rec, ws, TS_FIELDS["db_sessions"]).items():
             if v["s"] and app in apps:
                 f = _app(F[wn], app)
@@ -126,6 +128,8 @@ def extract(results: dict[str, Any], ws: list[Window], cfg: dict) -> dict[str, d
                 f["db_sessions"] = f.get("db_sessions", 0.0) + avg
                 if state == "active" and wt == "Lock":
                     f["db_sessions_lockwait"] = f.get("db_sessions_lockwait", 0.0) + avg
+                if str(state or "").startswith("idle in transaction"):   # DB, transaction içinde client'ı bekliyor
+                    f["db_sessions_idle_tx"] = f.get("db_sessions_idle_tx", 0.0) + avg
 
     # Collector sağlığı: hangi dakikalarda başarılı ölçüm var → kilit değerleri o dakikalar için "gerçek"
     for rec in ts("collector"):

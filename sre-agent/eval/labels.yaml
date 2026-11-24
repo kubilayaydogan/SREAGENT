@@ -12,5 +12,12 @@ global_connection: {primary: global_connection_pressure, sources: [reservation-s
 db_cpu:            {primary: db_cpu, sources: [checkin-service], not_mechanisms: [app_vm_cpu]}
 app_vm_cpu:        {primary: app_vm_cpu, sources: [baggage-service], not_mechanisms: [db_cpu]}
 two_sources:       {mechanisms: [row_lock, pool_saturation], sources_any: [reservation-service, baggage-service]}
+conn_relative:     {primary: global_connection_pressure, sources_any: [flightops-service]}
+conn_small_rise:   {not_mechanisms: [global_connection_pressure]}
+container_cpu:     {primary: app_container_cpu, sources: [baggage-service], not_mechanisms: [app_vm_cpu, db_cpu]}
+network_path:      {primary: network_path_latency, sources: [checkin-service], secondary: [pool_saturation],
+                    not_mechanisms: [row_lock, db_cpu, global_connection_pressure, app_vm_cpu]}
+pool_hold_not_network: {primary: pool_saturation, sources: [checkin-service], not_mechanisms: [network_path_latency]}
+tail_latency:      {impacted: [reservation-service], not_impacted: [checkin-service, flightops-service, baggage-service]}
 missing_telemetry: {quality_not_ok: [spans, edges, hikari, collector], lock_unknown: true}
 stale_telemetry:   {quality_stale: [hosts, db_conn]}

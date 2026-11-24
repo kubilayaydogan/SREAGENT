@@ -50,12 +50,21 @@ impact:                       # "etkilendi" kararı (uygulama bazında, baseline
   error_rate_delta: 0.01     # 5xx oranında +1 puan
   throughput_load_ratio: 2.0 # kaynak aday: istek hızı baseline'ın en az 2 katı
   min_load_rpm_delta: 60     # ...ve en az +60 istek/dk (1 rps); boşa yakın baseline'dan oran şişmesin
+  # Tail impact: istekların küçük bir kısmı çok yavaşsa p95 değişmeyebilir (ör. hot row Lock Wait). Ortalama bu kadar
+  # artarsa p95 yerine ortalama kullanılır (2026-11-24 chaos eval S03: mean ×37, p95 sabit).
+  tail_mean_ratio: 5.0
+  tail_min_delta_ms: 50
 
 mechanisms:
   lock_min_edges: 3          # pencerede asgari kilit kenarı logu
   lock_min_waiters_avg: 0.5
   pool_active_ratio: 0.85
   db_conn_ratio: 0.80
+  db_conn_ratio_rel_min: 0.60  # göreli kural: ratio bu değerin üstünde VE baseline'a göre +db_conn_rise
+  db_conn_rise: 0.25
+  container_cpu_rise_cores: 0.5  # iş uygulaması container'ı baseline'a göre bu kadar çekirdek fazla CPU kullanıyorsa
+  net_idle_tx_sessions: 2.0    # network path: uygulamanın idle-in-transaction oturum artışı (DB client'ı bekliyor)
+  net_max_exec_ratio: 1.5      # ...ve DB server-side exec/call artışı bunun altında (DB yavaş değil)
   db_cpu_pct: 80
   app_cpu_pct: 85
   cpu_increase_pp: 20        # host CPU'da baseline'a göre asgari artış (yüzde puan)

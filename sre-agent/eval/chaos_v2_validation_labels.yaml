@@ -1,0 +1,31 @@
+# Chaos v2 DOĞRULAMA seti — 2026-11-24'te eklenen 4 kural (göreli connection pressure, app_container_cpu,
+# network_path_latency, tail latency) için. Etiketler deneyler koşulmadan ÖNCE yazıldı ve sonradan değiştirilmedi.
+# Initiator / intensity ilk setten (chaos_v2_labels.yaml) farklıdır; kurallar ilk setin pencerelerinden türetildiği için
+# bu set kuralların genellenip genellenmediğini ölçer. Agent girdisine girmez.
+
+# Kontrol: chaos yok. Yeni kurallar yanlış alarm üretmemeli.
+V0:  {primary: null, max_score: 25,
+      not_mechanisms: [global_connection_pressure, app_container_cpu, network_path_latency]}
+
+# Connection storm, initiator reservation + checkin, HIGH.
+V10: {mechanisms: [global_connection_pressure], sources_any: [reservation-service, checkin-service],
+      not_mechanisms: [row_lock, network_path_latency]}
+
+# Container CPU burn, reservation, HIGH.
+V11: {primary: app_container_cpu, sources: [reservation-service],
+      not_mechanisms: [row_lock, db_cpu, global_connection_pressure, network_path_latency]}
+
+# flightops → DB network delay (netem), HIGH.
+V13: {primary: network_path_latency, sources: [flightops-service],
+      not_mechanisms: [row_lock, db_cpu, global_connection_pressure, app_vm_cpu]}
+
+# checkin → DB packet loss (netem), HIGH. Retransmit kaynaklı gecikme; aynı network imzası beklenir.
+V14: {primary: network_path_latency, sources: [checkin-service],
+      not_mechanisms: [row_lock, db_cpu, global_connection_pressure, app_vm_cpu]}
+
+# Long-running transaction, HIGH: row_lock + tail impact (hot row'a dokunan istekler).
+V03: {primary: row_lock, sources: [flightops-service], impacted: [reservation-service],
+      not_mechanisms: [db_cpu, network_path_latency]}
+
+# Multi-app gerçek trafik yükü: paylaşılan resource / network mekanizması OLMAMALI.
+V18: {not_mechanisms: [row_lock, db_cpu, global_connection_pressure, network_path_latency]}

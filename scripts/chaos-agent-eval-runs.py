@@ -3,6 +3,7 @@
 
 APP_VM'de çalıştırın (kimlik bilgileri app-vm/.env'den okunur, ekrana basılmaz):
   python3 scripts/chaos-agent-eval-runs.py [--only C0,S03] [--out /opt/airlab/deploy/evidence/chaos-v2-agent-eval]
+  python3 scripts/chaos-agent-eval-runs.py --set validation --out /opt/airlab/deploy/evidence/chaos-v2-agent-validation
 
 Çıktı:
   <out>/windows.yaml       YALNIZ zaman aralıkları (case adı → baseline_from/to, from/to). Agent'a girdi olarak giden
@@ -41,6 +42,16 @@ CASES = {
     "S11": ("S11", "HIGH", "baggage", "SINGLE", []),
     "S13": ("S13", "HIGH", "checkin", "SINGLE", []),
     "S17": ("S17", "HIGH", "baggage", "AUTO", []),
+}
+# Doğrulama seti (--set validation): kurallar ilk setten türetildi; burada farklı initiator/intensity ile denenir.
+VALIDATION = {
+    "V0": None,
+    "V10": ("S10", "HIGH", "reservation", "MULTI", ["checkin"]),
+    "V11": ("S11", "HIGH", "reservation", "SINGLE", []),
+    "V13": ("S13", "HIGH", "flightops", "SINGLE", []),
+    "V14": ("S14", "HIGH", "checkin", "SINGLE", []),
+    "V03": ("S03", "HIGH", "flightops", "AUTO", []),
+    "V18": ("S18", "MEDIUM", "reservation", "ALL", []),
 }
 DURATIONS = {"baselineSec": 210, "rampSec": 30, "durationSec": 270, "recoverySec": 90, "maxDurationSec": 0}
 CONTROL_SEC = 8 * 60
@@ -114,7 +125,9 @@ def main() -> int:
     ap.add_argument("--base", default="http://172.20.229.26:8080")
     ap.add_argument("--out", default="/opt/airlab/deploy/evidence/chaos-v2-agent-eval")
     ap.add_argument("--only", default="")
+    ap.add_argument("--set", choices=["eval", "validation"], default="eval")
     a = ap.parse_args()
+    cases = VALIDATION if a.set == "validation" else CASES
     e = e2e.env(a.env)
     api = e2e.Api(a.base, e.get("CHAOS_USER", "chaos"), e["CHAOS_PASSWORD"])
     os.makedirs(a.out, exist_ok=True)
@@ -123,7 +136,7 @@ def main() -> int:
     runs = json.load(open(runs_path, encoding="utf-8")) if os.path.exists(runs_path) else {}
     wins = {k: v["windows"] for k, v in runs.items() if v.get("windows") and v.get("valid")}
 
-    for case, spec in CASES.items():
+    for case, spec in cases.items():
         if only and case not in only:
             continue
         e2e.wait_idle(api)

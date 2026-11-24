@@ -123,7 +123,8 @@ def q_db_conn(ws, cfg):
 
 
 def q_db_sessions(ws, cfg):
-    return f"timeseries s=avg(airlab.pg.sessions), {_rng(ws)}, interval:1m, by:{{app, state, wait_type}}"
+    # db.role: application_name'i bilinen servis adı olmayan oturumlar (havuz dışı bağlantılar) role üzerinden sahiplenilir
+    return f"timeseries s=avg(airlab.pg.sessions), {_rng(ws)}, interval:1m, by:{{app, db.role, state, wait_type}}"
 
 
 def q_lock_waiters(ws, cfg):

@@ -26,16 +26,25 @@ def ramp(x: float | None, lo_hi: list[float]) -> float | None:
 
 
 def latency_ratio(cur: dict, base: dict, cfg: dict) -> tuple[float | None, str | None, float | None]:
-    """(oran, kaynak, fark_ms). Span p95 her iki pencerede yeterli örnekle varsa onu, yoksa HTTP ortalamasını kullanır."""
+    """(oran, kaynak, fark_ms). Span p95 her iki pencerede yeterli örnekle varsa onu, yoksa HTTP ortalamasını kullanır.
+
+    Tail impact: p95 değişmese de ortalama tail_mean_ratio kat VE tail_min_delta_ms artmışsa ortalama kullanılır
+    (isteklerin küçük bir kısmı çok yavaş; impact p95'in ötesinde kalıyor — ör. hot row Lock Wait)."""
     m = cfg["quality"]["min_span_samples"]
+    mean = None
+    if cur.get("http_mean_ms") is not None and base.get("http_mean_ms"):
+        mc, mb = cur["http_mean_ms"], base["http_mean_ms"]
+        mean = (mc / max(mb, 1e-6), "http_mean", mc - mb)
     if (cur.get("span_n") or 0) >= m and (base.get("span_n") or 0) >= m and cur.get("span_p95_ms") is not None \
             and base.get("span_p95_ms"):
-        c, b, src = cur["span_p95_ms"], base["span_p95_ms"], "span_p95"
-    elif cur.get("http_mean_ms") is not None and base.get("http_mean_ms"):
-        c, b, src = cur["http_mean_ms"], base["http_mean_ms"], "http_mean"
-    else:
-        return None, None, None
-    return c / max(b, 1e-6), src, c - b
+        c, b = cur["span_p95_ms"], base["span_p95_ms"]
+        p95 = (c / max(b, 1e-6), "span_p95", c - b)
+        im = cfg["impact"]
+        if (mean and mean[0] >= im.get("tail_mean_ratio", float("inf")) and mean[2] >= im.get("tail_min_delta_ms", 0)
+                and mean[0] > p95[0]):
+            return mean[0], "http_mean (tail)", mean[2]
+        return p95
+    return mean or (None, None, None)
 
 
 def app_components(cur: dict, base: dict, db: dict, hosts: dict, cfg: dict) -> dict[str, Any]:

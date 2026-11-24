@@ -53,6 +53,14 @@ SCENARIOS = {
         apps={C: {"mean_ms": 900.0, "p95": 3900.0, "pool_a": 7.5, "sessions": 8.0},
               B: {"rpm": 240.0, "pool_a": 8.0, "pool_pe": 3.0, "mean_ms": 300.0, "p95": 600.0}},
         lock_total=5.0, lock_pairs={(C, R): 5.0}, edges=[_edge(C, R, 120)], pg_lock_logs=500), {}),
+    # 2026-11-24 chaos eval sonrası eklenen kurallar (pozitif + negatif)
+    "conn_relative": lambda: (_w(conn_ratio=0.30), _w(conn_ratio=0.65, apps={F: {"sessions": 25.0}, B: {"sessions": 12.0}}), {}),
+    "conn_small_rise": lambda: (_w(conn_ratio=0.10), _w(conn_ratio=0.45, apps={F: {"sessions": 20.0}}), {}),
+    "container_cpu": lambda: (NORMAL, _w(hosts={"app-vm": 41.0}, apps={B: {"cores": 0.95}}), {}),
+    "network_path": lambda: (NORMAL, _w(apps={C: {"mean_ms": 300.0, "p95": 650.0, "pool_a": 7.5, "idle_tx": 2.7}}), {}),
+    "pool_hold_not_network": lambda: (NORMAL, _w(
+        apps={C: {"mean_ms": 600.0, "p95": 1700.0, "pool_a": 8.0, "pool_pe": 6.0, "pool_to": 3.0, "idle_tx": 1.0}}), {}),
+    "tail_latency": lambda: (NORMAL, _w(apps={R: {"mean_ms": 150.0, "p95": 32.0}}), {}),
     "missing_telemetry": lambda: (NORMAL, _w(collector=False),
                                   {"drop": ("spans", "edges", "pg_lock_logs", "lock_waiters", "hikari")}),
     "stale_telemetry": lambda: (NORMAL, _w(), {"stale": ("hosts", "db_conn")}),

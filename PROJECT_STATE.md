@@ -115,7 +115,7 @@ Kod `sre-agent/`; mimari kararlar `docs/decisions/ADR-007-sre-agent.md`; işleti
 | Yığın | Python 3.13, LangGraph 1.2.24 + SqliteSaver, langchain-anthropic 1.7.12 (`claude-sonnet-5-5`), langchain-mcp-adapters 0.3.2 / mcp 1.30.0, LangSmith 0.16 (redakte) |
 | Veri kaynağı | Yalnız Dynatrace Remote MCP `execute-dql`. 21 araç keşfedildi; sabit katalog (15 sinyal + 2 ek kanıt). DB bağlantısı yok, sessiz fallback yok |
 | CLI | `doctor`, `analyze` (`--last`, `--from/--to`, `--baseline-from/--baseline-to`), `ask`, `chat`, `watch`, `watch-status`, `report list/show` |
-| Puan / atıf | Deterministik. Risk, veri kapsamı ve nedensellik güveni ayrı. Mekanizmalar: row_lock (kök engelleyici), pool_saturation, global_connection_pressure, db_cpu, app_vm_cpu (agent'ın kendi CPU'su `self_is_source`), independent_load |
+| Puan / atıf | Deterministik. Risk, veri kapsamı ve nedensellik güveni ayrı. Mekanizmalar: row_lock (kök engelleyici), pool_saturation, global_connection_pressure (mutlak veya göreli), db_cpu, app_vm_cpu (agent'ın kendi CPU'su `self_is_source`), app_container_cpu, network_path_latency, independent_load; tail latency (mean ×5) |
 | Testler | ✅ 38/38 (`pytest`): puan formülü, veri kalitesi, 10 senaryo, graf (MCP/Claude kesintisi, checkpoint, redaksiyon, prompt injection), watch durum makinesi |
 | Değerlendirme | ✅ sentetik 10/10 (`deploy/evidence/sre-agent-eval-synthetic.json`, fixture). ✅ **gerçek VM deneyleri 5/5** (`deploy/evidence/sre-agent-eval-real.json`): E0 sorun yok; E2 row_lock reservation → checkin (yüksek güven); E1×3 baggage bağımsız yük, yayılma yok |
 | Örnek raporlar | `docs/examples/sre-agent/` (gerçek veri + Claude açıklaması) |

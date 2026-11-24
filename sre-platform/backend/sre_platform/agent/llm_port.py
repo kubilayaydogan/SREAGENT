@@ -18,7 +18,8 @@ from pydantic import BaseModel, Field
 from airlab_agent.llm import LlmUnavailable, _log_terminology
 from airlab_agent.terminology import with_policy
 
-MECHANISMS = ("row_lock", "pool_saturation", "global_connection_pressure", "db_cpu", "app_vm_cpu", "independent_load")
+MECHANISMS = ("row_lock", "pool_saturation", "global_connection_pressure", "db_cpu", "app_vm_cpu", "app_container_cpu",
+              "network_path_latency", "independent_load")
 SCOPES = ("investigations", "incidents", "rca", "runbooks", "known_issues", "conversations")
 
 
@@ -45,7 +46,7 @@ class ChatRoute(BaseModel):
         Field(default_factory=list, description="Geçmiş sorularında aranacak kayıt türleri")
     since_days: int | None = Field(None, description="Geçmiş araması için gün sınırı (ör. 'geçen hafta' → 7)")
     mechanism: Literal["row_lock", "pool_saturation", "global_connection_pressure", "db_cpu", "app_vm_cpu",
-                       "independent_load"] | None = Field(None, description=_MECH_DESC)
+                       "app_container_cpu", "network_path_latency", "independent_load"] | None = Field(None, description=_MECH_DESC)
     search_terms: str | None = Field(None, description=_SEARCH_DESC)
 
 

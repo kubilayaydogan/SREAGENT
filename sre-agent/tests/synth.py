@@ -16,7 +16,7 @@ BASE_MIN, WIN_MIN = 15, 5
 APPS = ["reservation-service", "checkin-service", "flightops-service", "baggage-service"]
 
 NORMAL_APP = {"rpm": 60.0, "mean_ms": 20.0, "err": 0.0, "p95": 30.0, "span_n": 200, "pool_a": 1.0, "pool_pe": 0.0,
-              "pool_to": 0.0, "sessions": 2.0, "exec_ms": 100.0, "cores": 0.2}
+              "pool_to": 0.0, "sessions": 2.0, "exec_ms": 100.0, "cores": 0.2, "idle_tx": 0.0}
 NORMAL = {"apps": {a: dict(NORMAL_APP) for a in APPS},
           "hosts": {"app-vm": 30.0, "db-vm": 10.0}, "conn_ratio": 0.1, "lock_total": 0.0,
           "lock_pairs": {}, "edges": [], "pg_lock_logs": 0, "collector": True, "tooling_cores": {"chaos-controller": 0.1,
@@ -90,6 +90,8 @@ def build_multi(S: dict[str, dict], ws: list[Window], drop: tuple = (), stale: t
         R["jvm_heap"].append(_ts(ws, {wn: {"used": 5e7} for wn in S}, {"service": app, "area": "heap"}))
         R["db_sessions"].append(_ts(ws, {wn: {"s": sp["apps"][app]["sessions"]} for wn, sp in S.items()},
                                     {"app": app, "state": "idle", "wait_type": "Client"}))
+        R["db_sessions"].append(_ts(ws, {wn: {"s": sp["apps"][app].get("idle_tx", 0.0)} for wn, sp in S.items()},
+                                    {"app": app, "state": "idle in transaction", "wait_type": "Client"}))
         role = "svc_" + app.split("-")[0]
         R["statements"].append(_ts(ws, {wn: {"et": sp["apps"][app]["exec_ms"], "calls": 10.0} for wn, sp in S.items()},
                                    {"db.role": role}))

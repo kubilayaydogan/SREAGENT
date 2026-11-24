@@ -64,6 +64,25 @@ known_issues:
     root_cause: "Aynı host'ta CPU yoğun bir süreç (ör. derleme, yük üreteci, chaos deneyi) uygulamalarla yarışıyor."
     resolution: "Baskın container/süreç belirlenir; deney veya derleme durdurulur ya da CPU limiti uygulanır (INFRA onayı)."
 
+  - title: "Tek uygulama container CPU saturation"
+    mechanism: app_container_cpu
+    tags: [cpu, containers]
+    symptoms: |
+      - Bir iş uygulamasının container CPU'su baseline'a göre ≥ 0.5 core artar
+      - APP_VM host CPU eşiğin altında kalabilir; diğer uygulamalara yayılma beklenmez
+    root_cause: "Uygulamanın kendi CPU-bound işi, sıkışmış thread'ler veya yoğun GC."
+    resolution: "Thread dump / profiler ile CPU harcayan kod yolu bulunur; container CPU limiti ve son deploy kontrol edilir."
+
+  - title: "App ↔ PostgreSQL network path latency"
+    mechanism: network_path_latency
+    tags: [network, postgresql]
+    symptoms: |
+      - Uygulamanın latency'si artar, PostgreSQL server-side execution süresi (exec/call) değişmez
+      - pg_stat_activity'de uygulamanın session'ları 'idle in transaction' (DB client'ı bekliyor)
+      - DB CPU, Lock Wait ve global connection pressure normal
+    root_cause: "Uygulama ile DB arasındaki network path'inde gecikme veya packet loss (ör. tc/qdisc, overlay network, MTU)."
+    resolution: "RTT ve packet loss ölçülür (ping, ss -ti retrans); network yapılandırması düzeltilir. Query tuning çözüm değildir."
+
   - title: "Bağımsız yük artışı (kendi trafiğiyle yavaşlayan servis)"
     mechanism: independent_load
     tags: [load, capacity]

@@ -50,6 +50,8 @@ def test_scenario(name):
         assert set(L["sources_any"]) <= {x for m in a["mechanisms"] for x in m["source_apps"]}
     for app in L.get("not_impacted", []):
         assert app not in a["impacted"]
+    for app in L.get("impacted", []):
+        assert app in a["impacted"], a["impacted"]
     if "max_score" in L:
         assert s["overall"]["score"] is not None and s["overall"]["score"] < L["max_score"]
     if "min_score" in L:
@@ -90,3 +92,19 @@ def test_app_vm_cpu_separates_agent_itself():
     a = detect(F["window"], F["baseline"], c, {})
     m = next(x for x in a["mechanisms"] if x["id"] == "app_vm_cpu")
     assert m["source_apps"][0] == "sre-agent" and m["self_is_source"] is True
+
+
+def test_sessions_with_unknown_application_name_are_owned_by_db_role():
+    """Havuz dışı bağlantılar (ör. application_name=<svc>-batch) role üzerinden sahiplenilir; ham ad features'a girmez."""
+    from airlab_agent.features import extract
+    from synth import NORMAL, build, windows
+    c = cfg()
+    ws = windows()
+    res = build(NORMAL, NORMAL, ws)
+    recs = res["db_sessions"].records
+    extra = dict(recs[0])
+    extra.update({"app": "flightops-service-batch-xyz", "db.role": "svc_flightops", "state": "idle"})
+    res["db_sessions"].records.append(extra)
+    F = extract(res, ws, c)
+    assert F["window"]["apps"]["flightops-service"]["db_sessions"] > F["window"]["apps"]["checkin-service"]["db_sessions"]
+    assert not any("batch" in k for fw in F.values() for k in fw["apps"])

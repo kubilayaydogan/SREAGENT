@@ -41,6 +41,8 @@ export const MECHANISM_LABEL: Record<string, string> = {
   global_connection_pressure: "PostgreSQL global connection pressure",
   db_cpu: "DB_VM CPU pressure",
   app_vm_cpu: "APP_VM CPU pressure",
+  app_container_cpu: "Container CPU saturation",
+  network_path_latency: "App ↔ PostgreSQL network path latency",
   independent_load: "Bağımsız load artışı",
 };
 
