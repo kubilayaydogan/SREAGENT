@@ -2,6 +2,8 @@
 
   python eval/run_eval.py              # sentetik senaryolar (çevrimdışı)
   python eval/run_eval.py --real       # gerçek deney pencereleri, Dynatrace MCP üzerinden (Claude kapalı)
+  python eval/run_eval.py --real --windows eval/chaos_v2_windows.yaml --labels eval/chaos_v2_labels.yaml
+                                       # chaos v2 kör değerlendirmesi (pencereler scripts/chaos-agent-eval-runs.py'den)
 
 Etiketler (labels.yaml / real_labels.yaml) yalnız sonuç karşılaştırmasında okunur; agent'a girdi olarak verilmez.
 Sonuç: eval/results/<tür>-<zaman>.json + ekrana tablo.
@@ -27,6 +29,13 @@ def check(label: dict, r: dict) -> list[str]:
     c = r["causality"]
     if "primary" in label and c["primary_mechanism"] != label["primary"]:
         fails.append(f"primary {c['primary_mechanism']} != {label['primary']}")
+    if "primary_any" in label and c["primary_mechanism"] not in label["primary_any"]:
+        fails.append(f"primary {c['primary_mechanism']} ∉ {label['primary_any']}")
+    if label.get("sources_any") and not set(label["sources_any"]) & set(c["source_apps"]):
+        fails.append(f"sources {c['source_apps']} ∩ {label['sources_any']} boş")
+    for a in label.get("impacted", []):
+        if a not in r["impacted"]:
+            fails.append(f"{a} etkilenmiş olarak tespit edilmedi")
     if label.get("sources") and c["source_apps"][: len(label["sources"])] != label["sources"]:
         fails.append(f"sources {c['source_apps']} != {label['sources']}")
     if label.get("affected") and not set(label["affected"]) <= set(c["affected_apps"]):
@@ -67,7 +76,7 @@ def run_synthetic(tmp: Path) -> list[dict]:
     return out
 
 
-def run_real(tmp: Path | None) -> list[dict]:
+def run_real(tmp: Path | None, windows: str = "real_windows.yaml", labels_file: str = "real_labels.yaml") -> list[dict]:
     from functools import partial
 
     from airlab_agent.config import load_settings
@@ -82,8 +91,8 @@ def run_real(tmp: Path | None) -> list[dict]:
     b = s.cfg["budgets"]
     gwf = partial(McpGateway, s.mcp_url, s.dt_token, timeout_s=b["query_timeout_seconds"], retries=b["query_retries"],
                   max_queries=b["max_queries_per_run"])
-    wins = yaml.safe_load((HERE / "real_windows.yaml").read_text(encoding="utf-8"))
-    labels = yaml.safe_load((HERE / "real_labels.yaml").read_text(encoding="utf-8"))
+    wins = yaml.safe_load((HERE / windows).read_text(encoding="utf-8"))
+    labels = yaml.safe_load((HERE / labels_file).read_text(encoding="utf-8"))
     out = []
     for name, w in wins.items():
         start = datetime.fromisoformat(w["from"].replace("Z", "+00:00"))
@@ -109,10 +118,12 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--real", action="store_true")
     p.add_argument("--data-dir", help="raporların yazılacağı dizin (varsayılan: geçici)")
+    p.add_argument("--windows", default="real_windows.yaml", help="--real pencere dosyası (eval/ altına göre)")
+    p.add_argument("--labels", default="real_labels.yaml", help="--real etiket dosyası (eval/ altına göre)")
     a = p.parse_args()
     import tempfile
     tmp = Path(a.data_dir) if a.data_dir else Path(tempfile.mkdtemp(prefix="airlab-eval-"))
-    rows = run_real(tmp) if a.real else run_synthetic(tmp)
+    rows = run_real(tmp, a.windows, a.labels) if a.real else run_synthetic(tmp)
     for r in rows:
         mark = "PASS" if not r["fails"] else "FAIL"
         print(f"{mark}  {r['case']:18} puan={r['score']!s:6} birincil={r['primary']!s:28} güven={r['confidence']!s:6} "
@@ -124,7 +135,7 @@ def main():
     print(f"\n{passed}/{len(rows)} senaryo geçti")
     res_dir = (tmp / "eval-results") if a.data_dir else HERE / "results"
     res_dir.mkdir(parents=True, exist_ok=True)
-    kind = "real" if a.real else "synthetic"
+    kind = ("real" if a.windows == "real_windows.yaml" else Path(a.windows).stem) if a.real else "synthetic"
     path = res_dir / f"{kind}-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}.json"
     path.write_text(json.dumps({"kind": kind, "fixture": not a.real, "rows": rows}, ensure_ascii=False, indent=2),
                     encoding="utf-8")

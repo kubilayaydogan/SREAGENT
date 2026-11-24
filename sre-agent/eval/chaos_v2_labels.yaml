@@ -1,0 +1,28 @@
+# Chaos v2 kör değerlendirmesi — beklenen sonuçlar (yalnız karşılaştırmada okunur; agent girdisine girmez).
+# Etiketler agent sonuçları görülmeden, senaryo tasarımına ve agent'ın mekanizma kataloğuna göre 2026-11-24'te yazıldı.
+# Katalogda karşılığı olan senaryolar: mekanizma + kaynak doğru mu? Karşılığı olmayanlar (S13 network): etkiyi görüyor mu,
+# ve yanlış bir paylaşılan-kaynak mekanizmasına (DB/lock/CPU) atfetmekten kaçınıyor mu?
+
+# Kontrol: chaos yok, yalnız sürekli trafik → olay yok.
+C0:  {primary: null, max_score: 25}
+
+# Long-running transaction flightops'un sıcak uçuş satırlarını tutuyor → diğer uygulamalar Lock Wait'te.
+S03: {primary: row_lock, sources: [flightops-service], not_mechanisms: [db_cpu, app_vm_cpu]}
+
+# CPU-intensive query'ler (baggage rolü) → DB_VM CPU.
+S04: {primary: db_cpu, sources_any: [baggage-service], not_mechanisms: [row_lock]}
+
+# checkin'in kendi Hikari pool'u tükeniyor; DB genelinde connection pressure yok.
+S01: {primary: pool_saturation, sources: [checkin-service], not_mechanisms: [row_lock, db_cpu, global_connection_pressure]}
+
+# flightops + baggage bağlantı fırtınası → max_connections'a yaklaşma.
+S10: {mechanisms: [global_connection_pressure], sources_any: [flightops-service, baggage-service], not_mechanisms: [row_lock]}
+
+# baggage container'ında CPU burn → APP_VM CPU (DB ile ilgisiz).
+S11: {primary: app_vm_cpu, sources_any: [baggage-service], not_mechanisms: [row_lock, db_cpu, global_connection_pressure]}
+
+# checkin → DB yolunda netem delay. Katalogda network mekanizması yok: etkiyi görmeli, DB/lock/CPU'ya atfetmemeli.
+S13: {impacted: [checkin-service], not_mechanisms: [row_lock, db_cpu, global_connection_pressure, app_vm_cpu]}
+
+# Cascading DB saturation: baggage kaynaklı DB CPU, diğer uygulamalarda latency.
+S17: {primary: db_cpu, sources_any: [baggage-service], not_mechanisms: [row_lock]}

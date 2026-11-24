@@ -47,4 +47,16 @@ def strip_fields(records: list[dict], fields: list[str]) -> list[dict]:
         return (k in drop or k.split(".")[-1] in drop or any(k.endswith("." + f) for f in drop)
                 or k.startswith("chaos.") or ".chaos." in k)
 
-    return [{k: v for k, v in r.items() if not hidden(k)} for r in records]
+    return [{k: _mask_op(k, v) for k, v in r.items() if not hidden(k)} for r in records]
+
+
+# Kaos/lab workload'ları SQL yorumuna op=chaos-longtx, op=lab_hold_checkin gibi etiketler yazar; collector bunları
+# waiter.op/blocker.op olarak taşır. Alan adı masum olsa da DEĞER cevabı verir → değer maskelenir (alan kalır).
+_LAB_OP = re.compile(r"(?i)^(chaos|lab)[-_.:]")
+
+
+def _mask_op(k: str, v: Any) -> Any:
+    last = k.split(".")[-1]
+    if (last == "op" or last.endswith("_op")) and isinstance(v, str) and _LAB_OP.match(v):
+        return "unlabeled"
+    return v
