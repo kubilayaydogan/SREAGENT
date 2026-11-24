@@ -1,0 +1,9 @@
+# Chaos v2 agent eval pencereleri — YALNIZ GİRDİ (zaman aralıkları). Üreten: scripts/chaos-agent-eval-runs.py
+C0: {baseline_from: "2026-11-24T18:49:00Z", baseline_to: "2026-11-24T18:53:00Z", from: "2026-11-24T18:53:00Z", to: "2026-11-24T18:56:00Z"}
+S03: {baseline_from: "2026-11-24T18:58:00Z", baseline_to: "2026-11-24T19:01:00Z", from: "2026-11-24T19:02:00Z", to: "2026-11-24T19:06:00Z"}
+S04: {baseline_from: "2026-11-24T19:09:00Z", baseline_to: "2026-11-24T19:11:00Z", from: "2026-11-24T19:13:00Z", to: "2026-11-24T19:16:00Z"}
+S01: {baseline_from: "2026-11-24T19:19:00Z", baseline_to: "2026-11-24T19:21:00Z", from: "2026-11-24T19:23:00Z", to: "2026-11-24T19:26:00Z"}
+S10: {baseline_from: "2026-11-24T19:29:00Z", baseline_to: "2026-11-24T19:32:00Z", from: "2026-11-24T19:33:00Z", to: "2026-11-24T19:37:00Z"}
+S11: {baseline_from: "2026-11-24T19:40:00Z", baseline_to: "2026-11-24T19:42:00Z", from: "2026-11-24T19:44:00Z", to: "2026-11-24T19:47:00Z"}
+S13: {baseline_from: "2026-11-24T19:50:00Z", baseline_to: "2026-11-24T19:52:00Z", from: "2026-11-24T19:54:00Z", to: "2026-11-24T19:57:00Z"}
+S17: {baseline_from: "2026-11-24T20:00:00Z", baseline_to: "2026-11-24T20:03:00Z", from: "2026-11-24T20:04:00Z", to: "2026-11-24T20:08:00Z"}

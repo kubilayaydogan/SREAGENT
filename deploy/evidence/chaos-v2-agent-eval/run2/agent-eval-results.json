@@ -1,0 +1,132 @@
+{
+  "kind": "chaos_v2_windows",
+  "fixture": false,
+  "rows": [
+    {
+      "case": "C0",
+      "report": "rep-20261124-201112-5c5c9e",
+      "fails": [],
+      "score": 0.0,
+      "primary": null,
+      "confidence": null,
+      "sources": [],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S03",
+      "report": "rep-20261124-201120-6f9230",
+      "fails": [],
+      "score": 35.4,
+      "primary": "row_lock",
+      "confidence": "high",
+      "sources": [
+        "flightops-service"
+      ],
+      "affected": [
+        "reservation-service",
+        "checkin-service",
+        "baggage-service"
+      ],
+      "impacted": [
+        "baggage-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S04",
+      "report": "rep-20261124-201131-87c334",
+      "fails": [],
+      "score": 0.0,
+      "primary": "db_cpu",
+      "confidence": "medium",
+      "sources": [
+        "baggage-service",
+        "checkin-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S01",
+      "report": "rep-20261124-201141-cd7f12",
+      "fails": [],
+      "score": 60.0,
+      "primary": "pool_saturation",
+      "confidence": "medium",
+      "sources": [
+        "checkin-service"
+      ],
+      "affected": [
+        "checkin-service"
+      ],
+      "impacted": [
+        "checkin-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S10",
+      "report": "rep-20261124-201147-4278a4",
+      "fails": [
+        "sources [] ∩ ['flightops-service', 'baggage-service'] boş",
+        "eksik mekanizma global_connection_pressure"
+      ],
+      "score": 0.0,
+      "primary": null,
+      "confidence": null,
+      "sources": [],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S11",
+      "report": "rep-20261124-201156-daf9b3",
+      "fails": [
+        "primary None != app_vm_cpu",
+        "sources [] ∩ ['baggage-service'] boş"
+      ],
+      "score": 0.0,
+      "primary": null,
+      "confidence": null,
+      "sources": [],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S13",
+      "report": "rep-20261124-201202-dbaa24",
+      "fails": [],
+      "score": 30.0,
+      "primary": null,
+      "confidence": null,
+      "sources": [],
+      "affected": [
+        "checkin-service"
+      ],
+      "impacted": [
+        "checkin-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S17",
+      "report": "rep-20261124-201210-d1356c",
+      "fails": [],
+      "score": 0.0,
+      "primary": "db_cpu",
+      "confidence": "medium",
+      "sources": [
+        "baggage-service",
+        "checkin-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    }
+  ]
+}

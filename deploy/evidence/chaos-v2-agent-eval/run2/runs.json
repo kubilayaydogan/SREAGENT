@@ -1,0 +1,392 @@
+{
+ "C0": {
+  "case": "C0",
+  "skew_before": 0.6,
+  "windows": {
+   "baseline_from": "2026-11-24T18:49:00Z",
+   "baseline_to": "2026-11-24T18:53:00Z",
+   "from": "2026-11-24T18:53:00Z",
+   "to": "2026-11-24T18:56:00Z"
+  },
+  "chaos": {
+   "note": "chaos yok; yalnız sürekli trafik"
+  },
+  "skew_after": 0.0,
+  "valid": true
+ },
+ "S03": {
+  "case": "S03",
+  "skew_before": 0.5,
+  "chaos": {
+   "scenario": "S03",
+   "id": "v2-20261124-185736-2bd6",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 13.2,
+   "observedAffected": [
+    "reservation",
+    "checkin",
+    "baggage"
+   ],
+   "criteria": [
+    {
+     "d": "uzun transaction gözlendi (s)",
+     "req": true,
+     "obs": 14.81,
+     "thr": 9.0,
+     "res": "PASS"
+    },
+    {
+     "d": "blocking: lock waiters ≥ 1",
+     "req": true,
+     "obs": 14.0,
+     "thr": 1.0,
+     "res": "PASS"
+    },
+    {
+     "d": "hedef uygulamada p95 artışı",
+     "req": true,
+     "obs": 7659.36,
+     "thr": 74.85,
+     "res": "PASS"
+    }
+   ],
+   "controller": {}
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T18:58:00Z",
+   "baseline_to": "2026-11-24T19:01:00Z",
+   "from": "2026-11-24T19:02:00Z",
+   "to": "2026-11-24T19:06:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.4,
+  "valid": true
+ },
+ "S04": {
+  "case": "S04",
+  "skew_before": 0.8,
+  "chaos": {
+   "scenario": "S04",
+   "id": "v2-20261124-190802-7b1a",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 6.0,
+   "observedAffected": [
+    "baggage"
+   ],
+   "criteria": [
+    {
+     "d": "DB CPU hedefin %80'ine ulaştı",
+     "req": true,
+     "obs": 51.74,
+     "thr": 44.0,
+     "res": "PASS"
+    },
+    {
+     "d": "diğer uygulamalarda p95 artışı (paylaşılan DB)",
+     "req": false,
+     "obs": 33.27,
+     "thr": 28.54,
+     "res": "PASS"
+    }
+   ],
+   "controller": {
+    "metric": "DB_CPU_PCT",
+    "scope": "DB",
+    "target": 55.0,
+    "finalLevel": 0.2,
+    "saturated": false,
+    "note": ""
+   }
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T19:09:00Z",
+   "baseline_to": "2026-11-24T19:11:00Z",
+   "from": "2026-11-24T19:13:00Z",
+   "to": "2026-11-24T19:16:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.7,
+  "valid": true
+ },
+ "S01": {
+  "case": "S01",
+  "skew_before": 0.1,
+  "chaos": {
+   "scenario": "S01",
+   "id": "v2-20261124-191824-d2b2",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 8.7,
+   "observedAffected": [
+    "checkin"
+   ],
+   "criteria": [
+    {
+     "d": "pool demand hedefe ulaştı",
+     "req": true,
+     "obs": 300.0,
+     "thr": 88.0,
+     "res": "PASS"
+    },
+    {
+     "d": "pool pending > 0 (bekleyen istek)",
+     "req": true,
+     "obs": 16.0,
+     "thr": 1.0,
+     "res": "PASS"
+    },
+    {
+     "d": "initiator p95 artışı",
+     "req": false,
+     "obs": 2125.36,
+     "thr": 39.33,
+     "res": "PASS"
+    },
+    {
+     "d": "diğer uygulamalar etkilenmez (izolasyon)",
+     "req": false,
+     "obs": 9.44,
+     "thr": 63.2,
+     "res": "PASS"
+    }
+   ],
+   "controller": {
+    "metric": "APP_POOL_DEMAND_PCT",
+    "scope": "INITIATOR",
+    "target": 110.0,
+    "finalLevel": 0.5,
+    "saturated": false,
+    "note": ""
+   }
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T19:19:00Z",
+   "baseline_to": "2026-11-24T19:21:00Z",
+   "from": "2026-11-24T19:23:00Z",
+   "to": "2026-11-24T19:26:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.0,
+  "valid": true
+ },
+ "S10": {
+  "case": "S10",
+  "skew_before": 0.5,
+  "chaos": {
+   "scenario": "S10",
+   "id": "v2-20261124-192845-ac19",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 4.4,
+   "observedAffected": [
+    "baggage"
+   ],
+   "criteria": [
+    {
+     "d": "DB bağlantı doluluğu",
+     "req": true,
+     "obs": 59.0,
+     "thr": 44.0,
+     "res": "PASS"
+    }
+   ],
+   "controller": {
+    "metric": "DB_CONNECTIONS_PCT",
+    "scope": "DB",
+    "target": 55.0,
+    "finalLevel": 0.4,
+    "saturated": false,
+    "note": ""
+   }
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T19:29:00Z",
+   "baseline_to": "2026-11-24T19:32:00Z",
+   "from": "2026-11-24T19:33:00Z",
+   "to": "2026-11-24T19:37:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.4,
+  "valid": true
+ },
+ "S11": {
+  "case": "S11",
+  "skew_before": 0.8,
+  "chaos": {
+   "scenario": "S11",
+   "id": "v2-20261124-193902-dfc7",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 5.7,
+   "observedAffected": [
+    "baggage"
+   ],
+   "criteria": [
+    {
+     "d": "initiator CPU hedefin %80'i",
+     "req": true,
+     "obs": 80.0,
+     "thr": 64.0,
+     "res": "PASS"
+    },
+    {
+     "d": "initiator p95 artışı",
+     "req": true,
+     "obs": 79.41,
+     "thr": 53.28,
+     "res": "PASS"
+    },
+    {
+     "d": "DB CPU belirgin değişmez",
+     "req": false,
+     "obs": 1.63,
+     "thr": 17.01,
+     "res": "PASS"
+    }
+   ],
+   "controller": {
+    "metric": "APP_CPU_PCT",
+    "scope": "INITIATOR",
+    "target": 80.0,
+    "finalLevel": 0.9,
+    "saturated": false,
+    "note": ""
+   }
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T19:40:00Z",
+   "baseline_to": "2026-11-24T19:42:00Z",
+   "from": "2026-11-24T19:44:00Z",
+   "to": "2026-11-24T19:47:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.7,
+  "valid": true
+ },
+ "S13": {
+  "case": "S13",
+  "skew_before": 0.1,
+  "chaos": {
+   "scenario": "S13",
+   "id": "v2-20261124-194923-ae40",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 8.8,
+   "observedAffected": [
+    "checkin",
+    "baggage"
+   ],
+   "criteria": [
+    {
+     "d": "initiator p95 ≥ baseline + delay",
+     "req": true,
+     "obs": 1062.68,
+     "thr": 164.88,
+     "res": "PASS"
+    },
+    {
+     "d": "initiator pool usage artışı",
+     "req": false,
+     "obs": 100.0,
+     "thr": 10.49,
+     "res": "PASS"
+    },
+    {
+     "d": "diğer uygulamalar etkilenmez",
+     "req": false,
+     "obs": 9.37,
+     "thr": 43.52,
+     "res": "PASS"
+    }
+   ],
+   "controller": {}
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T19:50:00Z",
+   "baseline_to": "2026-11-24T19:52:00Z",
+   "from": "2026-11-24T19:54:00Z",
+   "to": "2026-11-24T19:57:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.0,
+  "valid": true
+ },
+ "S17": {
+  "case": "S17",
+  "skew_before": 0.4,
+  "chaos": {
+   "scenario": "S17",
+   "id": "v2-20261124-195944-ab44",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 12.4,
+   "observedAffected": [
+    "checkin",
+    "baggage"
+   ],
+   "criteria": [
+    {
+     "d": "DB CPU hedefin %80'i",
+     "req": true,
+     "obs": 84.45,
+     "thr": 64.0,
+     "res": "PASS"
+    },
+    {
+     "d": "cascade: hedef uygulamada p95 ≥ 1.5×",
+     "req": true,
+     "obs": 47.63,
+     "thr": 31.45,
+     "res": "PASS"
+    },
+    {
+     "d": "query mean latency artışı",
+     "req": false,
+     "obs": 38.6,
+     "thr": 0.39,
+     "res": "PASS"
+    }
+   ],
+   "controller": {
+    "metric": "DB_CPU_PCT",
+    "scope": "DB",
+    "target": 80.0,
+    "finalLevel": 0.2,
+    "saturated": false,
+    "note": ""
+   }
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T20:00:00Z",
+   "baseline_to": "2026-11-24T20:03:00Z",
+   "from": "2026-11-24T20:04:00Z",
+   "to": "2026-11-24T20:08:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.5,
+  "valid": true
+ }
+}

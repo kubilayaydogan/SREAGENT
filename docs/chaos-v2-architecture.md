@@ -224,6 +224,7 @@ Testler:
 - **DB_VM disk boş alanı doğrudan ölçülmez.** Koruma `temp_file_limit` (2 GB/rol), DB boyut artış limiti ve `chaos.write_sink` trim ile sağlanır.
 - **Tek uygulamalı connection storm (S10) role limitine takılır.** Bu limit 40 bağlantıdır. `max_connections` doygunluğu için senaryonun ALL/MULTI modunda çalıştırılması gerekir.
 - **Network senaryoları (S13–S16, S19) netem sidecar'a bağlıdır.** Etki container ağ arayüzünde oluşur; DB_VM tarafında ağ kesintisi simüle edilmez.
+  Sidecar uygulamanın network namespace'ini paylaşır (`network_mode: service:<app>`). Uygulama container'ı yeniden oluşturulur veya yeniden başlatılırsa sidecar eski namespace'te kalır ve deney ön kontrolde "netem sidecar erişilemiyor" hatasıyla reddedilir. Çözüm: `docker compose up -d --force-recreate --no-deps netem-<app>`.
 - **Dynatrace UI bağlantılarında query parametre biçimi garanti değildir.** Bu yüzden raporda kopyalanabilir DQL de verilir.
 - **Lock senaryolarının (S02, S08, S09) etkisi yalnız DB ve workload seviyesinde görünür.** Bu senaryolar yalnız `chaos.*` satırlarında çalışır, iş endpoint'leri etkilenmez. İş trafiğini etkileyen lock senaryosu S03'tür (sıcak uçuş satırları).
 - **S18 (multi-app load) iş endpoint'lerine gerçek trafik gönderir.** Bu endpoint'ler hafif (catalog sorguları) olduğu için DB CPU genelde birkaç yüzdeyi aşmaz. Zorunlu ölçütler RPS ve TPS artışıdır; DB CPU yalnızca bilgi amaçlı gösterilir. DB CPU doygunluğu için S04 veya S17 kullanılmalıdır.

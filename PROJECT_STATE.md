@@ -18,7 +18,7 @@ Ayrıntı: `docs/chaos-v2-architecture.md` · API: `docs/openapi/chaos-controlle
 Chaos v2 açık maddeleri:
 1. Frontend ekran görüntüsü üretilmedi.
 2. `chaos.*` alanları log'da JSON içinde; Dynatrace'te ayrı öznitelik olarak aranabilmesi için OpenPipeline kuralı yok (sorguda `parse` gerekir).
-3. SRE Agent'ın chaos deneylerini (S01–S20) kör olarak teşhis etme değerlendirmesi henüz koşulmadı.
+3. SRE Agent kör değerlendirmesi (2026-11-24, `docs/chaos-v2-agent-eval.md`): **6/8** — row_lock, db_cpu, pool_saturation doğru; S10 (connection storm, ratio 0.63 < eşik 0.80) ve S11 (container CPU) kaçtı; network (S13) katalog dışı ama yanlış atıf yok. Öneriler uygulanmadı.
 4. Bilinen sınırlamalar: `docs/chaos-v2-architecture.md` §7 (S10 tek uygulamada role limiti, DB_VM disk ölçülmez, lock senaryoları yalnız `chaos.*` satırları vb.).
 
 ## SRE Operations Platform (2026-11-21)
