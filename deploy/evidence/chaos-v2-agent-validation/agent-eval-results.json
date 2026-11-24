@@ -1,0 +1,121 @@
+{
+  "kind": "chaos_v2_validation_windows",
+  "fixture": false,
+  "rows": [
+    {
+      "case": "V0",
+      "report": "rep-20261124-214404-13d935",
+      "fails": [],
+      "score": 0.0,
+      "primary": null,
+      "confidence": null,
+      "sources": [],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "V10",
+      "report": "rep-20261124-214410-11b619",
+      "fails": [],
+      "score": 0.0,
+      "primary": "global_connection_pressure",
+      "confidence": "medium",
+      "sources": [
+        "checkin-service",
+        "reservation-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "V11",
+      "report": "rep-20261124-214419-8aa285",
+      "fails": [],
+      "score": 0.0,
+      "primary": "app_container_cpu",
+      "confidence": "medium",
+      "sources": [
+        "reservation-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "V13",
+      "report": "rep-20261124-214424-12135d",
+      "fails": [
+        "primary pool_saturation != network_path_latency"
+      ],
+      "score": 50.0,
+      "primary": "pool_saturation",
+      "confidence": "medium",
+      "sources": [
+        "flightops-service"
+      ],
+      "affected": [
+        "flightops-service"
+      ],
+      "impacted": [
+        "flightops-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "V14",
+      "report": "rep-20261124-214430-535089",
+      "fails": [],
+      "score": 30.0,
+      "primary": "network_path_latency",
+      "confidence": "medium",
+      "sources": [
+        "checkin-service"
+      ],
+      "affected": [
+        "checkin-service"
+      ],
+      "impacted": [
+        "checkin-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "V03",
+      "report": "rep-20261124-214436-c8a47c",
+      "fails": [],
+      "score": 81.1,
+      "primary": "row_lock",
+      "confidence": "high",
+      "sources": [
+        "flightops-service"
+      ],
+      "affected": [
+        "reservation-service",
+        "baggage-service",
+        "checkin-service"
+      ],
+      "impacted": [
+        "baggage-service",
+        "checkin-service",
+        "reservation-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "V18",
+      "report": "rep-20261124-214446-206b10",
+      "fails": [],
+      "score": 0.0,
+      "primary": "independent_load",
+      "confidence": "medium",
+      "sources": [
+        "reservation-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    }
+  ]
+}

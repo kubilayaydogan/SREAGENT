@@ -1,0 +1,137 @@
+{
+  "kind": "chaos_v2_windows",
+  "fixture": false,
+  "rows": [
+    {
+      "case": "C0",
+      "report": "rep-20261124-203201-b6f9e7",
+      "fails": [],
+      "score": 0.0,
+      "primary": null,
+      "confidence": null,
+      "sources": [],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S03",
+      "report": "rep-20261124-203208-edd34c",
+      "fails": [],
+      "score": 65.4,
+      "primary": "row_lock",
+      "confidence": "high",
+      "sources": [
+        "flightops-service"
+      ],
+      "affected": [
+        "reservation-service",
+        "checkin-service",
+        "baggage-service"
+      ],
+      "impacted": [
+        "baggage-service",
+        "checkin-service",
+        "reservation-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S04",
+      "report": "rep-20261124-203219-d633f7",
+      "fails": [],
+      "score": 0.0,
+      "primary": "db_cpu",
+      "confidence": "medium",
+      "sources": [
+        "baggage-service",
+        "checkin-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S01",
+      "report": "rep-20261124-203229-e6a9cc",
+      "fails": [],
+      "score": 60.0,
+      "primary": "pool_saturation",
+      "confidence": "medium",
+      "sources": [
+        "checkin-service"
+      ],
+      "affected": [
+        "checkin-service"
+      ],
+      "impacted": [
+        "checkin-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S10",
+      "report": "rep-20261124-203235-a4d136",
+      "fails": [],
+      "score": 0.0,
+      "primary": "global_connection_pressure",
+      "confidence": "medium",
+      "sources": [
+        "baggage-service",
+        "flightops-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S11",
+      "report": "rep-20261124-203245-51fea9",
+      "fails": [
+        "primary app_container_cpu != app_vm_cpu"
+      ],
+      "score": 0.0,
+      "primary": "app_container_cpu",
+      "confidence": "medium",
+      "sources": [
+        "baggage-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S13",
+      "report": "rep-20261124-203251-58f458",
+      "fails": [],
+      "score": 30.0,
+      "primary": "network_path_latency",
+      "confidence": "medium",
+      "sources": [
+        "checkin-service"
+      ],
+      "affected": [
+        "checkin-service"
+      ],
+      "impacted": [
+        "checkin-service"
+      ],
+      "coverage": "15/15"
+    },
+    {
+      "case": "S17",
+      "report": "rep-20261124-203258-32ac0c",
+      "fails": [],
+      "score": 0.0,
+      "primary": "db_cpu",
+      "confidence": "medium",
+      "sources": [
+        "baggage-service",
+        "checkin-service"
+      ],
+      "affected": [],
+      "impacted": [],
+      "coverage": "15/15"
+    }
+  ]
+}

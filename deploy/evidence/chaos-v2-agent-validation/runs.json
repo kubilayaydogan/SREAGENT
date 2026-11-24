@@ -1,0 +1,316 @@
+{
+ "V0": {
+  "case": "V0",
+  "skew_before": 1.0,
+  "windows": {
+   "baseline_from": "2026-11-24T20:32:00Z",
+   "baseline_to": "2026-11-24T20:36:00Z",
+   "from": "2026-11-24T20:36:00Z",
+   "to": "2026-11-24T20:39:00Z"
+  },
+  "chaos": {
+   "note": "chaos yok; yalnız sürekli trafik"
+  },
+  "skew_after": 0.4,
+  "valid": true
+ },
+ "V10": {
+  "case": "V10",
+  "skew_before": 0.8,
+  "chaos": {
+   "scenario": "S10",
+   "id": "v2-20261124-204117-a3bc",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 4.1,
+   "observedAffected": [],
+   "criteria": [
+    {
+     "d": "DB bağlantı doluluğu",
+     "req": true,
+     "obs": 70.0,
+     "thr": 48.0,
+     "res": "PASS"
+    }
+   ],
+   "controller": {
+    "metric": "DB_CONNECTIONS_PCT",
+    "scope": "DB",
+    "target": 70.0,
+    "finalLevel": 0.6,
+    "saturated": false,
+    "note": ""
+   }
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T20:42:00Z",
+   "baseline_to": "2026-11-24T20:44:00Z",
+   "from": "2026-11-24T20:46:00Z",
+   "to": "2026-11-24T20:49:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.7,
+  "valid": true
+ },
+ "V11": {
+  "case": "V11",
+  "skew_before": 0.2,
+  "chaos": {
+   "scenario": "S11",
+   "id": "v2-20261124-205133-2ab9",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 4.8,
+   "observedAffected": [
+    "baggage"
+   ],
+   "criteria": [
+    {
+     "d": "initiator CPU hedefin %80'i",
+     "req": true,
+     "obs": 66.67,
+     "thr": 64.0,
+     "res": "PASS"
+    },
+    {
+     "d": "initiator p95 artışı",
+     "req": true,
+     "obs": 24.33,
+     "thr": 15.18,
+     "res": "PASS"
+    },
+    {
+     "d": "DB CPU belirgin değişmez",
+     "req": false,
+     "obs": 1.48,
+     "thr": 17.02,
+     "res": "PASS"
+    }
+   ],
+   "controller": {
+    "metric": "APP_CPU_PCT",
+    "scope": "INITIATOR",
+    "target": 80.0,
+    "finalLevel": 1.0,
+    "saturated": true,
+    "note": "hedef, worker üst sınırı içinde ulaşılamadı (güvenlik limitleri) — dürüst sonuç"
+   }
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T20:52:00Z",
+   "baseline_to": "2026-11-24T20:55:00Z",
+   "from": "2026-11-24T20:56:00Z",
+   "to": "2026-11-24T21:00:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.0,
+  "valid": true
+ },
+ "V13": {
+  "case": "V13",
+  "skew_before": 0.5,
+  "chaos": {
+   "scenario": "S13",
+   "id": "v2-20261124-210149-3aac",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 12.2,
+   "observedAffected": [
+    "flightops",
+    "baggage"
+   ],
+   "criteria": [
+    {
+     "d": "initiator p95 ≥ baseline + delay",
+     "req": true,
+     "obs": 467.12,
+     "thr": 154.79,
+     "res": "PASS"
+    },
+    {
+     "d": "initiator pool usage artışı",
+     "req": false,
+     "obs": 100.0,
+     "thr": 10.97,
+     "res": "PASS"
+    },
+    {
+     "d": "diğer uygulamalar etkilenmez",
+     "req": false,
+     "obs": 224.81,
+     "thr": 80.69,
+     "res": "FAIL"
+    }
+   ],
+   "controller": {}
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T21:02:00Z",
+   "baseline_to": "2026-11-24T21:05:00Z",
+   "from": "2026-11-24T21:06:00Z",
+   "to": "2026-11-24T21:10:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.4,
+  "valid": true
+ },
+ "V14": {
+  "case": "V14",
+  "skew_before": 0.8,
+  "chaos": {
+   "scenario": "S14",
+   "id": "v2-20261124-211216-4c8b",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 5.8,
+   "observedAffected": [
+    "checkin"
+   ],
+   "criteria": [
+    {
+     "d": "initiator p99 artışı",
+     "req": true,
+     "obs": 445.6,
+     "thr": 173.22,
+     "res": "PASS"
+    },
+    {
+     "d": "diğer uygulamalar etkilenmez",
+     "req": false,
+     "obs": 9.02,
+     "thr": 42.19,
+     "res": "PASS"
+    }
+   ],
+   "controller": {}
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T21:13:00Z",
+   "baseline_to": "2026-11-24T21:15:00Z",
+   "from": "2026-11-24T21:17:00Z",
+   "to": "2026-11-24T21:20:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.7,
+  "valid": true
+ },
+ "V03": {
+  "case": "V03",
+  "skew_before": 0.2,
+  "chaos": {
+   "scenario": "S03",
+   "id": "v2-20261124-212237-f8a3",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 12.3,
+   "observedAffected": [
+    "reservation",
+    "checkin",
+    "baggage"
+   ],
+   "criteria": [
+    {
+     "d": "uzun transaction gözlendi (s)",
+     "req": true,
+     "obs": 29.81,
+     "thr": 18.0,
+     "res": "PASS"
+    },
+    {
+     "d": "blocking: lock waiters ≥ 1",
+     "req": true,
+     "obs": 19.0,
+     "thr": 1.0,
+     "res": "PASS"
+    },
+    {
+     "d": "hedef uygulamada p95 artışı",
+     "req": true,
+     "obs": 8751.0,
+     "thr": 69.48,
+     "res": "PASS"
+    }
+   ],
+   "controller": {}
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T21:23:00Z",
+   "baseline_to": "2026-11-24T21:26:00Z",
+   "from": "2026-11-24T21:27:00Z",
+   "to": "2026-11-24T21:31:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.1,
+  "valid": true
+ },
+ "V18": {
+  "case": "V18",
+  "skew_before": 0.5,
+  "chaos": {
+   "scenario": "S18",
+   "id": "v2-20261124-213303-a693",
+   "state": "COMPLETED",
+   "stateReason": "plan tamamlandı",
+   "verdict": "IMPACT_CONFIRMED",
+   "cleanupOk": true,
+   "recovered": true,
+   "recoveryTimeSec": 5.8,
+   "observedAffected": [],
+   "criteria": [
+    {
+     "d": "hedeflerde RPS artışı",
+     "req": true,
+     "obs": 13.27,
+     "thr": 8.01,
+     "res": "PASS"
+    },
+    {
+     "d": "DB TPS artışı",
+     "req": true,
+     "obs": 207.97,
+     "thr": 104.0,
+     "res": "PASS"
+    },
+    {
+     "d": "DB CPU hedefin %60'ı",
+     "req": false,
+     "obs": 2.95,
+     "thr": 27.0,
+     "res": "FAIL"
+    }
+   ],
+   "controller": {
+    "metric": "DB_CPU_PCT",
+    "scope": "DB",
+    "target": 45.0,
+    "finalLevel": 1.0,
+    "saturated": true,
+    "note": "hedef, worker üst sınırı içinde ulaşılamadı (güvenlik limitleri) — dürüst sonuç"
+   }
+  },
+  "windows": {
+   "baseline_from": "2026-11-24T21:34:00Z",
+   "baseline_to": "2026-11-24T21:36:00Z",
+   "from": "2026-11-24T21:38:00Z",
+   "to": "2026-11-24T21:41:00Z"
+  },
+  "experiment_state": "COMPLETED",
+  "skew_after": 0.4,
+  "valid": true
+ }
+}

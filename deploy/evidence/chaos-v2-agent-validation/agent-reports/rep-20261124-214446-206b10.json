@@ -1,0 +1,625 @@
+{
+  "id": "rep-20261124-214446-206b10",
+  "kind": "eval-real",
+  "generated_at": "2026-11-24T21:44:46Z",
+  "status": "complete",
+  "question": null,
+  "windows": [
+    {
+      "name": "baseline",
+      "start": "2026-11-24T21:34:00Z",
+      "end": "2026-11-24T21:36:00Z"
+    },
+    {
+      "name": "window",
+      "start": "2026-11-24T21:38:00Z",
+      "end": "2026-11-24T21:41:00Z"
+    }
+  ],
+  "notes": [],
+  "risk": {
+    "overall": {
+      "score": 0.0,
+      "band": "düşük",
+      "coverage": 1.0,
+      "scored_apps": 4,
+      "total_apps": 4
+    },
+    "apps": {
+      "reservation-service": {
+        "components": {
+          "latency": 0.0,
+          "errors": 0.0,
+          "saturation": 0.0,
+          "lock": 0.0,
+          "resource": 0.0,
+          "_latency_ratio": 0.714,
+          "_latency_source": "span_p95",
+          "_latency_delta_ms": -2.0
+        },
+        "score": 0.0,
+        "coverage": 1.0,
+        "band": "düşük",
+        "missing": []
+      },
+      "checkin-service": {
+        "components": {
+          "latency": 0.0,
+          "errors": 0.0,
+          "saturation": 0.0,
+          "lock": 0.0,
+          "resource": 0.0,
+          "_latency_ratio": 0.556,
+          "_latency_source": "span_p95",
+          "_latency_delta_ms": -4.0
+        },
+        "score": 0.0,
+        "coverage": 1.0,
+        "band": "düşük",
+        "missing": []
+      },
+      "flightops-service": {
+        "components": {
+          "latency": 0.0,
+          "errors": 0.0,
+          "saturation": 0.0,
+          "lock": 0.0,
+          "resource": 0.0,
+          "_latency_ratio": 0.636,
+          "_latency_source": "span_p95",
+          "_latency_delta_ms": -4.0
+        },
+        "score": 0.0,
+        "coverage": 1.0,
+        "band": "düşük",
+        "missing": []
+      },
+      "baggage-service": {
+        "components": {
+          "latency": 0.0,
+          "errors": 0.0,
+          "saturation": 0.0,
+          "lock": 0.0,
+          "resource": 0.0,
+          "_latency_ratio": 0.667,
+          "_latency_source": "span_p95",
+          "_latency_delta_ms": -5.0
+        },
+        "score": 0.0,
+        "coverage": 1.0,
+        "band": "düşük",
+        "missing": []
+      }
+    }
+  },
+  "data_coverage": {
+    "signals_ok": 15,
+    "signals_total": 15,
+    "ratio": 1.0,
+    "gaps": {}
+  },
+  "causality": {
+    "primary_mechanism": "independent_load",
+    "confidence": "medium",
+    "source_apps": [
+      "reservation-service"
+    ],
+    "affected_apps": []
+  },
+  "impacted": {},
+  "mechanisms": [
+    {
+      "id": "independent_load",
+      "title": "reservation-service bağımsız load artışı",
+      "source_apps": [
+        "reservation-service"
+      ],
+      "affected_apps": [],
+      "mechanism": "Request rate arttı; paylaşılan resource'ta (lock, DB connection, CPU) pressure ölçülmedi. Diğer uygulamalara yayılma gözlenmedi.",
+      "rpm_ratio": 3.38,
+      "unexplained_impact": [],
+      "signals": [
+        "Micrometer istek hızı"
+      ],
+      "confidence": "medium",
+      "evidence_ids": [
+        "ev-b8d1876c41"
+      ]
+    },
+    {
+      "id": "independent_load",
+      "title": "checkin-service bağımsız load artışı",
+      "source_apps": [
+        "checkin-service"
+      ],
+      "affected_apps": [],
+      "mechanism": "Request rate arttı; paylaşılan resource'ta (lock, DB connection, CPU) pressure ölçülmedi. Diğer uygulamalara yayılma gözlenmedi.",
+      "rpm_ratio": 3.68,
+      "unexplained_impact": [],
+      "signals": [
+        "Micrometer istek hızı"
+      ],
+      "confidence": "medium",
+      "evidence_ids": [
+        "ev-b8d1876c41"
+      ]
+    },
+    {
+      "id": "independent_load",
+      "title": "flightops-service bağımsız load artışı",
+      "source_apps": [
+        "flightops-service"
+      ],
+      "affected_apps": [],
+      "mechanism": "Request rate arttı; paylaşılan resource'ta (lock, DB connection, CPU) pressure ölçülmedi. Diğer uygulamalara yayılma gözlenmedi.",
+      "rpm_ratio": 2.79,
+      "unexplained_impact": [],
+      "signals": [
+        "Micrometer istek hızı"
+      ],
+      "confidence": "medium",
+      "evidence_ids": [
+        "ev-b8d1876c41"
+      ]
+    },
+    {
+      "id": "independent_load",
+      "title": "baggage-service bağımsız load artışı",
+      "source_apps": [
+        "baggage-service"
+      ],
+      "affected_apps": [],
+      "mechanism": "Request rate arttı; paylaşılan resource'ta (lock, DB connection, CPU) pressure ölçülmedi. Diğer uygulamalara yayılma gözlenmedi.",
+      "rpm_ratio": 3.33,
+      "unexplained_impact": [],
+      "signals": [
+        "Micrometer istek hızı"
+      ],
+      "confidence": "medium",
+      "evidence_ids": [
+        "ev-b8d1876c41"
+      ]
+    }
+  ],
+  "alternatives": [],
+  "unexplained_impacted": [],
+  "data_gaps": [],
+  "true_zero_signals": [
+    "edges",
+    "lock_waiters",
+    "pg_lock_logs"
+  ],
+  "human_review": [
+    "Belirgin bir risk yok; rutin monitoring yeterli."
+  ],
+  "evidence": [
+    {
+      "id": "ev-b8d1876c41",
+      "signal": "http",
+      "status": "OK",
+      "records": 8,
+      "dynatrace_query_id": "01a20f84-c067-7943-a379-de0be630d920",
+      "dql": "timeseries n=sum(airlab.app.http.server.requests, rollup: count), t=sum(airlab.app.http.server.requests, rollup: sum), mx=max(airlab.app.http.server.requests, rollup: max), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m, by:{service, outcome}, filter:{not startsWith(uri, \"/actuator\") and not startsWith(uri, \"/lab\")}",
+      "error": null
+    },
+    {
+      "id": "ev-09377ef085",
+      "signal": "spans",
+      "status": "OK",
+      "records": 8,
+      "dynatrace_query_id": "01a20f84-c061-7cdd-b85e-d5f82f942039",
+      "dql": "fetch spans, from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\" | filter span.kind == \"server\" and isNotNull(spring.application.name) and not startsWith(url.path, \"/actuator\") and not startsWith(url.path, \"/lab\") | fieldsAdd w = if(start_time < toTimestamp(\"2026-11-24T21:34:00Z\"), \"_out\", else:if(start_time < toTimestamp(\"2026-11-24T21:36:00Z\"), \"baseline\", else:if(start_time < toTimestamp(\"2026-11-24T21:41:00Z\"), \"window\", else:\"_out\"))) | summarize n=count(), p50=percentile(duration, 50)/1000000, p95=percentile(duration, 95)/1000000, by:{w, svc=spring.application.name}",
+      "error": null
+    },
+    {
+      "id": "ev-d6e362ce02",
+      "signal": "hikari",
+      "status": "OK",
+      "records": 4,
+      "dynatrace_query_id": "01a20f84-c069-7e25-aeab-2c0a2b4ead3b",
+      "dql": "timeseries a=max(airlab.app.hikaricp.connections.active), pe=max(airlab.app.hikaricp.connections.pending), mx=max(airlab.app.hikaricp.connections.max), to=sum(airlab.app.hikaricp.connections.timeout), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m, by:{service}",
+      "error": null
+    },
+    {
+      "id": "ev-7a5513b31f",
+      "signal": "jvm_gc",
+      "status": "OK",
+      "records": 4,
+      "dynatrace_query_id": "01a20f84-c065-7581-8cd5-56e0778f6152",
+      "dql": "timeseries gc=sum(airlab.app.jvm.gc.pause, rollup: count), gcmax=max(airlab.app.jvm.gc.pause, rollup: max), ov=max(airlab.app.jvm.gc.overhead), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m, by:{service}",
+      "error": null
+    },
+    {
+      "id": "ev-8b234b9a85",
+      "signal": "jvm_heap",
+      "status": "OK",
+      "records": 4,
+      "dynatrace_query_id": "01a20f84-c418-76a2-954e-73005957341e",
+      "dql": "timeseries used=max(airlab.app.jvm.memory.used), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m, by:{service, area} | filter area == \"heap\"",
+      "error": null
+    },
+    {
+      "id": "ev-d523aa7841",
+      "signal": "hosts",
+      "status": "OK",
+      "records": 2,
+      "dynatrace_query_id": "01a20f84-c423-79ba-acb2-942276c96f0c",
+      "dql": "timeseries cpu=avg(dt.host.cpu.usage), io=avg(dt.host.cpu.iowait), mem=avg(dt.host.memory.usage), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m, by:{dt.smartscape.host} | fieldsAdd host=getNodeName(dt.smartscape.host)",
+      "error": null
+    },
+    {
+      "id": "ev-527fbde322",
+      "signal": "containers",
+      "status": "OK",
+      "records": 11,
+      "dynatrace_query_id": "01a20f84-c420-7010-a586-c31f9b5cae15",
+      "dql": "timeseries u=sum(dt.containers.cpu.usage_user_time), s=sum(dt.containers.cpu.usage_system_time), rss=max(dt.containers.memory.resident_set_bytes), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m, by:{dt.smartscape.container} | fieldsAdd name=getNodeName(dt.smartscape.container)",
+      "error": null
+    },
+    {
+      "id": "ev-3cd1322904",
+      "signal": "db_conn",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a20f84-c569-7bc0-a6bb-d779a19962c2",
+      "dql": "timeseries r=max(airlab.pg.connections.used_ratio_normal), used=max(airlab.pg.connections.used), slots=max(airlab.pg.connections.normal_slots), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m",
+      "error": null
+    },
+    {
+      "id": "ev-147127c2a5",
+      "signal": "db_sessions",
+      "status": "OK",
+      "records": 13,
+      "dynatrace_query_id": "01a20f84-c67a-7436-b005-dc13b79f21da",
+      "dql": "timeseries s=avg(airlab.pg.sessions), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m, by:{app, db.role, state, wait_type}",
+      "error": null
+    },
+    {
+      "id": "ev-022395bf2b",
+      "signal": "lock_waiters",
+      "status": "EMPTY",
+      "records": 0,
+      "dynatrace_query_id": "01a20f84-c681-74e2-80b4-0a8333097f2e",
+      "dql": "timeseries wt=max(airlab.pg.lock.waiters), wmax=max(airlab.pg.lock.wait_max_seconds), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m, by:{waiter.app, blocker.app}",
+      "error": null
+    },
+    {
+      "id": "ev-5d1e298693",
+      "signal": "collector",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a20f84-c695-723e-91e8-a99e0cf0a0b1",
+      "dql": "timeseries up=min(airlab.pg.collector.up), tot=max(airlab.pg.lock.waiters_total), tavg=avg(airlab.pg.lock.waiters_total), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m",
+      "error": null
+    },
+    {
+      "id": "ev-d34c6e40d3",
+      "signal": "edges",
+      "status": "EMPTY",
+      "records": 0,
+      "dynatrace_query_id": "01a20f84-c7cf-705e-aec5-e4c7f2e41da9",
+      "dql": "fetch logs, from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\" | filter airlab.event == \"airlab.pg.blocking_edge\" | fieldsAdd w = if(timestamp < toTimestamp(\"2026-11-24T21:34:00Z\"), \"_out\", else:if(timestamp < toTimestamp(\"2026-11-24T21:36:00Z\"), \"baseline\", else:if(timestamp < toTimestamp(\"2026-11-24T21:41:00Z\"), \"window\", else:\"_out\"))) | summarize n=count(), wait_max=max(toDouble(waiter.wait_seconds)), by:{w, waiter_app=waiter.app, blocker_app=blocker.app, wait_type=waiter.wait_event_type, waiter_op=waiter.op, blocker_op=blocker.op, blocker_state=blocker.state, blocker_wait=blocker.wait_event_type}",
+      "error": null
+    },
+    {
+      "id": "ev-283d6c8903",
+      "signal": "pg_lock_logs",
+      "status": "EMPTY",
+      "records": 0,
+      "dynatrace_query_id": "01a20f84-c8d3-78aa-8801-f64cfc704b3c",
+      "dql": "fetch logs, from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\" | filter host.name == \"db-vm\" and contains(content, \"still waiting for\") | fieldsAdd w = if(timestamp < toTimestamp(\"2026-11-24T21:34:00Z\"), \"_out\", else:if(timestamp < toTimestamp(\"2026-11-24T21:36:00Z\"), \"baseline\", else:if(timestamp < toTimestamp(\"2026-11-24T21:41:00Z\"), \"window\", else:\"_out\"))) | summarize n=count(), by:{w}",
+      "error": null
+    },
+    {
+      "id": "ev-bea747aaf6",
+      "signal": "db_stats",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a20f84-c8d8-7fde-9068-c1727dc7f071",
+      "dql": "timeseries dl=sum(airlab.pg.db.deadlocks), rb=sum(airlab.pg.db.xact_rollback), cm=sum(airlab.pg.db.xact_commit), tmp=sum(airlab.pg.db.temp_bytes), rd=sum(airlab.pg.db.blks_read), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m",
+      "error": null
+    },
+    {
+      "id": "ev-7868c5ba21",
+      "signal": "statements",
+      "status": "OK",
+      "records": 7,
+      "dynatrace_query_id": "01a20f84-c8e3-77bd-b279-fad30d3f8ff9",
+      "dql": "timeseries et=sum(airlab.pg.statements.exec_time_ms), calls=sum(airlab.pg.statements.calls), from:\"2026-11-24T21:34:00Z\", to:\"2026-11-24T21:41:00Z\", interval:1m, by:{db.role}",
+      "error": null
+    }
+  ],
+  "extra_evidence": {},
+  "explanation": "**Özet.** 21:38 UTC (00:38 TSİ) – 21:41 UTC (00:41 TSİ) aralığı, öncesindeki 21:34 UTC (00:34 TSİ) – 21:36 UTC (00:36 TSİ) baseline ile karşılaştırıldı. Tespit edilen mechanism: **reservation-service bağımsız load artışı**. Root cause source'u reservation-service, etkilenen uygulamalar yok. Genel risk score 0.0/100 (düşük); bu puan şiddeti gösterir, nedenselliğin kesinliğini değil.\n\n**Root cause ve yayılım.** Request rate arttı; paylaşılan resource'ta (lock, DB connection, CPU) pressure ölçülmedi. Diğer uygulamalara yayılma gözlenmedi.\n\n**Evidence ve confidence.** Değerlendirme 15/15 signal ile yapıldı. Causality confidence medium; mechanism'i destekleyen signal'ler: Micrometer istek hızı (evidence: ev-b8d1876c41).\n\n**Önerilen inceleme.** Belirgin bir risk yok; rutin monitoring yeterli. Ajan salt-okunurdur; değişiklik gerektiren adımlar onay akışından geçmelidir.",
+  "explanation_source": "deterministik (LLM devre dışı)",
+  "errors": [],
+  "budget": {
+    "queries_used": 15,
+    "elapsed_s": 5.4
+  },
+  "features_summary": {
+    "baseline": {
+      "apps": {
+        "baggage-service": {
+          "rpm": 596.0,
+          "err_rate": 0.0,
+          "http_mean_ms": 5.231,
+          "span_n": 1192.0,
+          "span_p95_ms": 15.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 8.0,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 646.951
+        },
+        "checkin-service": {
+          "rpm": 514.0,
+          "err_rate": 0.0,
+          "http_mean_ms": 3.375,
+          "span_n": 1028.0,
+          "span_p95_ms": 9.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 8.0,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 104.389
+        },
+        "flightops-service": {
+          "rpm": 592.0,
+          "err_rate": 0.0,
+          "http_mean_ms": 3.925,
+          "span_n": 1184.0,
+          "span_p95_ms": 11.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 5.875,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 75.559
+        },
+        "reservation-service": {
+          "rpm": 578.5,
+          "err_rate": 0.0,
+          "http_mean_ms": 2.717,
+          "span_n": 1157.0,
+          "span_p95_ms": 7.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 8.0,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 40.903
+        }
+      },
+      "hosts": {
+        "db-vm": {
+          "cpu": 1.722,
+          "cpu_max": 1.746,
+          "iowait": 0.42,
+          "mem": 51.348,
+          "points": 2
+        },
+        "app-vm": {
+          "cpu": 7.624,
+          "cpu_max": 7.681,
+          "iowait": 0.021,
+          "mem": 72.001,
+          "points": 2
+        }
+      },
+      "db": {
+        "conn_ratio": 0.319,
+        "conn_used_max": 30.0,
+        "conn_slots": 94.0,
+        "collector_points": 2,
+        "collector_up_min": 1.0,
+        "lock_waiters_max": 0.0,
+        "lock_waiters_avg": 0.0,
+        "edges_total": 0,
+        "pg_lock_wait_logs": 0,
+        "deadlocks": 0.0,
+        "rollbacks": 404.0,
+        "commits": 8827.0,
+        "temp_bytes": 0.0
+      },
+      "containers": {
+        "checkin-service": {
+          "cpu_cores": 0.0297,
+          "rss_max": 412722517.0
+        },
+        "pg-lock-collector": {
+          "cpu_cores": 0.0015,
+          "rss_max": 16728064.0
+        },
+        "flightops-service": {
+          "cpu_cores": 0.0307,
+          "rss_max": 394866688.0
+        },
+        "airlab/sre-platform-backend:0.1.0": {
+          "cpu_cores": 0.0062,
+          "rss_max": 172228608.0
+        },
+        "postgres:17.7-alpine": {
+          "cpu_cores": 0.0052,
+          "rss_max": 41738240.0
+        },
+        "airlab/netem-agent:1.0.0": {
+          "cpu_cores": 0.0002,
+          "rss_max": 19644416.0
+        },
+        "chaos-controller": {
+          "cpu_cores": 0.0993,
+          "rss_max": 401694037.0
+        },
+        "baggage-service": {
+          "cpu_cores": 0.0303,
+          "rss_max": 408802645.0
+        },
+        "airlab/sre-platform-frontend:0.1.0": {
+          "cpu_cores": 0.0019,
+          "rss_max": 27594752.0
+        },
+        "reservation-service": {
+          "cpu_cores": 0.0309,
+          "rss_max": 398938112.0
+        },
+        "": {
+          "cpu_cores": 0.0049,
+          "rss_max": 227135488.0
+        }
+      }
+    },
+    "window": {
+      "apps": {
+        "baggage-service": {
+          "rpm": 1986.667,
+          "err_rate": 0.0,
+          "http_mean_ms": 3.373,
+          "span_n": 9146.0,
+          "span_p95_ms": 10.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.001,
+          "db_sessions": 8.972,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 1504.51
+        },
+        "checkin-service": {
+          "rpm": 1889.0,
+          "err_rate": 0.0,
+          "http_mean_ms": 2.02,
+          "span_n": 8668.0,
+          "span_p95_ms": 5.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.001,
+          "db_sessions": 6.694,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 234.686
+        },
+        "flightops-service": {
+          "rpm": 1649.333,
+          "err_rate": 0.0,
+          "http_mean_ms": 2.159,
+          "span_n": 9126.0,
+          "span_p95_ms": 7.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.001,
+          "db_sessions": 8.028,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 188.655
+        },
+        "reservation-service": {
+          "rpm": 1955.333,
+          "err_rate": 0.0,
+          "http_mean_ms": 1.844,
+          "span_n": 8993.0,
+          "span_p95_ms": 5.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.001,
+          "db_sessions": 6.972,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 87.981
+        }
+      },
+      "hosts": {
+        "db-vm": {
+          "cpu": 2.918,
+          "cpu_max": 2.956,
+          "iowait": 0.353,
+          "mem": 51.248,
+          "points": 3
+        },
+        "app-vm": {
+          "cpu": 10.95,
+          "cpu_max": 11.137,
+          "iowait": 0.017,
+          "mem": 71.992,
+          "points": 3
+        }
+      },
+      "db": {
+        "conn_ratio": 0.308,
+        "conn_used_max": 29.0,
+        "conn_slots": 94.0,
+        "collector_points": 3,
+        "collector_up_min": 1.0,
+        "lock_waiters_max": 0.0,
+        "lock_waiters_avg": 0.0,
+        "edges_total": 0,
+        "pg_lock_wait_logs": 0,
+        "deadlocks": 0.0,
+        "rollbacks": 1633.0,
+        "commits": 35757.0,
+        "temp_bytes": 0.0
+      },
+      "containers": {
+        "checkin-service": {
+          "cpu_cores": 0.0576,
+          "rss_max": 413039274.0
+        },
+        "pg-lock-collector": {
+          "cpu_cores": 0.0012,
+          "rss_max": 16728064.0
+        },
+        "flightops-service": {
+          "cpu_cores": 0.058,
+          "rss_max": 395342506.0
+        },
+        "airlab/sre-platform-backend:0.1.0": {
+          "cpu_cores": 0.0054,
+          "rss_max": 172228608.0
+        },
+        "postgres:17.7-alpine": {
+          "cpu_cores": 0.0055,
+          "rss_max": 42303488.0
+        },
+        "airlab/netem-agent:1.0.0": {
+          "cpu_cores": 0.0001,
+          "rss_max": 19644416.0
+        },
+        "chaos-controller": {
+          "cpu_cores": 0.1315,
+          "rss_max": 401859925.0
+        },
+        "baggage-service": {
+          "cpu_cores": 0.0647,
+          "rss_max": 409141248.0
+        },
+        "airlab/sre-platform-frontend:0.1.0": {
+          "cpu_cores": 0.0016,
+          "rss_max": 27594752.0
+        },
+        "reservation-service": {
+          "cpu_cores": 0.0606,
+          "rss_max": 399329962.0
+        },
+        "": {
+          "cpu_cores": 0.0069,
+          "rss_max": 237262165.0
+        }
+      }
+    }
+  },
+  "fixture": false
+}

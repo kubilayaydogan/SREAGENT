@@ -17,8 +17,8 @@ Ayrıntı: `docs/chaos-v2-architecture.md` · API: `docs/openapi/chaos-controlle
 
 Chaos v2 açık maddeleri:
 1. Frontend ekran görüntüsü üretilmedi.
-2. `chaos.*` alanları log'da JSON içinde; Dynatrace'te ayrı öznitelik olarak aranabilmesi için OpenPipeline kuralı yok (sorguda `parse` gerekir).
-3. SRE Agent kör değerlendirmesi (2026-11-24, `docs/chaos-v2-agent-eval.md`): **6/8** — row_lock, db_cpu, pool_saturation doğru; S10 (connection storm, ratio 0.63 < eşik 0.80) ve S11 (container CPU) kaçtı; network (S13) katalog dışı ama yanlış atıf yok. Öneriler uygulanmadı.
+2. `chaos.*` alanları log'da JSON içinde; Dynatrace'te ayrı öznitelik olarak aranabilmesi için OpenPipeline kuralı yok (query'de `parse` gerekir).
+3. SRE Agent kör değerlendirmesi (2026-11-24, `docs/chaos-v2-agent-eval.md`): **6/8** — row_lock, db_cpu, pool_saturation doğru; S10 (connection storm, ratio 0.63 < eşik 0.80) ve S11 (container CPU) kaçtı; network (S13) katalog dışı ama yanlış atıf yok. Ardından 4 kural eklendi (597e04f): regresyon 7/8, **bağımsız doğrulama seti 6/7** (V13 network kaçtı; `network_path_latency` kırılgan). Platform yeniden derlendi.
 4. Bilinen sınırlamalar: `docs/chaos-v2-architecture.md` §7 (S10 tek uygulamada role limiti, DB_VM disk ölçülmez, lock senaryoları yalnız `chaos.*` satırları vb.).
 
 ## SRE Operations Platform (2026-11-21)
@@ -115,7 +115,7 @@ Kod `sre-agent/`; mimari kararlar `docs/decisions/ADR-007-sre-agent.md`; işleti
 | Yığın | Python 3.13, LangGraph 1.2.24 + SqliteSaver, langchain-anthropic 1.7.12 (`claude-sonnet-5-5`), langchain-mcp-adapters 0.3.2 / mcp 1.30.0, LangSmith 0.16 (redakte) |
 | Veri kaynağı | Yalnız Dynatrace Remote MCP `execute-dql`. 21 araç keşfedildi; sabit katalog (15 sinyal + 2 ek kanıt). DB bağlantısı yok, sessiz fallback yok |
 | CLI | `doctor`, `analyze` (`--last`, `--from/--to`, `--baseline-from/--baseline-to`), `ask`, `chat`, `watch`, `watch-status`, `report list/show` |
-| Puan / atıf | Deterministik. Risk, veri kapsamı ve nedensellik güveni ayrı. Mekanizmalar: row_lock (kök engelleyici), pool_saturation, global_connection_pressure (mutlak veya göreli), db_cpu, app_vm_cpu (agent'ın kendi CPU'su `self_is_source`), app_container_cpu, network_path_latency, independent_load; tail latency (mean ×5) |
+| Puan / atıf | Deterministik. Risk, data coverage ve causality confidence ayrı. Mechanism'ler: row_lock (kök engelleyici), pool_saturation, global_connection_pressure (mutlak veya göreli), db_cpu, app_vm_cpu (agent'ın kendi CPU'su `self_is_source`), app_container_cpu, network_path_latency, independent_load; tail latency (mean ×5) |
 | Testler | ✅ 38/38 (`pytest`): puan formülü, veri kalitesi, 10 senaryo, graf (MCP/Claude kesintisi, checkpoint, redaksiyon, prompt injection), watch durum makinesi |
 | Değerlendirme | ✅ sentetik 10/10 (`deploy/evidence/sre-agent-eval-synthetic.json`, fixture). ✅ **gerçek VM deneyleri 5/5** (`deploy/evidence/sre-agent-eval-real.json`): E0 sorun yok; E2 row_lock reservation → checkin (yüksek güven); E1×3 baggage bağımsız yük, yayılma yok |
 | Örnek raporlar | `docs/examples/sre-agent/` (gerçek veri + Claude açıklaması) |

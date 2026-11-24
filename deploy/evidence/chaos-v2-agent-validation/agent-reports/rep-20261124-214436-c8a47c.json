@@ -1,0 +1,1069 @@
+{
+  "id": "rep-20261124-214436-c8a47c",
+  "kind": "eval-real",
+  "generated_at": "2026-11-24T21:44:36Z",
+  "status": "complete",
+  "question": null,
+  "windows": [
+    {
+      "name": "baseline",
+      "start": "2026-11-24T21:23:00Z",
+      "end": "2026-11-24T21:26:00Z"
+    },
+    {
+      "name": "window",
+      "start": "2026-11-24T21:27:00Z",
+      "end": "2026-11-24T21:31:00Z"
+    }
+  ],
+  "notes": [],
+  "risk": {
+    "overall": {
+      "score": 81.1,
+      "band": "kritik",
+      "coverage": 1.0,
+      "scored_apps": 4,
+      "total_apps": 4
+    },
+    "apps": {
+      "reservation-service": {
+        "components": {
+          "latency": 1.0,
+          "errors": 0.428,
+          "saturation": 1.0,
+          "lock": 1.0,
+          "resource": 0.0,
+          "_latency_ratio": 85.876,
+          "_latency_source": "http_mean (tail)",
+          "_latency_delta_ms": 255.054
+        },
+        "score": 75.7,
+        "coverage": 1.0,
+        "band": "kritik",
+        "missing": []
+      },
+      "checkin-service": {
+        "components": {
+          "latency": 1.0,
+          "errors": 0.367,
+          "saturation": 1.0,
+          "lock": 1.0,
+          "resource": 0.0,
+          "_latency_ratio": 72.155,
+          "_latency_source": "http_mean (tail)",
+          "_latency_delta_ms": 228.854
+        },
+        "score": 74.2,
+        "coverage": 1.0,
+        "band": "yüksek",
+        "missing": []
+      },
+      "flightops-service": {
+        "components": {
+          "latency": 0.0,
+          "errors": 0.0,
+          "saturation": 0.0,
+          "lock": 0.25,
+          "resource": 0.0,
+          "_latency_ratio": 0.8,
+          "_latency_source": "span_p95",
+          "_latency_delta_ms": -2.0
+        },
+        "score": 3.8,
+        "coverage": 1.0,
+        "band": "düşük",
+        "missing": []
+      },
+      "baggage-service": {
+        "components": {
+          "latency": 1.0,
+          "errors": 0.642,
+          "saturation": 1.0,
+          "lock": 1.0,
+          "resource": 0.0,
+          "_latency_ratio": 103.875,
+          "_latency_source": "span_p95",
+          "_latency_delta_ms": 1646.0
+        },
+        "score": 81.1,
+        "coverage": 1.0,
+        "band": "kritik",
+        "missing": []
+      }
+    }
+  },
+  "data_coverage": {
+    "signals_ok": 15,
+    "signals_total": 15,
+    "ratio": 1.0,
+    "gaps": {}
+  },
+  "causality": {
+    "primary_mechanism": "row_lock",
+    "confidence": "high",
+    "source_apps": [
+      "flightops-service"
+    ],
+    "affected_apps": [
+      "reservation-service",
+      "baggage-service",
+      "checkin-service"
+    ]
+  },
+  "impacted": {
+    "reservation-service": {
+      "reasons": [
+        "latency ×85.9 (http_mean (tail), +255 ms)",
+        "5xx rate 0.0% → 2.4%",
+        "pool timeout 12"
+      ],
+      "latency_ratio": 85.87594586291294,
+      "latency_source": "http_mean (tail)"
+    },
+    "checkin-service": {
+      "reasons": [
+        "latency ×72.2 (http_mean (tail), +229 ms)",
+        "5xx rate 0.0% → 2.2%",
+        "pool timeout 9"
+      ],
+      "latency_ratio": 72.15501399025702,
+      "latency_source": "http_mean (tail)"
+    },
+    "baggage-service": {
+      "reasons": [
+        "latency ×103.9 (span_p95, +1646 ms)",
+        "5xx rate 0.0% → 3.4%",
+        "pool timeout 77"
+      ],
+      "latency_ratio": 103.875,
+      "latency_source": "span_p95"
+    }
+  },
+  "mechanisms": [
+    {
+      "id": "row_lock",
+      "title": "Zincirleme row lock wait",
+      "source_apps": [
+        "flightops-service"
+      ],
+      "affected_apps": [
+        "reservation-service",
+        "baggage-service",
+        "checkin-service"
+      ],
+      "mechanism": "Source uygulamanın açık transaction'ı row lock'u tutarken etkilenen uygulamanın UPDATE/SELECT FOR UPDATE işlemleri Lock/transactionid wait'e düşüyor; bekleyen request'ler Hikari connection'ını tuttuğu için connection pool doluluğu ve latency artıyor.",
+      "signals": [
+        "blocking_edge logları",
+        "pg lock waiters metric'i",
+        "PostgreSQL log_lock_waits"
+      ],
+      "edges_total": 710.0,
+      "edge_pairs": [
+        {
+          "waiter_app": "baggage-service",
+          "blocker_app": "baggage-service",
+          "wait_type": "Lock",
+          "waiter_op": "register_bag",
+          "blocker_op": "register_bag",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 131.0,
+          "wait_max_s": 9.921
+        },
+        {
+          "waiter_app": "baggage-service",
+          "blocker_app": "checkin-service",
+          "wait_type": "Lock",
+          "waiter_op": "register_bag",
+          "blocker_op": "checkin",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 68.0,
+          "wait_max_s": 9.727
+        },
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "baggage-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": "register_bag",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 1.0,
+          "wait_max_s": 4.235
+        },
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "checkin-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": "checkin",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 77.0,
+          "wait_max_s": 9.764
+        },
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "flightops-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": "unlabeled",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 2.0,
+          "wait_max_s": 2.516
+        },
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "flightops-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": "unlabeled",
+          "blocker_state": "active",
+          "blocker_wait": "Timeout",
+          "n": 26.0,
+          "wait_max_s": 9.557
+        },
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "reservation-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": "cancel_booking",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 14.0,
+          "wait_max_s": 6.295
+        },
+        {
+          "waiter_app": "checkin-service",
+          "blocker_app": "reservation-service",
+          "wait_type": "Lock",
+          "waiter_op": "checkin",
+          "blocker_op": "create_booking",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 66.0,
+          "wait_max_s": 7.193
+        },
+        {
+          "waiter_app": "flightops-service",
+          "blocker_app": "flightops-service",
+          "wait_type": "Lock",
+          "waiter_op": "unlabeled",
+          "blocker_op": "unlabeled",
+          "blocker_state": "active",
+          "blocker_wait": "Timeout",
+          "n": 3.0,
+          "wait_max_s": 9.303
+        },
+        {
+          "waiter_app": "flightops-service",
+          "blocker_app": "reservation-service",
+          "wait_type": "Lock",
+          "waiter_op": "unlabeled",
+          "blocker_op": "create_booking",
+          "blocker_state": "active",
+          "blocker_wait": "Lock",
+          "n": 1.0,
+          "wait_max_s": 4.304
+        }
+      ],
+      "blocker_states": [
+        "active"
+      ],
+      "chain_blockers": [
+        "baggage-service",
+        "checkin-service",
+        "reservation-service"
+      ],
+      "lock_chain": [
+        {
+          "app": "flightops-service",
+          "level": 0,
+          "waits_on": [],
+          "n": 0
+        },
+        {
+          "app": "reservation-service",
+          "level": 1,
+          "waits_on": [
+            {
+              "app": "flightops-service",
+              "n": 87.0
+            }
+          ],
+          "n": 87.0
+        },
+        {
+          "app": "checkin-service",
+          "level": 1,
+          "waits_on": [
+            {
+              "app": "flightops-service",
+              "n": 28.0
+            }
+          ],
+          "n": 28.0
+        },
+        {
+          "app": "baggage-service",
+          "level": 2,
+          "waits_on": [
+            {
+              "app": "checkin-service",
+              "n": 68.0
+            }
+          ],
+          "n": 68.0
+        }
+      ],
+      "chain_depth": 2,
+      "chain_path": "flightops-service → reservation-service + checkin-service → baggage-service",
+      "cascade": "Bekleyen her halka kendi transaction'ında tuttuğu row lock'u ve Hikari connection'ını bırakamadığı için bir sonraki uygulamayı bekletiyor; impact source uygulamadan zincir boyunca yayılıyor.",
+      "confidence": "high",
+      "evidence_ids": [
+        "ev-502a27ea9a",
+        "ev-de436ba6a9",
+        "ev-0f65e463cb",
+        "ev-344244587d"
+      ]
+    },
+    {
+      "id": "pool_saturation",
+      "title": "reservation-service connection pool saturation",
+      "source_apps": [
+        "flightops-service"
+      ],
+      "affected_apps": [
+        "reservation-service"
+      ],
+      "mechanism": "Lock wait'in sonucu: bekleyen request'ler connection'ları tutuyor.",
+      "secondary_to": "row_lock",
+      "pool_ratio": 0.562,
+      "pending_max": 0.0,
+      "timeouts": 12.0,
+      "rpm_ratio": null,
+      "signals": [
+        "Hikari aktif/max"
+      ],
+      "confidence": "medium",
+      "evidence_ids": [
+        "ev-fb359835ce",
+        "ev-1de55ca11b"
+      ]
+    },
+    {
+      "id": "pool_saturation",
+      "title": "checkin-service connection pool saturation",
+      "source_apps": [
+        "flightops-service"
+      ],
+      "affected_apps": [
+        "checkin-service"
+      ],
+      "mechanism": "Lock wait'in sonucu: bekleyen request'ler connection'ları tutuyor.",
+      "secondary_to": "row_lock",
+      "pool_ratio": 0.625,
+      "pending_max": 0.0,
+      "timeouts": 9.0,
+      "rpm_ratio": null,
+      "signals": [
+        "Hikari aktif/max"
+      ],
+      "confidence": "medium",
+      "evidence_ids": [
+        "ev-fb359835ce",
+        "ev-1de55ca11b"
+      ]
+    },
+    {
+      "id": "pool_saturation",
+      "title": "baggage-service connection pool saturation",
+      "source_apps": [
+        "flightops-service"
+      ],
+      "affected_apps": [
+        "baggage-service"
+      ],
+      "mechanism": "Lock wait'in sonucu: bekleyen request'ler connection'ları tutuyor.",
+      "secondary_to": "row_lock",
+      "pool_ratio": 0.625,
+      "pending_max": 6.0,
+      "timeouts": 77.0,
+      "rpm_ratio": null,
+      "signals": [
+        "Hikari aktif/max"
+      ],
+      "confidence": "medium",
+      "evidence_ids": [
+        "ev-fb359835ce",
+        "ev-1de55ca11b"
+      ]
+    }
+  ],
+  "alternatives": [],
+  "unexplained_impacted": [],
+  "data_gaps": [],
+  "true_zero_signals": [],
+  "human_review": [
+    "Source uygulamanın long-running/idle transaction'larını (blocker_state, xact_age) inceleyin; pg_stat_activity'de 'idle in transaction' session'ları ve uygulamanın transaction boundary'lerini doğrulayın."
+  ],
+  "evidence": [
+    {
+      "id": "ev-1de55ca11b",
+      "signal": "http",
+      "status": "OK",
+      "records": 11,
+      "dynatrace_query_id": "01a20f84-98cb-7a51-90c0-29063768344f",
+      "dql": "timeseries n=sum(airlab.app.http.server.requests, rollup: count), t=sum(airlab.app.http.server.requests, rollup: sum), mx=max(airlab.app.http.server.requests, rollup: max), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m, by:{service, outcome}, filter:{not startsWith(uri, \"/actuator\") and not startsWith(uri, \"/lab\")}",
+      "error": null
+    },
+    {
+      "id": "ev-e4838d0e54",
+      "signal": "spans",
+      "status": "OK",
+      "records": 8,
+      "dynatrace_query_id": "01a20f84-98c0-7a6b-9f93-150363148580",
+      "dql": "fetch spans, from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\" | filter span.kind == \"server\" and isNotNull(spring.application.name) and not startsWith(url.path, \"/actuator\") and not startsWith(url.path, \"/lab\") | fieldsAdd w = if(start_time < toTimestamp(\"2026-11-24T21:23:00Z\"), \"_out\", else:if(start_time < toTimestamp(\"2026-11-24T21:26:00Z\"), \"baseline\", else:if(start_time < toTimestamp(\"2026-11-24T21:31:00Z\"), \"window\", else:\"_out\"))) | summarize n=count(), p50=percentile(duration, 50)/1000000, p95=percentile(duration, 95)/1000000, by:{w, svc=spring.application.name}",
+      "error": null
+    },
+    {
+      "id": "ev-fb359835ce",
+      "signal": "hikari",
+      "status": "OK",
+      "records": 4,
+      "dynatrace_query_id": "01a20f84-98c7-7b58-8e97-893794e91700",
+      "dql": "timeseries a=max(airlab.app.hikaricp.connections.active), pe=max(airlab.app.hikaricp.connections.pending), mx=max(airlab.app.hikaricp.connections.max), to=sum(airlab.app.hikaricp.connections.timeout), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m, by:{service}",
+      "error": null
+    },
+    {
+      "id": "ev-8a699ded36",
+      "signal": "jvm_gc",
+      "status": "OK",
+      "records": 4,
+      "dynatrace_query_id": "01a20f84-98c0-7722-b462-ef7fe55505d6",
+      "dql": "timeseries gc=sum(airlab.app.jvm.gc.pause, rollup: count), gcmax=max(airlab.app.jvm.gc.pause, rollup: max), ov=max(airlab.app.jvm.gc.overhead), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m, by:{service}",
+      "error": null
+    },
+    {
+      "id": "ev-55069fa493",
+      "signal": "jvm_heap",
+      "status": "OK",
+      "records": 4,
+      "dynatrace_query_id": "01a20f84-9c5f-7097-9b0d-1bb928684d41",
+      "dql": "timeseries used=max(airlab.app.jvm.memory.used), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m, by:{service, area} | filter area == \"heap\"",
+      "error": null
+    },
+    {
+      "id": "ev-4ad34eec13",
+      "signal": "hosts",
+      "status": "OK",
+      "records": 2,
+      "dynatrace_query_id": "01a20f84-9c9a-730b-8d9d-fbf89d07d780",
+      "dql": "timeseries cpu=avg(dt.host.cpu.usage), io=avg(dt.host.cpu.iowait), mem=avg(dt.host.memory.usage), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m, by:{dt.smartscape.host} | fieldsAdd host=getNodeName(dt.smartscape.host)",
+      "error": null
+    },
+    {
+      "id": "ev-2f5bd1eb42",
+      "signal": "containers",
+      "status": "OK",
+      "records": 11,
+      "dynatrace_query_id": "01a20f84-9d99-7bb5-a6b9-5ffee74e9fc6",
+      "dql": "timeseries u=sum(dt.containers.cpu.usage_user_time), s=sum(dt.containers.cpu.usage_system_time), rss=max(dt.containers.memory.resident_set_bytes), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m, by:{dt.smartscape.container} | fieldsAdd name=getNodeName(dt.smartscape.container)",
+      "error": null
+    },
+    {
+      "id": "ev-d1306ed514",
+      "signal": "db_conn",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a20f84-9e27-7d55-97ed-2ba742e9a42f",
+      "dql": "timeseries r=max(airlab.pg.connections.used_ratio_normal), used=max(airlab.pg.connections.used), slots=max(airlab.pg.connections.normal_slots), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m",
+      "error": null
+    },
+    {
+      "id": "ev-3a2c8d078d",
+      "signal": "db_sessions",
+      "status": "OK",
+      "records": 16,
+      "dynatrace_query_id": "01a20f84-9eae-7d18-82f1-0c099034c71d",
+      "dql": "timeseries s=avg(airlab.pg.sessions), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m, by:{app, db.role, state, wait_type}",
+      "error": null
+    },
+    {
+      "id": "ev-0f65e463cb",
+      "signal": "lock_waiters",
+      "status": "OK",
+      "records": 11,
+      "dynatrace_query_id": "01a20f84-9f0b-7f48-87f5-c456dc24e1c3",
+      "dql": "timeseries wt=max(airlab.pg.lock.waiters), wmax=max(airlab.pg.lock.wait_max_seconds), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m, by:{waiter.app, blocker.app}",
+      "error": null
+    },
+    {
+      "id": "ev-de436ba6a9",
+      "signal": "collector",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a20f84-9ffe-7a6e-9eee-d473c305d061",
+      "dql": "timeseries up=min(airlab.pg.collector.up), tot=max(airlab.pg.lock.waiters_total), tavg=avg(airlab.pg.lock.waiters_total), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m",
+      "error": null
+    },
+    {
+      "id": "ev-502a27ea9a",
+      "signal": "edges",
+      "status": "OK",
+      "records": 19,
+      "dynatrace_query_id": "01a20f84-a0b2-7b6b-99ce-b766a11a843c",
+      "dql": "fetch logs, from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\" | filter airlab.event == \"airlab.pg.blocking_edge\" | fieldsAdd w = if(timestamp < toTimestamp(\"2026-11-24T21:23:00Z\"), \"_out\", else:if(timestamp < toTimestamp(\"2026-11-24T21:26:00Z\"), \"baseline\", else:if(timestamp < toTimestamp(\"2026-11-24T21:31:00Z\"), \"window\", else:\"_out\"))) | summarize n=count(), wait_max=max(toDouble(waiter.wait_seconds)), by:{w, waiter_app=waiter.app, blocker_app=blocker.app, wait_type=waiter.wait_event_type, waiter_op=waiter.op, blocker_op=blocker.op, blocker_state=blocker.state, blocker_wait=blocker.wait_event_type}",
+      "error": null
+    },
+    {
+      "id": "ev-344244587d",
+      "signal": "pg_lock_logs",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a20f84-a106-7727-ba23-f0a787ac7c96",
+      "dql": "fetch logs, from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\" | filter host.name == \"db-vm\" and contains(content, \"still waiting for\") | fieldsAdd w = if(timestamp < toTimestamp(\"2026-11-24T21:23:00Z\"), \"_out\", else:if(timestamp < toTimestamp(\"2026-11-24T21:26:00Z\"), \"baseline\", else:if(timestamp < toTimestamp(\"2026-11-24T21:31:00Z\"), \"window\", else:\"_out\"))) | summarize n=count(), by:{w}",
+      "error": null
+    },
+    {
+      "id": "ev-262ce87dc9",
+      "signal": "db_stats",
+      "status": "OK",
+      "records": 1,
+      "dynatrace_query_id": "01a20f84-a165-7ac5-a80f-b160fbea42e1",
+      "dql": "timeseries dl=sum(airlab.pg.db.deadlocks), rb=sum(airlab.pg.db.xact_rollback), cm=sum(airlab.pg.db.xact_commit), tmp=sum(airlab.pg.db.temp_bytes), rd=sum(airlab.pg.db.blks_read), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m",
+      "error": null
+    },
+    {
+      "id": "ev-a9750e5859",
+      "signal": "statements",
+      "status": "OK",
+      "records": 7,
+      "dynatrace_query_id": "01a20f84-a25f-7c3e-9fce-5635a5e98987",
+      "dql": "timeseries et=sum(airlab.pg.statements.exec_time_ms), calls=sum(airlab.pg.statements.calls), from:\"2026-11-24T21:23:00Z\", to:\"2026-11-24T21:31:00Z\", interval:1m, by:{db.role}",
+      "error": null
+    },
+    {
+      "id": "ev-97f0f4718f",
+      "signal": "edges_detail",
+      "status": "OK",
+      "records": 15,
+      "dynatrace_query_id": "01a20f84-b27a-7edf-ac6b-d464a1e3df0d",
+      "dql": "fetch logs, from:\"2026-11-24T21:27:00Z\", to:\"2026-11-24T21:31:00Z\" | filter airlab.event == \"airlab.pg.blocking_edge\" | fields timestamp, content, waiter.app, blocker.app, waiter.wait_event_type, waiter.wait_event, waiter.wait_seconds, blocker.state, blocker.wait_event_type, blocker.xact_age_seconds, waiter.op, blocker.op | sort toDouble(waiter.wait_seconds) desc | limit 15",
+      "error": null
+    }
+  ],
+  "extra_evidence": {
+    "edges_detail": {
+      "evidence_id": "ev-97f0f4718f",
+      "status": "OK",
+      "records": [
+        {
+          "timestamp": "2026-11-24T21:29:43.613000000Z",
+          "content": "reservation-service(svc_reservation) pid 119028 waits Lock/transactionid for flightops-service(svc_flightops) pid 118407 wait=9.97s blocker_xact_age=6.09s",
+          "waiter.app": "reservation-service",
+          "blocker.app": "flightops-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.971,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 6.093,
+          "waiter.op": "create_booking",
+          "blocker.op": "unlabeled"
+        },
+        {
+          "timestamp": "2026-11-24T21:28:53.615000000Z",
+          "content": "baggage-service(svc_baggage) pid 118062 waits Lock/transactionid for baggage-service(svc_baggage) pid 119026 wait=9.92s blocker_xact_age=5.17s",
+          "waiter.app": "baggage-service",
+          "blocker.app": "baggage-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.921,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Lock",
+          "blocker.xact_age_seconds": 5.172,
+          "waiter.op": "register_bag",
+          "blocker.op": "register_bag"
+        },
+        {
+          "timestamp": "2026-11-24T21:28:58.617000000Z",
+          "content": "baggage-service(svc_baggage) pid 119245 waits Lock/transactionid for baggage-service(svc_baggage) pid 119026 wait=9.91s blocker_xact_age=10.17s",
+          "waiter.app": "baggage-service",
+          "blocker.app": "baggage-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.911,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Lock",
+          "blocker.xact_age_seconds": 10.173,
+          "waiter.op": "register_bag",
+          "blocker.op": "register_bag"
+        },
+        {
+          "timestamp": "2026-11-24T21:27:53.614000000Z",
+          "content": "checkin-service(svc_checkin) pid 118544 waits Lock/transactionid for checkin-service(svc_checkin) pid 119027 wait=9.76s blocker_xact_age=4.83s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "checkin-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.764,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Lock",
+          "blocker.xact_age_seconds": 4.832,
+          "waiter.op": "checkin",
+          "blocker.op": "checkin"
+        },
+        {
+          "timestamp": "2026-11-24T21:27:28.610000000Z",
+          "content": "reservation-service(svc_reservation) pid 118539 waits Lock/transactionid for flightops-service(svc_flightops) pid 118223 wait=9.73s blocker_xact_age=21.15s",
+          "waiter.app": "reservation-service",
+          "blocker.app": "flightops-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.728,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 21.149,
+          "waiter.op": "create_booking",
+          "blocker.op": "unlabeled"
+        },
+        {
+          "timestamp": "2026-11-24T21:29:08.617000000Z",
+          "content": "baggage-service(svc_baggage) pid 119026 waits Lock/transactionid for checkin-service(svc_checkin) pid 119023 wait=9.73s blocker_xact_age=4.63s",
+          "waiter.app": "baggage-service",
+          "blocker.app": "checkin-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.727,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Lock",
+          "blocker.xact_age_seconds": 4.632,
+          "waiter.op": "register_bag",
+          "blocker.op": "checkin"
+        },
+        {
+          "timestamp": "2026-11-24T21:30:58.616000000Z",
+          "content": "baggage-service(svc_baggage) pid 119491 waits Lock/transactionid for baggage-service(svc_baggage) pid 119024 wait=9.71s blocker_xact_age=4.92s",
+          "waiter.app": "baggage-service",
+          "blocker.app": "baggage-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.711,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Lock",
+          "blocker.xact_age_seconds": 4.921,
+          "waiter.op": "register_bag",
+          "blocker.op": "register_bag"
+        },
+        {
+          "timestamp": "2026-11-24T21:30:23.617000000Z",
+          "content": "reservation-service(svc_reservation) pid 119028 waits Lock/transactionid for flightops-service(svc_flightops) pid 118407 wait=9.71s blocker_xact_age=16.07s",
+          "waiter.app": "reservation-service",
+          "blocker.app": "flightops-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.71,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 16.066,
+          "waiter.op": "cancel_booking",
+          "blocker.op": "unlabeled"
+        },
+        {
+          "timestamp": "2026-11-24T21:27:53.614000000Z",
+          "content": "baggage-service(svc_baggage) pid 119287 waits Lock/transactionid for baggage-service(svc_baggage) pid 119024 wait=9.67s blocker_xact_age=10.25s",
+          "waiter.app": "baggage-service",
+          "blocker.app": "baggage-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.669,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Lock",
+          "blocker.xact_age_seconds": 10.253,
+          "waiter.op": "register_bag",
+          "blocker.op": "register_bag"
+        },
+        {
+          "timestamp": "2026-11-24T21:29:58.612000000Z",
+          "content": "reservation-service(svc_reservation) pid 119028 waits Lock/transactionid for flightops-service(svc_flightops) pid 118407 wait=9.67s blocker_xact_age=21.09s",
+          "waiter.app": "reservation-service",
+          "blocker.app": "flightops-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.667,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 21.092,
+          "waiter.op": "create_booking",
+          "blocker.op": "unlabeled"
+        },
+        {
+          "timestamp": "2026-11-24T21:28:03.609000000Z",
+          "content": "reservation-service(svc_reservation) pid 119222 waits Lock/transactionid for flightops-service(svc_flightops) pid 118223 wait=9.61s blocker_xact_age=26.14s",
+          "waiter.app": "reservation-service",
+          "blocker.app": "flightops-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.609,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 26.144,
+          "waiter.op": "create_booking",
+          "blocker.op": "unlabeled"
+        },
+        {
+          "timestamp": "2026-11-24T21:27:18.610000000Z",
+          "content": "checkin-service(svc_checkin) pid 118544 waits Lock/transactionid for flightops-service(svc_flightops) pid 118223 wait=9.56s blocker_xact_age=11.15s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "flightops-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.557,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 11.149,
+          "waiter.op": "checkin",
+          "blocker.op": "unlabeled"
+        },
+        {
+          "timestamp": "2026-11-24T21:29:18.618000000Z",
+          "content": "checkin-service(svc_checkin) pid 118540 waits Lock/tuple for checkin-service(svc_checkin) pid 118544 wait=9.46s blocker_xact_age=8.96s",
+          "waiter.app": "checkin-service",
+          "blocker.app": "checkin-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "tuple",
+          "waiter.wait_seconds": 9.455,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Lock",
+          "blocker.xact_age_seconds": 8.961,
+          "waiter.op": "checkin",
+          "blocker.op": "checkin"
+        },
+        {
+          "timestamp": "2026-11-24T21:30:28.615000000Z",
+          "content": "reservation-service(svc_reservation) pid 118543 waits Lock/transactionid for flightops-service(svc_flightops) pid 118407 wait=9.38s blocker_xact_age=21.06s",
+          "waiter.app": "reservation-service",
+          "blocker.app": "flightops-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.381,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 21.065,
+          "waiter.op": "create_booking",
+          "blocker.op": "unlabeled"
+        },
+        {
+          "timestamp": "2026-11-24T21:27:33.609000000Z",
+          "content": "flightops-service(svc_flightops) pid 118407 waits Lock/transactionid for flightops-service(svc_flightops) pid 118223 wait=9.30s blocker_xact_age=26.15s",
+          "waiter.app": "flightops-service",
+          "blocker.app": "flightops-service",
+          "waiter.wait_event_type": "Lock",
+          "waiter.wait_event": "transactionid",
+          "waiter.wait_seconds": 9.303,
+          "blocker.state": "active",
+          "blocker.wait_event_type": "Timeout",
+          "blocker.xact_age_seconds": 26.149,
+          "waiter.op": "unlabeled",
+          "blocker.op": "unlabeled"
+        }
+      ]
+    }
+  },
+  "explanation": "**Özet.** 21:27 UTC (00:27 TSİ) – 21:31 UTC (00:31 TSİ) aralığı, öncesindeki 21:23 UTC (00:23 TSİ) – 21:26 UTC (00:26 TSİ) baseline ile karşılaştırıldı. Tespit edilen mechanism: **Zincirleme row lock wait**. Root cause source'u flightops-service, etkilenen uygulamalar reservation-service, baggage-service ve checkin-service. Genel risk score 81.1/100 (kritik); bu puan şiddeti gösterir, nedenselliğin kesinliğini değil.\n\n**Impact.** Ölçülen impact şöyle: reservation-service uygulamasında latency ×85.9 (http_mean (tail), +255 ms), 5xx rate 0.0% → 2.4%, pool timeout 12; checkin-service uygulamasında latency ×72.2 (http_mean (tail), +229 ms), 5xx rate 0.0% → 2.2%, pool timeout 9; baggage-service uygulamasında latency ×103.9 (span_p95, +1646 ms), 5xx rate 0.0% → 3.4%, pool timeout 77. flightops-service uygulamalarında baseline'a göre anlamlı değişiklik görülmedi.\n\n**Root cause ve yayılım.** Source uygulamanın açık transaction'ı row lock'u tutarken etkilenen uygulamanın UPDATE/SELECT FOR UPDATE işlemleri Lock/transactionid wait'e düşüyor; bekleyen request'ler Hikari connection'ını tuttuğu için connection pool doluluğu ve latency artıyor. Lock wait zinciri flightops-service → reservation-service + checkin-service → baggage-service biçiminde (2 halka). Bekleyen her halka kendi transaction'ında tuttuğu row lock'u ve Hikari connection'ını bırakamadığı için bir sonraki uygulamayı bekletiyor; impact source uygulamadan zincir boyunca yayılıyor. reservation-service, flightops-service uygulamasını 87 kez bekledi. checkin-service, flightops-service uygulamasını 28 kez bekledi. baggage-service, checkin-service uygulamasını 68 kez bekledi. Pencerede toplam 710 blocking edge kaydı var. Buna bağlı ikincil etkiler: reservation-service connection pool saturation, checkin-service connection pool saturation ve baggage-service connection pool saturation.\n\n**Evidence ve confidence.** Değerlendirme 15/15 signal ile yapıldı. Causality confidence high; mechanism'i destekleyen signal'ler: blocking_edge logları, pg lock waiters metric'i, PostgreSQL log_lock_waits (evidence: ev-502a27ea9a, ev-de436ba6a9, ev-0f65e463cb, ev-344244587d).\n\n**Önerilen inceleme.** Source uygulamanın long-running/idle transaction'larını (blocker_state, xact_age) inceleyin; pg_stat_activity'de 'idle in transaction' session'ları ve uygulamanın transaction boundary'lerini doğrulayın. Ajan salt-okunurdur; değişiklik gerektiren adımlar onay akışından geçmelidir.",
+  "explanation_source": "deterministik (LLM devre dışı)",
+  "errors": [],
+  "budget": {
+    "queries_used": 16,
+    "elapsed_s": 10.0
+  },
+  "features_summary": {
+    "baseline": {
+      "apps": {
+        "baggage-service": {
+          "rpm": 1027.0,
+          "err_rate": 0.0,
+          "http_mean_ms": 5.36,
+          "span_n": 3152.0,
+          "span_p95_ms": 16.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 9.722,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 1016.315
+        },
+        "checkin-service": {
+          "rpm": 978.667,
+          "err_rate": 0.0,
+          "http_mean_ms": 3.216,
+          "span_n": 2934.0,
+          "span_p95_ms": 10.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 7.944,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 191.108
+        },
+        "flightops-service": {
+          "rpm": 590.667,
+          "err_rate": 0.0,
+          "http_mean_ms": 3.89,
+          "span_n": 1772.0,
+          "span_p95_ms": 10.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.125,
+          "pool_ratio_avg": 0.042,
+          "gc_overhead": 0.0,
+          "db_sessions": 6.611,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 68.498
+        },
+        "reservation-service": {
+          "rpm": 863.0,
+          "err_rate": 0.0,
+          "http_mean_ms": 3.005,
+          "span_n": 3113.0,
+          "span_p95_ms": 9.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.0,
+          "pool_ratio_avg": 0.0,
+          "gc_overhead": 0.0,
+          "db_sessions": 5.25,
+          "lock_waiters_avg": 0.0,
+          "db_exec_ms_per_min": 96.647
+        }
+      },
+      "hosts": {
+        "db-vm": {
+          "cpu": 2.282,
+          "cpu_max": 2.398,
+          "iowait": 0.448,
+          "mem": 50.734,
+          "points": 3
+        },
+        "app-vm": {
+          "cpu": 8.554,
+          "cpu_max": 8.612,
+          "iowait": 0.02,
+          "mem": 71.725,
+          "points": 3
+        }
+      },
+      "db": {
+        "conn_ratio": 0.319,
+        "conn_used_max": 30.0,
+        "conn_slots": 94.0,
+        "collector_points": 3,
+        "collector_up_min": 1.0,
+        "lock_waiters_max": 0.0,
+        "lock_waiters_avg": 0.0,
+        "edges_total": 0,
+        "pg_lock_wait_logs": 0,
+        "deadlocks": 0.0,
+        "rollbacks": 810.0,
+        "commits": 19445.0,
+        "temp_bytes": 0.0
+      },
+      "containers": {
+        "checkin-service": {
+          "cpu_cores": 0.0411,
+          "rss_max": 412559360.0
+        },
+        "pg-lock-collector": {
+          "cpu_cores": 0.0016,
+          "rss_max": 16666624.0
+        },
+        "flightops-service": {
+          "cpu_cores": 0.0291,
+          "rss_max": 393861120.0
+        },
+        "airlab/sre-platform-backend:0.1.0": {
+          "cpu_cores": 0.0062,
+          "rss_max": 172228608.0
+        },
+        "postgres:17.7-alpine": {
+          "cpu_cores": 0.005,
+          "rss_max": 43511808.0
+        },
+        "airlab/netem-agent:1.0.0": {
+          "cpu_cores": 0.0002,
+          "rss_max": 19644416.0
+        },
+        "chaos-controller": {
+          "cpu_cores": 0.1093,
+          "rss_max": 398391978.0
+        },
+        "baggage-service": {
+          "cpu_cores": 0.043,
+          "rss_max": 406884352.0
+        },
+        "airlab/sre-platform-frontend:0.1.0": {
+          "cpu_cores": 0.0018,
+          "rss_max": 28023466.0
+        },
+        "reservation-service": {
+          "cpu_cores": 0.0425,
+          "rss_max": 394350592.0
+        },
+        "": {
+          "cpu_cores": 0.0052,
+          "rss_max": 227012608.0
+        }
+      }
+    },
+    "window": {
+      "apps": {
+        "baggage-service": {
+          "rpm": 951.0,
+          "err_rate": 0.034,
+          "http_mean_ms": 346.793,
+          "span_n": 4781.0,
+          "span_p95_ms": 1662.0,
+          "pool_pending_max": 6.0,
+          "pool_timeouts": 77.0,
+          "pool_ratio": 1.0,
+          "pool_ratio_avg": 0.625,
+          "gc_overhead": 0.001,
+          "db_sessions": 10.563,
+          "lock_waiters_avg": 8.5,
+          "db_exec_ms_per_min": 90247.1
+        },
+        "checkin-service": {
+          "rpm": 847.75,
+          "err_rate": 0.022,
+          "http_mean_ms": 232.071,
+          "span_n": 4302.0,
+          "span_p95_ms": 9.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 9.0,
+          "pool_ratio": 0.75,
+          "pool_ratio_avg": 0.625,
+          "gc_overhead": 0.0,
+          "db_sessions": 10.525,
+          "lock_waiters_avg": 10.25,
+          "db_exec_ms_per_min": 45859.6
+        },
+        "flightops-service": {
+          "rpm": 592.0,
+          "err_rate": 0.0,
+          "http_mean_ms": 2.801,
+          "span_n": 2955.0,
+          "span_p95_ms": 8.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 0.0,
+          "pool_ratio": 0.25,
+          "pool_ratio_avg": 0.25,
+          "gc_overhead": 0.0,
+          "db_sessions": 6.188,
+          "lock_waiters_avg": 0.75,
+          "db_exec_ms_per_min": 89658.75
+        },
+        "reservation-service": {
+          "rpm": 876.5,
+          "err_rate": 0.024,
+          "http_mean_ms": 258.059,
+          "span_n": 4429.0,
+          "span_p95_ms": 18.0,
+          "pool_pending_max": 0.0,
+          "pool_timeouts": 12.0,
+          "pool_ratio": 0.625,
+          "pool_ratio_avg": 0.562,
+          "gc_overhead": 0.001,
+          "db_sessions": 8.0,
+          "lock_waiters_avg": 14.75,
+          "db_exec_ms_per_min": 22807.458
+        }
+      },
+      "hosts": {
+        "db-vm": {
+          "cpu": 2.015,
+          "cpu_max": 2.066,
+          "iowait": 0.379,
+          "mem": 51.048,
+          "points": 4
+        },
+        "app-vm": {
+          "cpu": 8.63,
+          "cpu_max": 8.758,
+          "iowait": 0.013,
+          "mem": 71.756,
+          "points": 4
+        }
+      },
+      "db": {
+        "conn_ratio": 0.34,
+        "conn_used_max": 32.0,
+        "conn_slots": 94.0,
+        "collector_points": 4,
+        "collector_up_min": 1.0,
+        "lock_waiters_max": 26.0,
+        "lock_waiters_avg": 12.292,
+        "edges_total": 710.0,
+        "pg_lock_wait_logs": 1931.0,
+        "deadlocks": 0.0,
+        "rollbacks": 1249.0,
+        "commits": 20598.0,
+        "temp_bytes": 0.0
+      },
+      "containers": {
+        "checkin-service": {
+          "cpu_cores": 0.0433,
+          "rss_max": 412674730.0
+        },
+        "pg-lock-collector": {
+          "cpu_cores": 0.0024,
+          "rss_max": 16728064.0
+        },
+        "flightops-service": {
+          "cpu_cores": 0.0351,
+          "rss_max": 394232490.0
+        },
+        "airlab/sre-platform-backend:0.1.0": {
+          "cpu_cores": 0.0061,
+          "rss_max": 172228608.0
+        },
+        "postgres:17.7-alpine": {
+          "cpu_cores": 0.0048,
+          "rss_max": 41962837.0
+        },
+        "airlab/netem-agent:1.0.0": {
+          "cpu_cores": 0.0002,
+          "rss_max": 19644416.0
+        },
+        "chaos-controller": {
+          "cpu_cores": 0.1061,
+          "rss_max": 400599722.0
+        },
+        "baggage-service": {
+          "cpu_cores": 0.0481,
+          "rss_max": 408033962.0
+        },
+        "airlab/sre-platform-frontend:0.1.0": {
+          "cpu_cores": 0.0018,
+          "rss_max": 27803648.0
+        },
+        "reservation-service": {
+          "cpu_cores": 0.0469,
+          "rss_max": 397294250.0
+        },
+        "": {
+          "cpu_cores": 0.0044,
+          "rss_max": 227019434.0
+        }
+      }
+    }
+  },
+  "fixture": false
+}
