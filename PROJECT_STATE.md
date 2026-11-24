@@ -1,6 +1,25 @@
 # PROJECT_STATE
 
-Son güncelleme: 2026-11-21 · Aşama: **2 — SRE Agent yazıldı, testlendi, APP_VM'e dağıtılıyor** · Aşama 1: **tamam**
+Son güncelleme: 2026-11-24 · Aşama: **2 — SRE Agent yazıldı, testlendi, APP_VM'e dağıtılıyor** · Aşama 1: **tamam**
+
+## Chaos Controller v2 (2026-11-24)
+
+Ayrıntı: `docs/chaos-v2-architecture.md` · API: `docs/openapi/chaos-controller.yaml` (`/api/v2/*`, canlı springdoc çıktısı).
+
+| Konu | Durum |
+|---|---|
+| Dağıtım | ✅ APP_VM — UI `http://172.20.229.26:8080/ui/`, klasik panel `/classic`, 4 netem sidecar; DB_VM'de `chaos.*` şeması (V6) + `lab_os.host_stats()` |
+| Senaryolar | 20 senaryo (S01–S20): connection, lock, db-cpu, db-io, app-resource, network, amplification, cascade, load |
+| E2E (`scripts/chaos-e2e.py --quick`) | ✅ **20/20** COMPLETED + IMPACT_CONFIRMED, cleanup OK, recovered (`deploy/evidence/chaos-v2/summary.json` + senaryo başına rapor) |
+| Cascading acceptance (S17 HIGH, initiator baggage) | ✅ DB CPU 2.0 → 83.3 % (hedef 80), query mean 0.19 → 36 ms; checkin p95 22.6 → 86 ms (etkilendi); reservation/flightops beklenip **gözlenmedi** (rapor bunu açıkça yazıyor); recovery doğrulandı |
+| Testler | `mvn test -pl chaos-controller` (V2UnitTest, EngineTest), `ChaosLabIT`, netem-agent pytest, UI vitest |
+| Dynatrace korelasyonu | `X-Chaos-*` başlıkları → MDC `chaos.*` log alanları; raporda hazır DQL. SRE Agent redaction `chaos.*` alanlarını siler |
+
+Chaos v2 açık maddeleri:
+1. Frontend ekran görüntüsü üretilmedi.
+2. `chaos.*` alanları log'da JSON içinde; Dynatrace'te ayrı öznitelik olarak aranabilmesi için OpenPipeline kuralı yok (sorguda `parse` gerekir).
+3. SRE Agent'ın chaos deneylerini (S01–S20) kör olarak teşhis etme değerlendirmesi henüz koşulmadı.
+4. Bilinen sınırlamalar: `docs/chaos-v2-architecture.md` §7 (S10 tek uygulamada role limiti, DB_VM disk ölçülmez, lock senaryoları yalnız `chaos.*` satırları vb.).
 
 ## SRE Operations Platform (2026-11-21)
 

@@ -4,6 +4,7 @@ Dört Java 21 / Spring Boot iş uygulaması (Reservation, Check-in, Flight Opera
 yalnız HTTP ile yük veren **chaos-controller** ve Dynatrace gözlemlenebilirlik hazırlığı.
 Aşama 2: Dynatrace MCP üzerinden çalışan salt-okunur Python SRE Agent — `sre-agent/`.
 SRE Operations Platform (PostgreSQL hafızası, FastAPI, React arayüz `:8090`, watch/zamanlanmış kontroller) — `sre-platform/README.md`.
+Chaos Controller v2: 20 gerçek senaryo, adaptive control, safety budget, recovery doğrulaması, React UI `:8080/ui/`, API `/api/v2` — `docs/chaos-v2-architecture.md`.
 
 - Topoloji: APP_VM (Rocky 9/10, Docker) ↔ DB_VM (Rocky 9, postgresql-17 systemd) — `docs/architecture.md`
 - Tablo/transaction/kilit bağımlılıkları — `docs/sql-dependencies.md`
@@ -34,7 +35,7 @@ lab-common/                istek bağlamı, SQL etiketleme, hata sınıflandırm
 db-migrator/               TEK Flyway runner + seed + onaylı reset + integrity check; SQL: src/main/resources/db/migration
 test-support/              Testcontainers PG17 + gerçek rol betiği + migration + seed
 reservation-service/ checkin-service/ flightops-service/ baggage-service/
-chaos-controller/          panel + REST, RPS/concurrency üreticileri, reçeteler (resources/presets)
+chaos-controller/          v1 panel (/classic) + v2 motoru (/api/v2, chaos/v2/*) + React UI (ui/ → /ui/)
 Dockerfile                 çok hedefli imaj (reservation|checkin|flightops|baggage|chaos|migrator)
 app-vm/                    docker-compose.yml, compose.local.yml (yalnız yerel PG), .env.example, install-docker.sh
 db-vm/                     install-postgres17.sh, bootstrap-db.sh, create-roles.sql, postgresql.lab.conf, verify-db-vm.sh
@@ -50,4 +51,5 @@ docs/                      mimari, SQL bağımlılıkları, deneyler, telemetri 
 | `docker run --rm -v "$PWD/observability/pg-lock-collector":/w -w /w python:3.13-slim sh -c "pip install -q pytest==9.2.0 'psycopg[binary]==3.3.9' && python -m pytest -q tests"` | collector birim testleri |
 | `scripts/smoke.sh` | çalışan yığında 31 uçtan uca kontrol |
 | `scripts/lock-chain-demo.sh` | tek seferlik gerçek blocking zinciri |
+| `python3 scripts/chaos-e2e.py --quick` / `--acceptance` (APP_VM) | Chaos v2: 20 senaryo uçtan uca / S17 HIGH cascading acceptance; kanıt `deploy/evidence/chaos-v2/` |
 | `scripts/verify-db.sh` | bütünlük, rol/app eşlemesi, kapasite |

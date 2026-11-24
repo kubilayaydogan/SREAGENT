@@ -6,11 +6,129 @@ servers:
 - url: http://127.0.0.1:8080
   description: Generated server url
 paths:
+  /api/v2/random-plans:
+    post:
+      tags:
+      - v-2-api-controller
+      operationId: random
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RandomPlan"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/v2/experiments:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: list
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+    post:
+      tags:
+      - v-2-api-controller
+      operationId: submit
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Request"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+  /api/v2/experiments/{id}/stop:
+    post:
+      tags:
+      - v-2-api-controller
+      operationId: stop
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/v2/experiments/{id}/rerun:
+    post:
+      tags:
+      - v-2-api-controller
+      operationId: rerun
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+  /api/v2/experiments/preview:
+    post:
+      tags:
+      - v-2-api-controller
+      operationId: preview
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Request"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/v2/emergency-stop:
+    post:
+      tags:
+      - v-2-api-controller
+      operationId: emergency
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
   /api/experiments:
     get:
       tags:
       - experiment-api-controller
-      operationId: list
+      operationId: list_1
       responses:
         "200":
           description: OK
@@ -42,7 +160,7 @@ paths:
     post:
       tags:
       - experiment-api-controller
-      operationId: stop
+      operationId: stop_1
       parameters:
       - name: id
         in: path
@@ -71,11 +189,234 @@ paths:
                 type: object
                 additionalProperties:
                   type: string
+  /api/continuous:
+    get:
+      tags:
+      - experiment-api-controller
+      operationId: continuousStatus
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+    post:
+      tags:
+      - experiment-api-controller
+      operationId: continuousConfigure
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/v2/status:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: status
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/v2/scenarios:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: scenarios
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: {}
+  /api/v2/scenarios/{id}:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: scenario
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/v2/overview:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: overview
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/v2/metrics/history:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: history
+      parameters:
+      - name: max
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 150
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Sample"
+  /api/v2/intensity-presets:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: presets
+      parameters:
+      - name: initiator
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/v2/experiments/{id}:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: samples
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Experiment"
+  /api/v2/experiments/{id}/report.md:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: reportMd
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            text/markdown;charset=UTF-8:
+              schema:
+                type: string
+  /api/v2/experiments/{id}/live:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: live
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: since
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+          default: -1
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /api/v2/audit:
+    get:
+      tags:
+      - v-2-api-controller
+      operationId: audit
+      parameters:
+      - name: "n"
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /api/status:
     get:
       tags:
       - experiment-api-controller
-      operationId: status
+      operationId: status_1
       responses:
         "200":
           description: OK
@@ -88,7 +429,7 @@ paths:
     get:
       tags:
       - experiment-api-controller
-      operationId: presets
+      operationId: presets_1
       responses:
         "200":
           description: OK
@@ -133,7 +474,7 @@ paths:
     get:
       tags:
       - experiment-api-controller
-      operationId: get
+      operationId: get_1
       parameters:
       - name: id
         in: path
@@ -162,6 +503,204 @@ paths:
                 additionalProperties: {}
 components:
   schemas:
+    Durations:
+      type: object
+      properties:
+        baselineSec:
+          type: integer
+          format: int32
+        rampSec:
+          type: integer
+          format: int32
+        durationSec:
+          type: integer
+          format: int32
+        recoverySec:
+          type: integer
+          format: int32
+        maxDurationSec:
+          type: integer
+          format: int32
+    RandomPlan:
+      type: object
+      properties:
+        seed:
+          type: integer
+          format: int64
+        allowedScenarios:
+          type: array
+          items:
+            type: string
+        excludedScenarios:
+          type: array
+          items:
+            type: string
+        allowedApps:
+          type: array
+          items:
+            type: string
+        excludedApps:
+          type: array
+          items:
+            type: string
+        maxIntensity:
+          type: string
+          enum:
+          - LIGHT
+          - MEDIUM
+          - HIGH
+          - CRITICAL
+          - CUSTOM
+        count:
+          type: integer
+          format: int32
+        parallel:
+          type: boolean
+        cooldownSec:
+          type: integer
+          format: int32
+        durations:
+          $ref: "#/components/schemas/Durations"
+        traffic:
+          $ref: "#/components/schemas/Traffic"
+    Traffic:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        apps:
+          type: array
+          items:
+            type: string
+        rpsPerApp:
+          type: number
+          format: double
+        users:
+          type: integer
+          format: int32
+        readWriteRatio:
+          type: number
+          format: double
+        timeoutMs:
+          type: integer
+          format: int32
+        retries:
+          type: integer
+          format: int32
+        retryBackoffMs:
+          type: integer
+          format: int32
+        thinkTimeMs:
+          type: integer
+          format: int32
+        maxTotalRps:
+          type: number
+          format: double
+        hotRows:
+          type: boolean
+    Budget:
+      type: object
+      properties:
+        maxDbCpuPct:
+          type: number
+          format: double
+        maxDbConnectionsPct:
+          type: number
+          format: double
+        maxAppCpuPct:
+          type: number
+          format: double
+        maxAppHeapPct:
+          type: number
+          format: double
+        maxDbMemPct:
+          type: number
+          format: double
+    Custom:
+      type: object
+      properties:
+        workers:
+          type: integer
+          format: int32
+        rps:
+          type: number
+          format: double
+        dbConnections:
+          type: integer
+          format: int32
+        txDurationMs:
+          type: integer
+          format: int32
+        queryFrequency:
+          type: number
+          format: double
+        targetValue:
+          type: number
+          format: double
+        errorPct:
+          type: integer
+          format: int32
+        networkLatencyMs:
+          type: integer
+          format: int32
+        packetLossPct:
+          type: number
+          format: double
+        maxAffectedServices:
+          type: integer
+          format: int32
+        budget:
+          $ref: "#/components/schemas/Budget"
+    Request:
+      type: object
+      properties:
+        scenarioId:
+          type: string
+        initiator:
+          type: string
+        targetMode:
+          type: string
+          enum:
+          - SINGLE
+          - MULTI
+          - ALL
+          - SHARED_DB
+          - RANDOM
+          - AUTO
+        targets:
+          type: array
+          items:
+            type: string
+        intensity:
+          type: string
+          enum:
+          - LIGHT
+          - MEDIUM
+          - HIGH
+          - CRITICAL
+          - CUSTOM
+        custom:
+          $ref: "#/components/schemas/Custom"
+        durations:
+          $ref: "#/components/schemas/Durations"
+        traffic:
+          $ref: "#/components/schemas/Traffic"
+        seed:
+          type: integer
+          format: int64
+        label:
+          type: string
+        clientRequestId:
+          type: string
+        randomPlanId:
+          type: string
+        subScenarios:
+          type: array
+          items:
+            type: string
+        cooldownSec:
+          type: integer
+          format: int32
     Background:
       type: object
       properties:
@@ -249,6 +788,301 @@ components:
           enum:
           - LOAD
           - ALL
+    AppSample:
+      type: object
+      properties:
+        up:
+          type: boolean
+        cpuPct:
+          type: number
+          format: double
+        heapUsedMb:
+          type: number
+          format: double
+        heapMaxMb:
+          type: number
+          format: double
+        poolActive:
+          type: integer
+          format: int32
+        poolIdle:
+          type: integer
+          format: int32
+        poolPending:
+          type: integer
+          format: int32
+        poolMax:
+          type: integer
+          format: int32
+        rps:
+          type: number
+          format: double
+        errorPct:
+          type: number
+          format: double
+        p95Ms:
+          type: number
+          format: double
+        p99Ms:
+          type: number
+          format: double
+        dbConnections:
+          type: integer
+          format: int32
+        dbLockWaits:
+          type: integer
+          format: int32
+        heapLiveMb:
+          type: number
+          format: double
+        processStartSec:
+          type: number
+          format: double
+    DbSample:
+      type: object
+      properties:
+        up:
+          type: boolean
+        cpuPct:
+          type: number
+          format: double
+        memUsedPct:
+          type: number
+          format: double
+        load1:
+          type: number
+          format: double
+        cpus:
+          type: integer
+          format: int32
+        connections:
+          type: integer
+          format: int32
+        maxConnections:
+          type: integer
+          format: int32
+        active:
+          type: integer
+          format: int32
+        idleInTx:
+          type: integer
+          format: int32
+        lockWaiters:
+          type: integer
+          format: int32
+        longestXactSec:
+          type: number
+          format: double
+        tps:
+          type: number
+          format: double
+        deadlocksPerMin:
+          type: number
+          format: double
+        tempMbPerSec:
+          type: number
+          format: double
+        readMbPerSec:
+          type: number
+          format: double
+        writeMbPerSec:
+          type: number
+          format: double
+        insertsPerSec:
+          type: number
+          format: double
+        queryMeanMs:
+          type: number
+          format: double
+        dbSizeMb:
+          type: number
+          format: double
+    HostSample:
+      type: object
+      properties:
+        cpuPct:
+          type: number
+          format: double
+        memUsedPct:
+          type: number
+          format: double
+        diskFreeGb:
+          type: number
+          format: double
+    Sample:
+      type: object
+      properties:
+        at:
+          type: string
+        tMs:
+          type: integer
+          format: int64
+        phase:
+          type: string
+          enum:
+          - CREATED
+          - VALIDATING
+          - BASELINING
+          - RAMPING_UP
+          - RUNNING
+          - RECOVERING
+          - COMPLETED
+          - FAILED
+          - ABORTED
+          - TIMED_OUT
+        apps:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/AppSample"
+        db:
+          $ref: "#/components/schemas/DbSample"
+        appVm:
+          $ref: "#/components/schemas/HostSample"
+        workloads:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkloadSample"
+        traffic:
+          type: object
+          additionalProperties: {}
+    WorkloadSample:
+      type: object
+      properties:
+        part:
+          type: string
+        workers:
+          type: integer
+          format: int32
+        callsPerSec:
+          type: number
+          format: double
+        errorPct:
+          type: number
+          format: double
+        p95Ms:
+          type: number
+          format: double
+        amplification:
+          type: number
+          format: double
+        controlValue:
+          type: number
+          format: double
+        controlTarget:
+          type: number
+          format: double
+    Experiment:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+        request:
+          $ref: "#/components/schemas/Request"
+        scenarioName:
+          type: string
+        initiator:
+          type: string
+        targets:
+          type: array
+          items:
+            type: string
+        participants:
+          type: array
+          items:
+            type: string
+        intensity:
+          type: string
+        seed:
+          type: integer
+          format: int64
+        state:
+          type: string
+          enum:
+          - CREATED
+          - VALIDATING
+          - BASELINING
+          - RAMPING_UP
+          - RUNNING
+          - RECOVERING
+          - COMPLETED
+          - FAILED
+          - ABORTED
+          - TIMED_OUT
+        stateReason:
+          type: string
+        transitions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transition"
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/LogLine"
+        plan:
+          type: object
+          additionalProperties: {}
+        calibration:
+          type: object
+          additionalProperties: {}
+        samples:
+          type: array
+          items:
+            $ref: "#/components/schemas/Sample"
+        workloadSummary:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        report:
+          type: object
+          additionalProperties: {}
+        dynatrace:
+          type: object
+          additionalProperties: {}
+        startedAt:
+          type: string
+        endedAt:
+          type: string
+        cleanupOk:
+          type: boolean
+        cleanupErrors:
+          type: array
+          items:
+            type: string
+    LogLine:
+      type: object
+      properties:
+        at:
+          type: string
+        level:
+          type: string
+        message:
+          type: string
+    Transition:
+      type: object
+      properties:
+        state:
+          type: string
+          enum:
+          - CREATED
+          - VALIDATING
+          - BASELINING
+          - RAMPING_UP
+          - RUNNING
+          - RECOVERING
+          - COMPLETED
+          - FAILED
+          - ABORTED
+          - TIMED_OUT
+        at:
+          type: string
+        monoMs:
+          type: integer
+          format: int64
+        reason:
+          type: string
     ExperimentRecord:
       type: object
       properties:
@@ -293,6 +1127,16 @@ components:
           type: object
           additionalProperties:
             type: string
+        events:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        timeline:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
     Row:
       type: object
       properties:
