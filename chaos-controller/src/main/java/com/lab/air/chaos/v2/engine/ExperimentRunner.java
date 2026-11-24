@@ -87,6 +87,7 @@ public final class ExperimentRunner {
     private Map<String, Double> baselineErr = Map.of();
     private Double baselineDbCpu;
     private Integer baselineDbConns;
+    private Integer baselineDbActive;
     private List<Map<String, Object>> recoveryChecks = List.of();
 
     public ExperimentRunner(Experiment exp, ScenarioDef def, Plan plan, Set<String> involvedApps,
@@ -488,6 +489,9 @@ public final class ExperimentRunner {
         Double c = avg(b.stream().map(s -> s.db() == null || s.db().connections() == null ? null
                 : s.db().connections().doubleValue()).toList());
         baselineDbConns = c == null ? null : (int) Math.round(c);
+        Double act = avg(b.stream().map(s -> s.db() == null || s.db().active() == null ? null
+                : s.db().active().doubleValue()).toList());
+        baselineDbActive = act == null ? null : (int) Math.ceil(act);
         exp.log("INFO", "baseline: p95=" + p95 + " dbCpu=" + round(baselineDbCpu) + " dbConns=" + baselineDbConns);
     }
 
@@ -519,8 +523,10 @@ public final class ExperimentRunner {
         var db = s.db();
         if (db != null && db.up()) {
             ok &= add(checks, "lock waiters = 0", db.lockWaiters(), db.lockWaiters() != null && db.lockWaiters() == 0);
-            if (baselineDbConns != null && db.connections() != null) {
-                ok &= add(checks, "DB connections ≤ baseline + 5", db.connections(), db.connections() <= baselineDbConns + 5);
+            // toplam bağlantı değil active session: yük sonrası Hikari idle bağlantıları idle-timeout'a kadar
+            // açık kalır (normal pool davranışı, bozulma değil)
+            if (baselineDbActive != null && db.active() != null) {
+                ok &= add(checks, "DB active sessions ≤ baseline + 3", db.active(), db.active() <= baselineDbActive + 3);
             }
             if (baselineDbCpu != null && db.cpuPct() != null) {
                 double lim = Math.max(baselineDbCpu * 1.5, baselineDbCpu + 15);

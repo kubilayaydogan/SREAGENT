@@ -2,7 +2,7 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head><meta charset="utf-8"><title>Deney</title><link rel="stylesheet" href="/lab.css"></head>
 <body>
-<header><h1>⚡ Chaos Controller</h1><a href="/">Panel</a><a href="/experiments">Deney geçmişi</a></header>
+<header><h1>⚡ Chaos Controller</h1><a href="/ui/">Chaos v2</a><a href="/classic">Klasik panel</a><a href="/experiments">Deney geçmişi</a></header>
 <main>
   <p class="err" th:unless="${r}">Deney bulunamadı</p>
   <th:block th:if="${r}">

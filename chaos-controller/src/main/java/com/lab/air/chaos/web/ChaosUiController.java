@@ -15,7 +15,19 @@ public class ChaosUiController {
         this.service = service;
     }
 
+    /** Yeni chaos v2 arayüzü (React SPA, /ui/). */
     @GetMapping("/")
+    public String root() {
+        return "redirect:/ui/";
+    }
+
+    @GetMapping({"/ui", "/ui/"})
+    public String ui() {
+        return "forward:/ui/index.html";
+    }
+
+    /** Klasik (v1) panel; v2 ile aynı RunGate'i paylaşır — aynı anda tek deney. */
+    @GetMapping("/classic")
     public String panel() {
         return "panel";
     }

@@ -144,7 +144,7 @@ class V2UnitTest {
     }
 
     static Sample sample(double dbCpu, int conns, Double heapUsed, boolean appUp) {
-        AppSample a = new AppSample(appUp, 10.0, heapUsed, 100.0, 2, 6, 0, 8, 5.0, 0.0, 20.0, 40.0, 3, 0);
+        AppSample a = new AppSample(appUp, 10.0, heapUsed, 100.0, 2, 6, 0, 8, 5.0, 0.0, 20.0, 40.0, 3, 0, null, null);
         DbSample d = new DbSample(true, dbCpu, 50.0, 1.0, 6, conns, 100, 3, 0, 0, 0.1, 50.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                 1.0, 60.0);
         return new Sample("t", 0, State.RUNNING, Map.of("checkin", a), d, new HostSample(10.0, 40.0, 40.0), List.of(),
@@ -247,7 +247,7 @@ class V2UnitTest {
     @Test
     void intensityIncreasesControlTargets() {
         ScenarioRegistry reg = new ScenarioRegistry();
-        for (String id : List.of("S01", "S02", "S04", "S06", "S07", "S09", "S10", "S11", "S12", "S17", "S18")) {
+        for (String id : List.of("S01", "S02", "S04", "S06", "S07", "S09", "S10", "S11", "S17", "S18")) {
             double prev = -1;
             for (Intensity in : List.of(Intensity.LIGHT, Intensity.MEDIUM, Intensity.HIGH, Intensity.CRITICAL)) {
                 var p = reg.get(id).orElseThrow().plan()
@@ -255,6 +255,43 @@ class V2UnitTest {
                 assertTrue(p.control().target() >= prev, id + " " + in);
                 prev = p.control().target();
             }
+        }
+    }
+
+    @Test
+    void safetyAbortsImmediatelyOnAppRestart() {
+        SafetyGuard g = new SafetyGuard(v2(null), Budget.defaults(), Set.of("checkin"), List.of(), 60.0);
+        assertNull(g.check(withStart(1000.0)));
+        assertNull(g.check(withStart(1000.0)));
+        String r = g.check(withStart(1300.0));
+        assertNotNull(r);
+        assertTrue(r.contains("yeniden başladı"), r);
+    }
+
+    static Sample withStart(double start) {
+        Sample b = sample(10, 10, 50.0, true);
+        AppSample a = b.apps().get("checkin");
+        AppSample x = new AppSample(true, a.cpuPct(), a.heapUsedMb(), a.heapMaxMb(), a.poolActive(), a.poolIdle(),
+                a.poolPending(), a.poolMax(), a.rps(), a.errorPct(), a.p95Ms(), a.p99Ms(), a.dbConnections(),
+                a.dbLockWaits(), null, start);
+        return new Sample(b.at(), b.tMs(), b.phase(), Map.of("checkin", x), b.db(), b.appVm(), b.workloads(), b.traffic());
+    }
+
+    @Test
+    void memoryPressureIsOpenLoopAndBelowHeapBudget() {
+        ScenarioRegistry reg = new ScenarioRegistry();
+        double prev = -1;
+        for (Intensity in : List.of(Intensity.LIGHT, Intensity.MEDIUM, Intensity.HIGH, Intensity.CRITICAL)) {
+            var p = reg.get("S12").orElseThrow().plan()
+                    .apply(new Ctx("checkin", List.of("checkin"), in, null, CAL, new Random(1)));
+            assertEquals(null, p.control(), "S12 open-loop olmalı");
+            double rate = p.actions().get(0).ratePerWorker();
+            assertTrue(rate > prev, in.name());
+            prev = rate;
+            double ballast = ((Number) p.parameters().get("ballastMb")).doubleValue();
+            double heapMax = CAL.heapMaxMb().getOrDefault("checkin", 448.0);
+            assertTrue(ballast / heapMax * 100 + 25 <= Budget.defaults().maxAppHeapPct(), in.name());
+            assertTrue(ballast <= 0.5 * heapMax, in.name() + " ballast heap'in %50'sini aşmamalı");
         }
     }
 
@@ -320,8 +357,8 @@ class V2UnitTest {
     // ------------------------------------------------------------------ analyzer
 
     static Sample phaseSample(State st, double p95Checkin, double p95Baggage, double lockWaiters) {
-        AppSample c = new AppSample(true, 10.0, 50.0, 100.0, 2, 6, 0, 8, 5.0, 0.0, p95Checkin, p95Checkin * 2, 3, 0);
-        AppSample b = new AppSample(true, 10.0, 50.0, 100.0, 2, 6, 0, 8, 5.0, 0.0, p95Baggage, p95Baggage * 2, 3, 0);
+        AppSample c = new AppSample(true, 10.0, 50.0, 100.0, 2, 6, 0, 8, 5.0, 0.0, p95Checkin, p95Checkin * 2, 3, 0, null, null);
+        AppSample b = new AppSample(true, 10.0, 50.0, 100.0, 2, 6, 0, 8, 5.0, 0.0, p95Baggage, p95Baggage * 2, 3, 0, null, null);
         DbSample d = new DbSample(true, 20.0, 50.0, 1.0, 6, 20, 100, 3, 0, (int) lockWaiters, 0.1, 50.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 1.0, 60.0);
         return new Sample("t", 0, st, Map.of("checkin", c, "baggage", b), d, null, List.of(), Map.of());

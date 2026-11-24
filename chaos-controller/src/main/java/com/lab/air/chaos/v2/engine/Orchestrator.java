@@ -311,6 +311,8 @@ public class Orchestrator {
         return switch (def.id()) {
             case "S01", "S11", "S12", "S13", "S14", "S15", "S19" -> List.of(initiator);
             case "S04", "S05", "S06", "S07" -> List.of(initiator);     // paylaşılan DB etkisi yoğunluğa bağlı: bilgi
+            // contention yalnız chaos.* satırlarında: etki DB (lock) ve workload seviyesinde, iş endpoint'lerinde değil
+            case "S02", "S08", "S09" -> List.of();
             default -> participants;
         };
     }

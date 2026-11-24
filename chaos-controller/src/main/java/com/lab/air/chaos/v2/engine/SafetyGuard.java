@@ -27,6 +27,8 @@ public final class SafetyGuard {
     private final Set<String> extra;
     private final Double dbSizeStartMb;
     private final Map<String, Integer> streak = new HashMap<>();
+    /** İlk görülen process start time; değişirse uygulama deney sırasında yeniden başlamıştır (OOM / crash). */
+    private final Map<String, Double> startTimes = new HashMap<>();
 
     public SafetyGuard(V2Properties props, Budget budget, Set<String> apps, List<String> extraRules, Double dbSizeStartMb) {
         this.props = props;
@@ -79,15 +81,22 @@ public final class SafetyGuard {
                 viol.add(new String[]{"app-down-" + app, app + " 30 s boyunca erişilemedi (actuator)"});
                 continue;
             }
+            if (a.processStartSec() != null) {
+                Double first = startTimes.putIfAbsent(app, a.processStartSec());
+                if (first != null && Math.abs(a.processStartSec() - first) > 1.0) {
+                    viol.add(new String[]{"app-restart-" + app, app
+                            + " deney sırasında yeniden başladı (process start time değişti: olası OOM / crash)"});
+                }
+            }
             if (a.cpuPct() != null && a.cpuPct() > budget.maxAppCpuPct()) {
                 viol.add(new String[]{"app-cpu-" + app, fmt(app + " CPU %.0f%% > %.0f%%", a.cpuPct(), budget.maxAppCpuPct())});
             }
-            Double h = a.heapPct();
+            Double h = a.heapLivePct();       // GC sonrası live set (used, garbage nedeniyle yanıltıcı)
             if (h != null && h > budget.maxAppHeapPct()) {
-                viol.add(new String[]{"app-heap-" + app, fmt(app + " heap %.0f%% > %.0f%%", h, budget.maxAppHeapPct())});
+                viol.add(new String[]{"app-heap-" + app, fmt(app + " heap live set %.0f%% > %.0f%%", h, budget.maxAppHeapPct())});
             }
             if (h != null && h >= 97 && extra.contains("heap ≥ %97")) {
-                viol.add(new String[]{"app-heap97-" + app, fmt(app + " heap %.0f%% ≥ %%97", h, 0.0)});
+                viol.add(new String[]{"app-heap97-" + app, fmt(app + " heap live set %.0f%% ≥ %%97", h, 0.0)});
             }
         }
         if (s.appVm() != null) {
@@ -103,7 +112,8 @@ public final class SafetyGuard {
         String reason = null;
         for (String[] v : viol) {
             now.add(v[0]);
-            int need = v[0].startsWith("db-unreachable") || v[0].startsWith("app-down") ? UNREACHABLE : CONSECUTIVE;
+            int need = v[0].startsWith("app-restart") ? 1
+                    : v[0].startsWith("db-unreachable") || v[0].startsWith("app-down") ? UNREACHABLE : CONSECUTIVE;
             int c = streak.merge(v[0], 1, Integer::sum);
             if (c >= need && reason == null) {
                 reason = v[1];

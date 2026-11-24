@@ -105,9 +105,19 @@ public final class Model {
     /** Uygulama başına ölçüm (actuator/prometheus). Ölçülemeyen değer null kalır — asla uydurulmaz. */
     public record AppSample(boolean up, Double cpuPct, Double heapUsedMb, Double heapMaxMb, Integer poolActive,
                             Integer poolIdle, Integer poolPending, Integer poolMax, Double rps, Double errorPct,
-                            Double p95Ms, Double p99Ms, Integer dbConnections, Integer dbLockWaits) {
+                            Double p95Ms, Double p99Ms, Integer dbConnections, Integer dbLockWaits,
+                            Double heapLiveMb, Double processStartSec) {
+        /** used / max: toplanmamış garbage dahil (G1 bu değeri doğal olarak max'a yaklaştırır) → baskı göstergesi. */
         public Double heapPct() {
             return heapUsedMb == null || heapMaxMb == null || heapMaxMb <= 0 ? null : 100 * heapUsedMb / heapMaxMb;
+        }
+
+        /**
+         * Son GC sonrası live set / max (jvm_gc_live_data_size_bytes). OOM riski bu değere bağlıdır; safety budget
+         * bununla değerlendirilir. Ölçülemezse heapPct'e düşer.
+         */
+        public Double heapLivePct() {
+            return heapLiveMb == null || heapLiveMb <= 0 || heapMaxMb == null || heapMaxMb <= 0 ? heapPct() : 100 * heapLiveMb / heapMaxMb;
         }
 
         public Double poolUsagePct() {

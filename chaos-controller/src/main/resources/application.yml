@@ -7,6 +7,10 @@ spring:
   mvc:
     problemdetails:
       enabled: false
+  web:
+    resources:
+      # v2 React SPA: build çıktısı imajda /app/static-ui/ui/ (URL /ui/**; Dockerfile chaos-ui aşaması)
+      static-locations: classpath:/static/,file:${CHAOS_UI_DIR:/app/static-ui/}
 
 server:
   port: ${SERVER_PORT:8080}

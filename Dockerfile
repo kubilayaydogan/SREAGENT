@@ -25,6 +25,14 @@ RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -q -DskipTests package \
  && cp chaos-controller/target/chaos-controller.jar /out/ \
  && cp db-migrator/target/db-migrator-*-exec.jar /out/db-migrator.jar
 
+# Chaos v2 React UI (yalnız build; çıktı chaos imajına kopyalanır)
+FROM node:22-alpine AS chaos-ui
+WORKDIR /ui
+COPY chaos-controller/ui/package.json chaos-controller/ui/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY chaos-controller/ui/ ./
+RUN npx tsc -b --noEmit && npx vitest run && npx vite build
+
 FROM eclipse-temurin:21-jre AS runtime-base
 RUN groupadd --system app && useradd --system --gid app --home /app app
 WORKDIR /app
@@ -58,6 +66,7 @@ ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 
 FROM runtime-base AS chaos
 COPY --from=build /out/chaos-controller.jar app.jar
+COPY --from=chaos-ui /ui/dist /app/static-ui/ui
 USER root
 RUN mkdir -p /data/experiments && chown -R app:app /data
 USER app

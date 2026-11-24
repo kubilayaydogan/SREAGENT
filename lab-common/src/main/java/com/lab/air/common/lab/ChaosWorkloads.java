@@ -48,6 +48,11 @@ public class ChaosWorkloads {
 
     private static final Logger log = LoggerFactory.getLogger(ChaosWorkloads.class);
     private static final int MB = 1024 * 1024;
+    /**
+     * Ballast parça boyutu. 1 MB'lık byte[] küçük heap'lerde (G1 region = 1 MB) başlık nedeniyle humongous olur ve
+     * 2 region kaplar → gerçek ballast hesaplananın ~2 katı (ölçüldü: OutOfMemoryError). 256 KB yarım region'ın altında.
+     */
+    private static final int BALLAST_CHUNK = 256 * 1024;
 
     private final DataSource ds;
     private final ChaosLabProperties props;
@@ -183,6 +188,7 @@ public class ChaosWorkloads {
                 try {
                     long t0 = System.nanoTime();
                     long cnt;
+                    serialOnly(c);
                     try (PreparedStatement ps = c.prepareStatement(SqlTag.labTag("chaos-read", """
                             SELECT count(*), avg(val), max(payload) FROM chaos.synthetic_data
                              WHERE id < (SELECT (max(id) * ?::numeric / 100)::bigint FROM chaos.synthetic_data)
@@ -431,14 +437,14 @@ public class ChaosWorkloads {
         }
         long hold = Math.min(Math.max(0, holdMs), props.maxMemoryHoldMs());
         List<byte[]> mine = new ArrayList<>();
-        for (long done = 0; done + MB <= allowed; done += MB) {
-            byte[] chunk = new byte[MB];
+        for (long done = 0; done + BALLAST_CHUNK <= allowed; done += BALLAST_CHUNK) {
+            byte[] chunk = new byte[BALLAST_CHUNK];
             for (int i = 0; i < chunk.length; i += 4096) {
                 chunk[i] = (byte) i;               // sayfaları gerçekten dokun (RSS)
             }
             mine.add(chunk);
         }
-        long bytes = (long) mine.size() * MB;
+        long bytes = (long) mine.size() * BALLAST_CHUNK;
         ballast.addAll(mine);
         ballastBytes.addAndGet(bytes);
         long gen = generation.get();
@@ -560,6 +566,7 @@ public class ChaosWorkloads {
             c.setAutoCommit(false);
             try {
                 long t0 = System.nanoTime();
+                serialOnly(c);
                 try (PreparedStatement ps = c.prepareStatement(SqlTag.labTag(kind, sql))) {
                     ps.setInt(1, param);
                     ps.executeQuery().close();
@@ -571,6 +578,17 @@ public class ChaosWorkloads {
                 c.rollback();
                 throw e;
             }
+        }
+    }
+
+    /**
+     * Parallel query kapalı (yalnız bu transaction): aksi halde tek chaos sorgusu max_parallel_workers_per_gather
+     * kadar ek süreçle ~3 vCPU kullanır ve adaptive controller'ın en küçük adımı (1 worker) DB CPU'yu hedefin
+     * çok üstüne taşır (ölçüldü: 1–2 worker → %96). Seri sorguda 1 worker ≈ 1 vCPU.
+     */
+    private static void serialOnly(Connection c) throws SQLException {
+        try (var st = c.createStatement()) {
+            st.execute("SET LOCAL max_parallel_workers_per_gather = 0");
         }
     }
 

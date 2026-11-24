@@ -159,7 +159,7 @@ public class MetricsCollector {
     }
 
     private static AppSample down() {
-        return new AppSample(false, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        return new AppSample(false, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     // ------------------------------------------------------------------ uygulamalar
@@ -230,7 +230,8 @@ public class MetricsCollector {
         }
         return new AppSample(true, cpu == null ? null : cpu * 100, mb(heapUsed), mb(heapMax), i(active), i(idle),
                 i(pending), i(max), rps, errPct, p95, p99, dbConns == null ? null : dbConns[0],
-                dbConns == null ? null : dbConns[1]);
+                dbConns == null ? null : dbConns[1], mb(p.sum("jvm_gc_live_data_size_bytes", l -> true)),
+                p.sum("process_start_time_seconds", l -> true));
     }
 
     private static Double mb(Double b) {

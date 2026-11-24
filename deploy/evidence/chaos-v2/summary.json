@@ -1,0 +1,615 @@
+[
+ {
+  "scenario": "S01",
+  "id": "v2-20261123-205823-b50d",
+  "label": "e2e S01",
+  "intensity": "HIGH",
+  "initiator": "checkin",
+  "targets": [
+   "checkin"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 4.3,
+  "observedAffected": [
+   "checkin"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "pool demand hedefe ulaştı",
+    "baseline": 0.0,
+    "observed": 175.0,
+    "threshold": 88.0,
+    "result": "PASS"
+   },
+   {
+    "d": "pool pending > 0 (bekleyen istek)",
+    "baseline": 0.0,
+    "observed": 6.0,
+    "threshold": 1.0,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S02",
+  "id": "v2-20261123-205953-6ed9",
+  "label": "e2e S02",
+  "intensity": "MEDIUM",
+  "initiator": "reservation",
+  "targets": [
+   "reservation",
+   "checkin"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 5.0,
+  "observedAffected": [],
+  "requiredCriteria": [
+   {
+    "d": "lock waiters gözlendi",
+    "baseline": 0.0,
+    "observed": 4.0,
+    "threshold": 2.1,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S03",
+  "id": "v2-20261123-210123-726f",
+  "label": "e2e S03",
+  "intensity": "MEDIUM",
+  "initiator": "flightops",
+  "targets": [
+   "reservation",
+   "checkin",
+   "flightops",
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 13.1,
+  "observedAffected": [
+   "checkin",
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "uzun transaction gözlendi (s)",
+    "baseline": 0.0,
+    "observed": 14.16,
+    "threshold": 9.0,
+    "result": "PASS"
+   },
+   {
+    "d": "blocking: lock waiters ≥ 1",
+    "baseline": 0.0,
+    "observed": 12.0,
+    "threshold": 1.0,
+    "result": "PASS"
+   },
+   {
+    "d": "hedef uygulamada p95 artışı",
+    "baseline": 40.34,
+    "observed": 10665.84,
+    "threshold": 130.67,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S04",
+  "id": "v2-20261123-213529-7ae8",
+  "label": "e2e S04",
+  "intensity": "MEDIUM",
+  "initiator": "baggage",
+  "targets": [
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 6.9,
+  "observedAffected": [
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "DB CPU hedefin %80'ine ulaştı",
+    "baseline": 1.89,
+    "observed": 51.72,
+    "threshold": 44.0,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S05",
+  "id": "v2-20261123-210439-0285",
+  "label": "e2e S05",
+  "intensity": "MEDIUM",
+  "initiator": "baggage",
+  "targets": [
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 5.7,
+  "observedAffected": [
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "insert hızı hedefin %50'si",
+    "baseline": 6.73,
+    "observed": 3833.51,
+    "threshold": 2000.0,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S06",
+  "id": "v2-20261123-213704-3bd1",
+  "label": "e2e S06",
+  "intensity": "MEDIUM",
+  "initiator": "reservation",
+  "targets": [
+   "reservation"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 7.6,
+  "observedAffected": [
+   "reservation",
+   "checkin",
+   "flightops",
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "DB CPU hedefin %80'i",
+    "baseline": 1.74,
+    "observed": 56.66,
+    "threshold": 40.0,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S07",
+  "id": "v2-20261123-210749-4ee8",
+  "label": "e2e S07",
+  "intensity": "MEDIUM",
+  "initiator": "checkin",
+  "targets": [
+   "checkin"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 5.2,
+  "observedAffected": [
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "temp yazımı hedefin %50'si (MB/s)",
+    "baseline": 0.0,
+    "observed": 200.55,
+    "threshold": 7.5,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S08",
+  "id": "v2-20261123-210924-e18c",
+  "label": "e2e S08",
+  "intensity": "MEDIUM",
+  "initiator": "reservation",
+  "targets": [
+   "checkin",
+   "flightops"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 5.0,
+  "observedAffected": [
+   "checkin",
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "lock waiters gözlendi",
+    "baseline": 0.0,
+    "observed": 5.0,
+    "threshold": 1.0,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S09",
+  "id": "v2-20261123-211059-b055",
+  "label": "e2e S09",
+  "intensity": "MEDIUM",
+  "initiator": "checkin",
+  "targets": [
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 6.0,
+  "observedAffected": [],
+  "requiredCriteria": [
+   {
+    "d": "deadlock gözlendi (/dk)",
+    "baseline": 0.0,
+    "observed": 36.45,
+    "threshold": 1.8,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S10",
+  "id": "v2-20261123-211235-9e58",
+  "label": "e2e S10",
+  "intensity": "MEDIUM",
+  "initiator": "flightops",
+  "targets": [
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 5.0,
+  "observedAffected": [
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "DB bağlantı doluluğu",
+    "baseline": 33.0,
+    "observed": 65.0,
+    "threshold": 44.0,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S11",
+  "id": "v2-20261123-211405-2f82",
+  "label": "e2e S11",
+  "intensity": "HIGH",
+  "initiator": "baggage",
+  "targets": [
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 11.4,
+  "observedAffected": [
+   "checkin",
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "initiator CPU hedefin %80'i",
+    "baseline": 4.18,
+    "observed": 85.0,
+    "threshold": 64.0,
+    "result": "PASS"
+   },
+   {
+    "d": "initiator p95 artışı",
+    "baseline": 44.31,
+    "observed": 70.46,
+    "threshold": 62.61,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S12",
+  "id": "v2-20261123-211545-be2c",
+  "label": "e2e S12",
+  "intensity": "MEDIUM",
+  "initiator": "reservation",
+  "targets": [
+   "reservation"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 5.4,
+  "observedAffected": [
+   "checkin",
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "heap hedefin %85'i",
+    "baseline": 35.47,
+    "observed": 78.43,
+    "threshold": 46.75,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S13",
+  "id": "v2-20261123-211720-cf1a",
+  "label": "e2e S13",
+  "intensity": "HIGH",
+  "initiator": "checkin",
+  "targets": [
+   "checkin"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 12.6,
+  "observedAffected": [
+   "checkin"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "initiator p95 ≥ baseline + delay",
+    "baseline": 20.49,
+    "observed": 979.79,
+    "threshold": 170.49,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S14",
+  "id": "v2-20261123-211900-0076",
+  "label": "e2e S14",
+  "intensity": "HIGH",
+  "initiator": "flightops",
+  "targets": [
+   "flightops"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 10.8,
+  "observedAffected": [
+   "flightops"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "initiator p99 artışı",
+    "baseline": 13.9,
+    "observed": 420.55,
+    "threshold": 170.85,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S15",
+  "id": "v2-20261123-212040-0da9",
+  "label": "e2e S15",
+  "intensity": "MEDIUM",
+  "initiator": "reservation",
+  "targets": [
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 4.7,
+  "observedAffected": [],
+  "requiredCriteria": [
+   {
+    "d": "dependency p95 ≥ delay",
+    "baseline": null,
+    "observed": 167.91,
+    "threshold": 150.0,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S16",
+  "id": "v2-20261123-212210-ab2d",
+  "label": "e2e S16",
+  "intensity": "MEDIUM",
+  "initiator": "checkin",
+  "targets": [
+   "flightops"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 13.8,
+  "observedAffected": [
+   "flightops",
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "retry amplification ≥ 1.5",
+    "baseline": null,
+    "observed": 2.49,
+    "threshold": 1.5,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S17",
+  "id": "v2-20261124-043441-ac75",
+  "label": "cascading acceptance",
+  "intensity": "HIGH",
+  "initiator": "baggage",
+  "targets": [
+   "reservation",
+   "checkin",
+   "flightops",
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 6.7,
+  "observedAffected": [
+   "checkin",
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "DB CPU hedefin %80'i",
+    "baseline": 2.01,
+    "observed": 83.27,
+    "threshold": 64.0,
+    "result": "PASS"
+   },
+   {
+    "d": "cascade: hedef uygulamada p95 ≥ 1.5×",
+    "baseline": 22.6,
+    "observed": 86.12,
+    "threshold": 43.91,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S18",
+  "id": "v2-20261123-212511-be48",
+  "label": "e2e S18",
+  "intensity": "MEDIUM",
+  "initiator": "reservation",
+  "targets": [
+   "reservation",
+   "checkin",
+   "flightops",
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 5.8,
+  "observedAffected": [],
+  "requiredCriteria": [
+   {
+    "d": "hedeflerde RPS artışı",
+    "baseline": 4.41,
+    "observed": 13.46,
+    "threshold": 8.61,
+    "result": "PASS"
+   },
+   {
+    "d": "DB TPS artışı",
+    "baseline": 75.84,
+    "observed": 201.39,
+    "threshold": 103.59,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S19",
+  "id": "v2-20261123-212646-83bd",
+  "label": "e2e S19",
+  "intensity": "HIGH",
+  "initiator": "baggage",
+  "targets": [
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 6.2,
+  "observedAffected": [
+   "checkin",
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "retry amplification > 1.1",
+    "baseline": 1.0,
+    "observed": 4.0,
+    "threshold": 1.1,
+    "result": "PASS"
+   },
+   {
+    "d": "initiator p95 artışı",
+    "baseline": 56.69,
+    "observed": 6191.91,
+    "threshold": 256.69,
+    "result": "PASS"
+   }
+  ]
+ },
+ {
+  "scenario": "S20",
+  "id": "v2-20261124-043306-c5ca",
+  "label": "e2e S20",
+  "intensity": "HIGH",
+  "initiator": "checkin",
+  "targets": [
+   "reservation",
+   "checkin",
+   "flightops",
+   "baggage"
+  ],
+  "state": "COMPLETED",
+  "verdict": "IMPACT_CONFIRMED",
+  "cleanupOk": true,
+  "recovered": true,
+  "recoveryTimeSec": 7.8,
+  "observedAffected": [
+   "checkin",
+   "baggage"
+  ],
+  "requiredCriteria": [
+   {
+    "d": "DB CPU hedefin %80'i",
+    "baseline": 2.29,
+    "observed": 91.8,
+    "threshold": 52.0,
+    "result": "PASS"
+   },
+   {
+    "d": "cascade: hedef uygulamada p95 ≥ 1.5×",
+    "baseline": 44.26,
+    "observed": 106.81,
+    "threshold": 76.39,
+    "result": "PASS"
+   }
+  ]
+ }
+]

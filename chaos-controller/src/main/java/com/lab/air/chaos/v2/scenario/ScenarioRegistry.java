@@ -229,11 +229,16 @@ public final class ScenarioRegistry {
                 List.of("DB boyutu deney başından beri > 1 GB arttı", "budget aşımı"),
                 "worker'lar durur; write_sink TRUNCATE (SECURITY DEFINER trim_write_sink)",
                 c -> {
-                    double tgt = target(c, c.pick(2000.0, 8000.0, 20000.0, 40000.0));
+                    double tgt = target(c, c.pick(1000.0, 4000.0, 10000.0, 20000.0));
                     int rows = c.pick(200, 500, 1000, 2000);
+                    int maxW = workersCap(c, c.pick(2, 4, 8, 16));
+                    // worker başına çağrı hızı sınırlı: tüm worker'lar açıkken bile insert hızı ≈ 2 × hedef.
+                    // Sınırsız döngüde tek worker bile hedefi katlarca aşar (controller 1 worker'ın altına inemez)
+                    // ve DB boyutu growth limitine takılır.
+                    double perWorker = rate(c, Math.max(0.5, 2 * tgt / ((double) rows * maxW)));
                     return new Plan(List.of(Action.loop("write-burst", c.initiator(), "/lab/chaos/write-burst",
                             p("rows", "" + rows, "payloadBytes", "256", "errorPct", "" + c.err()), 1,
-                            workersCap(c, c.pick(2, 4, 8, 16)), rate(c, 0), true)),
+                            maxW, perWorker, true)),
                             new Control(INSERTS_PER_SEC, Scope.DB, tgt, 15),
                             List.of(Criterion.atLeast("insert hızı hedefin %50'si", INSERTS_PER_SEC, Scope.DB, Agg.AVG,
                                             tgt * 0.5),
@@ -394,15 +399,26 @@ public final class ScenarioRegistry {
                 List.of("heap ≥ %97", "initiator erişilemez"),
                 "ballast /lab/cleanup ile bırakılır",
                 c -> {
-                    double tgt = target(c, c.pick(50.0, 65.0, 80.0, 90.0));
+                    // Heap ballast bütünleyen (integrating) bir süreçtir: P-kontrol birikimin gerisinden gelir ve
+                    // hedefi aşar (ölçüldü: hedef 65 → %98). Bu yüzden open-loop: kararlı ballast = hız × mb × hold.
+                    // Hedef ballast = hedef heap − %25 pay (canlı set + toplanmamış garbage) ve en fazla heap'in %50'si
+                    // (uygulama tarafı LAB_CHAOS_MAX_MEMORY_FRACTION ile aynı); %60 ballast OOM üretti.
+                    double tgt = target(c, c.pick(45.0, 55.0, 65.0, 75.0));
+                    double heapMax = c.cal().heapMaxMb() == null ? 448.0
+                            : c.cal().heapMaxMb().getOrDefault(c.initiator(), 448.0);
+                    int mb = 8;
+                    int holdMs = 20_000;
+                    double ballastMb = Math.max(mb, Math.min(0.5, (tgt - 25.0) / 100.0) * heapMax);
+                    double callsPerSec = ballastMb / (mb * holdMs / 1000.0);
                     return new Plan(List.of(Action.loop("memory", c.initiator(), "/lab/chaos/memory",
-                            p("mb", "16", "holdMs", "120000"), 0, workersCap(c, c.pick(1, 2, 3, 4)), 0.5, true)),
-                            new Control(APP_HEAP_PCT, Scope.INITIATOR, tgt, 8),
+                            p("mb", "" + mb, "holdMs", "" + holdMs), 1, 1, callsPerSec, false)),
+                            null,
                             List.of(Criterion.atLeast("heap hedefin %85'i", APP_HEAP_PCT, Scope.INITIATOR, Agg.MAX,
                                             tgt * 0.85),
                                     Criterion.rise("initiator p99 artışı", APP_P99_MS, Scope.INITIATOR, Agg.P90, 1.2, 5,
                                             false)),
-                            List.of("heap ≥ %97"), params("targetHeapPct", tgt));
+                            List.of("heap ≥ %97"), params("targetHeapPct", tgt, "ballastMb", Math.round(ballastMb),
+                                    "callsPerSec", callsPerSec, "holdMs", holdMs));
                 }));
 
         add(new ScenarioDef("S13", "Database network latency", "network",
@@ -550,9 +566,12 @@ public final class ScenarioRegistry {
                                 true));
                     }
                     return new Plan(a, new Control(DB_CPU_PCT, Scope.DB, tgt, 15),
-                            List.of(Criterion.atLeast("DB CPU hedefin %60'ı", DB_CPU_PCT, Scope.DB, Agg.P90, tgt * 0.6),
-                                    Criterion.rise("hedeflerde RPS artışı", APP_RPS, Scope.ANY_TARGET, Agg.AVG, 1.5, 2, true),
-                                    Criterion.rise("DB TPS artışı", DB_TPS, Scope.DB, Agg.AVG, 1.3, 5, false)),
+                            // yük senaryosunun doğrudan etkisi RPS ve TPS'tir; DB CPU'nun hedefe ulaşması iş
+                            // endpoint'lerinin maliyetine bağlıdır (hafif catalog sorguları) → bilgi amaçlı
+                            List.of(Criterion.rise("hedeflerde RPS artışı", APP_RPS, Scope.ANY_TARGET, Agg.AVG, 1.5, 2, true),
+                                    Criterion.rise("DB TPS artışı", DB_TPS, Scope.DB, Agg.AVG, 1.3, 5, true),
+                                    Criterion.atLeast("DB CPU hedefin %60'ı", DB_CPU_PCT, Scope.DB, Agg.P90, tgt * 0.6)
+                                            .optional()),
                             List.of(), params("rpsPerApp", r, "targetDbCpuPct", tgt, "apps", participants(c)));
                 }));
 
@@ -615,8 +634,9 @@ public final class ScenarioRegistry {
             ScenarioDef d = defs.get(ids.get(k));
             String init = apps.get((k + c.rnd().nextInt(apps.size())) % apps.size());
             List<String> others = apps.stream().filter(a -> !a.equals(init)).toList();
+            // birleşik etkide toplam yük budget'ı aşmasın: alt senaryolar bir seviye düşük yoğunlukta
             Ctx sub = new Ctx(init, d.minApps() > 1 || d.defaultAllTargets() ? others : List.of(init),
-                    c.intensity(), c.custom(), c.cal(), c.rnd());
+                    lower(c.intensity()), c.custom(), c.cal(), c.rnd());
             Plan p = d.plan().apply(sub);
             int off = staggered ? 20 * k : 0;
             for (Action a : p.actions()) {
@@ -641,6 +661,15 @@ public final class ScenarioRegistry {
             control = null;        // alt senaryonun initiator'ı ana initiator ile aynı olmayabilir → sabit seviye
         }
         return new Plan(actions, control, crit, abort, params("subScenarios", ids, "parts", parts));
+    }
+
+    static Intensity lower(Intensity i) {
+        return switch (i) {
+            case MEDIUM -> Intensity.LIGHT;
+            case HIGH -> Intensity.MEDIUM;
+            case CRITICAL -> Intensity.HIGH;
+            default -> i;
+        };
     }
 
     /** UI / API için senaryo özeti (plan fonksiyonu hariç). */

@@ -65,6 +65,7 @@ public class V2ApiController {
             c.put("app", app);
             c.put("sample", a);
             c.put("heapPct", a == null ? null : a.heapPct());
+            c.put("heapLivePct", a == null || a.heapLiveMb() == null ? null : a.heapLivePct());
             c.put("poolUsagePct", a == null ? null : a.poolUsagePct());
             List<String> roles = new ArrayList<>();
             active.ifPresent(r -> {
