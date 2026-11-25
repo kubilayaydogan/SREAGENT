@@ -122,6 +122,36 @@ export interface Conversation {
   updated_at: string;
 }
 
+export interface ConversationFocus {
+  apps?: string[];
+  mechanism?: string | null;
+  window?: { start: string; end: string };
+  investigation?: string | null;
+  intent?: string;
+  turn?: number;
+  updated_at?: string;
+}
+
+export interface TurnDigest {
+  turn: number;
+  at: string;
+  question: string;
+  intent: string | null;
+  apps: string[];
+  investigation: string | null;
+  mechanism: string | null;
+  answer_head: string;
+}
+
+export interface WorkingMemory {
+  focus: ConversationFocus | null;
+  digests: TurnDigest[];
+  messages_in_state: number;
+  max_messages: number;
+  max_digests: number;
+  pending: string[];
+}
+
 export interface ConversationDetail extends Conversation {
   active_run_id: string | null;
   resumable: boolean;

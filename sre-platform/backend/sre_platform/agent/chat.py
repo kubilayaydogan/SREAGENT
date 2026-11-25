@@ -24,6 +24,7 @@ from ..db.models import MessageRole, Trigger
 from ..db.session import transaction
 from ..repositories import conversations, investigations
 from . import prompts
+from . import working_memory as wm
 from .investigation import InvestigationRunner, summary_of
 from .llm_port import ChatRoute, heuristic_route
 
@@ -37,6 +38,8 @@ def _keep_last(a: list, b: list) -> list:
 
 class ChatState(TypedDict, total=False):
     messages: Annotated[list[dict], _keep_last]
+    focus: dict | None                                     # working memory: konuşma odağı (bkz. working_memory)
+    digests: Annotated[list[dict], wm.append_digests]       # working memory: tur özetleri (eski turlar)
     question: str
     route: dict
     investigation: dict | None
@@ -86,12 +89,33 @@ def suggestions_for(route: dict, inv: dict | None, memory: dict | None) -> list[
 def _hist_block(memory: dict | None) -> dict | None:
     if not memory:
         return None
-    keep = {k: memory[k] for k in ("investigations", "incidents", "rca", "runbooks", "known_issues") if memory.get(k)}
+    keep = {k: memory[k] for k in ("episodes", "current_symptoms", "investigations", "incidents", "rca", "runbooks",
+                                   "known_issues") if memory.get(k)}
     return keep or {"note": "benzer kayıt bulunamadı"}
+
+
+OUTCOME_TR = {"confirmed": "feedback ile doğrulandı", "partially_confirmed": "kısmen doğrulandı",
+              "rejected": "hipotez yanlış çıktı (feedback)", "unverified": "sonuç doğrulanmadı"}
+
+
+def _det_episodes(items: list[dict]) -> list[str]:
+    out = ["### Benzer geçmiş episode'lar"]
+    for e in items:
+        sim = f" · benzerlik {e['similarity']:.2f}" if e.get("similarity") is not None else ""
+        out.append(f"- `{e['ref']}` {e.get('at', '')} {e.get('mechanism') or 'mechanism yok'}{sim} — "
+                   f"{OUTCOME_TR.get(e.get('outcome'), e.get('outcome'))}")
+        if e.get("shared_symptoms"):
+            out.append(f"  ortak belirtiler: {', '.join(e['shared_symptoms'][:6])}")
+        if e.get("resolution"):
+            out.append(f"  çözüm kaydı: {e['resolution']}")
+    return out
 
 
 def _det_history(memory: dict) -> str:
     lines, any_ = [], False
+    if memory.get("episodes"):
+        lines += _det_episodes(memory["episodes"])
+        any_ = True
     titles = {"investigations": "Araştırmalar", "incidents": "Incident'lar", "rca": "RCA raporları",
               "runbooks": "Runbook'lar", "known_issues": "Bilinen sorunlar", "conversations": "Önceki konuşmalar"}
     for k, t in titles.items():
@@ -143,10 +167,12 @@ class ChatOrchestrator:
         async def route(state: ChatState) -> dict:
             q = state["question"]
             history = [m for m in state.get("messages", [])[:-1]]
+            focus = state.get("focus")
             r: ChatRoute | None = None
             if chat_llm is not None:
                 try:
-                    r = await chat_llm.route(q, history, apps=apps, app=ctx.application_id)
+                    r = await chat_llm.route(q, history, apps=apps, app=ctx.application_id,
+                                             focus=wm.router_hint(focus))
                 except LlmUnavailable as e:
                     await ctx.emit("agent_thinking", {"step": "start", "message":
                                                       f"Soru Claude ile yorumlanamadı; kural tabanlı yorum kullanıldı ({e})."})
@@ -159,6 +185,10 @@ class ChatOrchestrator:
                 d.update(minutes=ctx.minutes, start_utc=None, end_utc=None)
             if ctx.start and ctx.end:
                 d.update(minutes=None, start_utc=ctx.start.isoformat(), end_utc=ctx.end.isoformat())
+            d, inherited = wm.resolve(d, focus, q, explicit_window=bool(ctx.minutes or (ctx.start and ctx.end)))
+            if inherited:
+                await ctx.emit("agent_thinking", {"step": "start", "message":
+                                                  "Önceki turun odağı kullanıldı — " + "; ".join(inherited) + "."})
             if d["intent"] == "followup" and not state.get("last_investigation_id") and \
                     len(state.get("messages", [])) <= 1:
                 d["intent"] = "analyze"           # takip edilecek önceki yanıt yok
@@ -166,7 +196,9 @@ class ChatOrchestrator:
                 "analyze": "Güncel telemetri analizi yapılacak.", "compare": "Güncel analiz yapılıp geçmişle karşılaştırılacak.",
                 "history": "Geçmiş kayıtlar aranacak (yeni telemetry query yok).",
                 "followup": "Önceki yanıt üzerinden devam ediliyor.", "smalltalk": "Genel soru."}[d["intent"]]})
-            return {"route": d, "investigation": None, "memory": None}
+            turn = wm.next_turn(state)
+            return {"route": d, "investigation": None, "memory": None,
+                    "focus": wm.focus_from_route(focus, d, turn)}
 
         def after_route(state: ChatState) -> str:
             i = state["route"]["intent"]
@@ -195,7 +227,8 @@ class ChatOrchestrator:
             summ = summary_of(inv, report)
             if report:
                 await rt.memory.remember_investigation(inv, user_id=ctx.user_id, conversation_id=ctx.conversation_id)
-            return {"investigation": summ, "last_investigation_id": str(inv.id)}
+            return {"investigation": summ, "last_investigation_id": str(inv.id),
+                    "focus": wm.focus_from_investigation(state.get("focus"), summ)}
 
         async def recall(state: ChatState) -> dict:
             r, inv = state["route"], state.get("investigation") or {}
@@ -249,7 +282,9 @@ class ChatOrchestrator:
                 prev = next((m["content"] for m in reversed(state.get("messages", [])[:-1])
                              if m["role"] == "assistant"), None)
                 ctx_data = {"previous_answer": (prev or "")[:6000],
-                            "last_investigation": (mem or {}).get("last_investigation")}
+                            "last_investigation": (mem or {}).get("last_investigation"),
+                            "focus": state.get("focus"),
+                            "earlier_turns": (state.get("digests") or [])[-8:]}
                 system, human = prompts.FOLLOWUP_SYSTEM, prompts.followup_human(q, ctx_data)
                 fallback = prev or "Önceki bir yanıt bulunamadı."
             else:
@@ -286,8 +321,10 @@ class ChatOrchestrator:
                     from ..services.slack_notify import notify_rca
                     await notify_rca(rt, uuid.UUID(inv["investigation_id"]))
             sugg = suggestions_for(r, inv, mem)
+            turn = wm.next_turn(state)
             return {"answer": answer, "answer_source": source, "suggestions": sugg,
-                    "messages": [{"role": "assistant", "content": answer[:8000]}]}
+                    "messages": [{"role": "assistant", "content": answer[:8000]}],
+                    "digests": [wm.digest(turn, q, r, inv, answer)]}
 
         g = StateGraph(ChatState)
         g.add_node("route", route)
@@ -360,6 +397,22 @@ class ChatOrchestrator:
         ctx = TurnContext(user_id=uuid.uuid4(), conversation_id=uuid.uuid4(), thread_id=thread_id, emit=_noop)
         snap = await self._graph(ctx).aget_state(self._config(ctx))
         return list(snap.next or [])
+
+    async def working_memory(self, thread_id: str) -> dict:
+        ctx = TurnContext(user_id=uuid.uuid4(), conversation_id=uuid.uuid4(), thread_id=thread_id, emit=_noop)
+        snap = await self._graph(ctx).aget_state(self._config(ctx))
+        return {**wm.public_view(snap.values or {}, MAX_STATE_MESSAGES), "pending": list(snap.next or [])}
+
+    async def clear_focus(self, thread_id: str) -> bool:
+        """Konuşma odağını siler (sonraki tur odak devralmaz). Yarım kalan tur varsa dokunulmaz → False."""
+        ctx = TurnContext(user_id=uuid.uuid4(), conversation_id=uuid.uuid4(), thread_id=thread_id, emit=_noop)
+        graph = self._graph(ctx)
+        snap = await graph.aget_state(self._config(ctx))
+        if snap.next:
+            return False
+        if (snap.values or {}).get("focus"):
+            await graph.aupdate_state(self._config(ctx), {"focus": None}, as_node="respond")
+        return True
 
     async def _finish(self, ctx: TurnContext, state: dict) -> dict:
         inv = state.get("investigation")

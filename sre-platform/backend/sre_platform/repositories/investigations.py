@@ -210,6 +210,9 @@ async def complete(s: AsyncSession, inv: Investigation, report: dict[str, Any], 
             inv.application_id = apps[0]
     await upsert_evidence(s, inv.id, evidence_from_report(report))
     await s.flush()
+    if not failed:
+        from . import episodes                        # episodic memory (kayda değer koşular)
+        await episodes.safe_refresh(s, inv_id=inv.id)
     return inv
 
 

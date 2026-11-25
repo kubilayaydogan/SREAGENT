@@ -17,6 +17,7 @@ from airlab_agent.redact import redact_text
 
 from ..db.models import (Incident, IncidentEvent, IncidentInvestigation, IncidentSource, IncidentStatus, Investigation,
                          Severity)
+from . import episodes
 from .base import Conflict, InvalidTransition, NotFound, Page, order_by, paginate, ts_match, ts_rank
 
 S = IncidentStatus
@@ -98,6 +99,7 @@ async def transition(s: AsyncSession, inc: Incident, to: IncidentStatus, *, user
     except IntegrityError:
         await s.refresh(inc)
         raise Conflict("aynı anahtarla başka bir açık incident var; yeniden açılamaz") from None
+    await episodes.safe_refresh(s, incident=inc)          # çözüm durumu episodic memory'ye
     return inc
 
 
@@ -117,6 +119,8 @@ async def update_fields(s: AsyncSession, inc: Incident, *, user_id: uuid.UUID | 
         s.add(IncidentEvent(incident_id=inc.id, kind="update", user_id=user_id,
                             message="Güncellendi: " + ", ".join(changed)))
     await s.flush()
+    if {"root_cause", "recommended_actions"} & set(changed):
+        await episodes.safe_refresh(s, incident=inc)
     return inc
 
 
@@ -136,6 +140,8 @@ async def link_investigation(s: AsyncSession, inc_id: uuid.UUID, inv_id: uuid.UU
         s.add(IncidentEvent(incident_id=inc_id, kind="investigation", user_id=user_id,
                             message=f"Araştırma bağlandı ({relation})"))
     await s.flush()
+    if res.rowcount:
+        await episodes.safe_refresh(s, inv_id=inv_id)
 
 
 async def investigations_of(s: AsyncSession, inc_id: uuid.UUID) -> list[tuple[Investigation, str]]:

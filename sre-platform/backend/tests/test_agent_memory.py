@@ -71,7 +71,8 @@ class FakePort:
         self.humans: list[str] = []
         self.rca_flags: list[bool] = []
 
-    async def route(self, question, history, *, apps, app=None):
+    async def route(self, question, history, *, apps, app=None, focus=None):
+        self.focus_hints = getattr(self, "focus_hints", []) + [focus]
         if self.route_fail:
             raise LlmUnavailable("simulated")
         return heuristic_route(question, apps, app)

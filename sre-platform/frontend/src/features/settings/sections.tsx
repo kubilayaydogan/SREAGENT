@@ -407,6 +407,25 @@ function MemoryPanel() {
               {fmtNum(m.store.items)} · {fmtBytes(m.store.bytes)}
             </Field>
           </div>
+          <div>
+            <Field label="Episodic memory">{m.episodes.table}</Field>
+            <Field label="Kapsam">{m.episodes.scope}</Field>
+            <Field label="Episode">
+              {fmtNum(m.episodes.total)} · confirmed {fmtNum(m.episodes.by_outcome.confirmed)} · partially_confirmed{" "}
+              {fmtNum(m.episodes.by_outcome.partially_confirmed)} · rejected {fmtNum(m.episodes.by_outcome.rejected)} · unverified{" "}
+              {fmtNum(m.episodes.by_outcome.unverified)}
+            </Field>
+            <Field label="Çözüm kayıtlı">
+              {fmtNum(m.episodes.with_resolution)} · retention: {m.episodes.retention}
+            </Field>
+          </div>
+          <div>
+            <Field label="Working memory">checkpointer (konuşma thread'i)</Field>
+            <Field label="Kapsam">{m.working_memory.scope}</Field>
+            <Field label="Sınırlar">
+              son {m.working_memory.max_messages} mesaj · {m.working_memory.max_digests} tur özeti
+            </Field>
+          </div>
         </dl>
         <table className="data-table w-full">
           <thead>

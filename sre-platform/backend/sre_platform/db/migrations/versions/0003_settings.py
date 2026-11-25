@@ -1,7 +1,7 @@
 """Settings modülü: bölüm ayarları + revizyon geçmişi, MCP connector'ları, LLM profilleri, şifreli secret'lar,
 audit kayıtları; investigation başına değişmez yapılandırma kopyası.
 
-Geri alma: `sre-platform migrate --to 0002` (downgrade) bu tabloları siler; mevcut analiz kayıtları etkilenmez
+Geri alma: `sre-platform migrate --downgrade 0002` bu tabloları siler; mevcut analiz kayıtları etkilenmez
 (yalnız investigations.config_snapshot sütunu kalkar). Ortam değişkenleriyle çalışma davranışı aynen sürer.
 
 Revision ID: 0003

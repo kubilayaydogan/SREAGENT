@@ -17,7 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db.models import (AuditEvent, Connector, Conversation, Investigation, InvestigationStatus, JobRun, LlmProfile,
                           Role, ScheduledJob, StoredSecret, User)
+from ...agent import working_memory as wm
+from ...agent.chat import MAX_STATE_MESSAGES
 from ...db.session import transaction
+from ...repositories import episodes as episodes_repo
 from ...settings import connectors as conn_svc
 from ...settings import llm_profiles as llm_svc
 from ...settings import netguard, risk_preview, runtime, secrets, service
@@ -569,6 +572,11 @@ async def memory_status(request: Request, _: User = Depends(sre), s: AsyncSessio
                          "threads": counts[0], "checkpoints": counts[1], "bytes": counts[3]},
         "store": {"backend": "AsyncPostgresStore", "durable": True, "schema": "langgraph",
                   "scope": "kullanıcı / uygulama / mechanism namespace'leri", "items": counts[2], "bytes": counts[4]},
+        "episodes": {**await episodes_repo.stats(s), "table": "sre.agent_episodes",
+                     "scope": "investigation başına belirti parmak izi → hipotez → sonuç (feedback, incident çözümü)",
+                     "retention": "investigation silinince silinir"},
+        "working_memory": {"max_messages": MAX_STATE_MESSAGES, "max_digests": wm.MAX_DIGESTS,
+                           "scope": "konuşma başına: son mesajlar, odak (uygulama/pencere/mechanism), tur özetleri"},
         "supported_backends": [
             {"id": "postgres", "label": "PostgresSaver / PostgresStore", "status": "aktif",
              "note": "çok worker'lı kalıcı deployment"},
@@ -578,7 +586,8 @@ async def memory_status(request: Request, _: User = Depends(sre), s: AsyncSessio
              "note": "yeniden başlatmada kaybolur; yarım kalan tur sürdürülemez"}],
         "switching": "Backend değişimi canlı yapılamaz: veri taşıma + yeniden başlatma gerekir. Mevcut durum sessizce "
                      "silinmez.",
-        "note": "Checkpoint uzun vadeli hafıza değildir: yalnız yarım kalan koşu/turun sürdürülmesi içindir.",
+        "note": "Checkpoint uzun vadeli hafıza değildir: yarım kalan koşu/turun sürdürülmesi ve konuşmanın working "
+                "memory'si (odak + tur özetleri) içindir.",
         "active_threads": active_inv,
         "retention": {"checkpoints": "otomatik silinmez; aşağıdan thread bazında silinebilir",
                       "investigations_days": eff["investigations_days"]},

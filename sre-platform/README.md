@@ -49,7 +49,7 @@ tarayıcı ──:8090──► sre-frontend (nginx: SPA + /api ters vekil, SSE 
 `users`, `applications`, `conversations`, `messages`, `investigations`, `investigation_evidence`,
 `agent_tool_executions`, `incidents`, `incident_investigations`, `incident_events`, `rca_reports`, `agent_feedback`,
 `known_issues`, `runbooks`, `approval_requests`, `scheduled_jobs`, `job_runs`, `watch_conditions`, `watch_windows`,
-`watch_events`, `kv`. LangGraph checkpointer ve Store tabloları ayrı (`langgraph` şeması) — `sre-platform migrate` kurar.
+`watch_events`, `kv`, `agent_episodes` (episodic memory). LangGraph checkpointer ve Store tabloları ayrı (`langgraph` şeması) — `sre-platform migrate` kurar.
 
 ## API (hepsi `/api` altında; `health`, `ready`, `auth/login` hariç JWT gerekir)
 
@@ -59,7 +59,7 @@ tarayıcı ──:8090──► sre-frontend (nginx: SPA + /api ters vekil, SSE 
 | Kimlik | `POST auth/login`, `GET auth/me`, `GET/POST users`, `PATCH users/{id}` |
 | Katalog | `GET applications`, `GET applications/{id}/health`, `GET applications/{id}/metrics`, `GET dashboard/summary` |
 | Ajan | `POST agent/chat` (202), `POST agent/investigate`, `GET agent/stream/{run_id}` (SSE, `Last-Event-ID`), `GET agent/runs[/{id}]`, `POST agent/runs/{id}/cancel` |
-| Sohbet | `GET/POST conversations`, `GET/PATCH conversations/{id}`, `GET conversations/{id}/messages`, `POST conversations/{id}/resume` |
+| Sohbet | `GET/POST conversations`, `GET/PATCH conversations/{id}`, `GET conversations/{id}/messages`, `POST conversations/{id}/resume`, `GET conversations/{id}/memory`, `DELETE conversations/{id}/memory/focus` (working memory — [docs/agent-memory.md](docs/agent-memory.md)) |
 | Araştırma | `GET investigations`, `GET investigations/{id}` + `/evidence` `/tools` `/similar` `/recommendations` `/feedback` |
 | Incident | `GET/POST incidents`, `GET/PATCH incidents/{id}`, `POST incidents/{id}/notes`, `POST incidents/{id}/investigations` |
 | RCA | `GET rca`, `POST rca/{inv_id}/generate`, `GET rca/{id}`, `GET rca/{id}/markdown` |

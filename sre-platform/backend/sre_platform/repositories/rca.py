@@ -82,6 +82,8 @@ async def upsert_feedback(s: AsyncSession, *, inv_id: uuid.UUID, user_id: uuid.U
                                             "comment": stmt.excluded.comment, "rca_id": stmt.excluded.rca_id,
                                             "updated_at": func.now()}).returning(AgentFeedback.id)
     fid = (await s.execute(stmt)).scalar_one()
+    from . import episodes                            # feedback → episode outcome (confirmed / rejected …)
+    await episodes.safe_refresh(s, inv_id=inv_id)
     return await s.get(AgentFeedback, fid, populate_existing=True)
 
 

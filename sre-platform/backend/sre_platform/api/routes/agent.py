@@ -67,6 +67,24 @@ async def get_messages(conv_id: uuid.UUID, page: int = 1, size: int = 200, u: Us
             "total": p.total, "page": p.page, "size": p.size, "pages": p.pages}
 
 
+@router.get("/conversations/{conv_id}/memory")
+async def get_working_memory(conv_id: uuid.UUID, request: Request, u: User = Depends(current_user),
+                             s: AsyncSession = Depends(db)):
+    """Working memory görünümü: konuşma odağı, tur özetleri, state'teki mesaj sayısı (yalnız konuşma sahibi)."""
+    c = await conversations.get(s, conv_id, u.id)
+    return await ChatOrchestrator(request.app.state.rt).working_memory(c.thread_id)
+
+
+@router.delete("/conversations/{conv_id}/memory/focus", status_code=204)
+async def clear_focus(conv_id: uuid.UUID, request: Request, u: User = Depends(current_user),
+                      s: AsyncSession = Depends(db)):
+    """Konuşma odağını siler; sonraki soru önceki uygulama/pencereyi devralmaz. Mesajlar ve özetler kalır."""
+    c = await conversations.get(s, conv_id, u.id)
+    busy = request.app.state.runs.active_for_conversation(c.id)
+    if busy or not await ChatOrchestrator(request.app.state.rt).clear_focus(c.thread_id):
+        raise HTTPException(status.HTTP_409_CONFLICT, "konuşmada süren ya da yarım kalan bir tur var")
+
+
 # ---------------------------------------------------------------- çalıştırma başlatma
 def _check_limits(request: Request, u: User, conv_id: uuid.UUID | None = None):
     runs = request.app.state.runs

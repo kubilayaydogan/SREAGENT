@@ -12,7 +12,7 @@ import yaml
 from ..core.config import PlatformSettings
 from ..db.models import Trigger
 from ..db.session import make_engine, make_sessionmaker, transaction
-from ..repositories import investigations, knowledge
+from ..repositories import episodes, investigations, knowledge
 
 log = logging.getLogger("sre.seed")
 SEED_DIR = Path(__file__).parent
@@ -36,6 +36,16 @@ async def run_seed(ps: PlatformSettings) -> dict[str, int]:
     try:
         async with transaction(make_sessionmaker(eng)) as s:
             return await seed_knowledge(s)
+    finally:
+        await eng.dispose()
+
+
+async def backfill_episodes(ps: PlatformSettings) -> int:
+    """Episodic memory backfill: episode'u olmayan tamamlanmış investigation'lar (idempotent)."""
+    eng = make_engine(ps, "sre-episodes")
+    try:
+        async with transaction(make_sessionmaker(eng)) as s:
+            return await episodes.backfill(s)
     finally:
         await eng.dispose()
 

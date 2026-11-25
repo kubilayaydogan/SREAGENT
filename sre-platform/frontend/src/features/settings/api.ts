@@ -208,6 +208,15 @@ export interface MemoryStatus {
   note: string;
   active_threads: string[];
   retention: { checkpoints: string; investigations_days: number };
+  episodes: {
+    total: number;
+    by_outcome: Record<"unverified" | "confirmed" | "partially_confirmed" | "rejected", number>;
+    with_resolution: number;
+    table: string;
+    scope: string;
+    retention: string;
+  };
+  working_memory: { max_messages: number; max_digests: number; scope: string };
 }
 
 export interface SecurityInfo {

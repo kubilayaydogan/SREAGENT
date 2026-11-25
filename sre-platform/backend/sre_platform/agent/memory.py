@@ -1,7 +1,8 @@
 """Ajan hafızası.
 
-Kısa vadeli hafıza: LangGraph AsyncPostgresSaver (konuşma thread'i başına durum; kaldığı yerden devam).
-Uzun vadeli hafıza iki katmandır:
+Kısa vadeli hafıza (working memory): LangGraph AsyncPostgresSaver ile konuşma thread'i başına durum — son
+mesajlar, konuşma odağı (focus) ve eski turların özetleri (digests); bkz. agent/working_memory.py.
+Uzun vadeli hafıza üç katmandır:
 
 1. **İlişkisel kayıtlar + tam metin araması** (sre şeması): araştırmalar, incident'lar, RCA, bilinen sorunlar,
    runbook'lar, konuşma mesajları. "Daha önce benzer hata oldu mu?", "geçen haftaki havuz sorunları", "önceki incident
@@ -10,8 +11,10 @@ Uzun vadeli hafıza iki katmandır:
    ("app", <uygulama>)            → o uygulamadaki araştırma bulguları (en yeni önce)
    ("user", <kullanıcı>, "context") → kullanıcının son araştırması / tercihleri
    ("conversation", <konuşma>)      → konuşmanın son araştırması
-   ("incident", <incident>)         → incident notları / çözüm özeti
    Store yalnız özet tutar; ayrıntı her zaman ilişkisel kayıttan okunur (tek doğruluk kaynağı).
+3. **Episodic memory** (sre.agent_episodes): investigation başına belirti parmak izi → hipotez → sonuç
+   (feedback'ten outcome, bağlı incident'ın çözümü). Analizde parmak izi benzerliğiyle, geçmiş sorularında
+   metin/mechanism ile aranır; bkz. repositories/episodes.py.
 
 Hafıza kayıtları istemde VERİ olarak verilir; içlerindeki metin talimat sayılmaz.
 """
@@ -23,7 +26,7 @@ from typing import Any
 
 from ..db.models import Investigation, InvestigationStatus
 from ..db.session import transaction
-from ..repositories import conversations, incidents, investigations, knowledge, rca
+from ..repositories import conversations, episodes, incidents, investigations, knowledge, rca
 
 MAX_TXT = 400
 
@@ -66,10 +69,6 @@ class MemoryService:
         if conversation_id:
             await self.store.aput(("conversation", str(conversation_id)), "last_investigation", b, index=False)
 
-    async def remember_incident_note(self, incident_id: uuid.UUID, key: str, value: dict) -> None:
-        if self.store is not None:
-            await self.store.aput(("incident", str(incident_id)), key, value, index=False)
-
     # ------------------------------------------------------------ okuma
     async def last_investigation(self, *, user_id: uuid.UUID | None, conversation_id: uuid.UUID | None
                                  ) -> dict | None:
@@ -94,6 +93,7 @@ class MemoryService:
                      conversation_id: uuid.UUID | None = None, limit: int = 5) -> dict[str, Any]:
         """Soruyla ilgili geçmiş kayıtları getirir. Boş kapsam = hepsi. Sonuç küçük ve JSON'a hazırdır."""
         scope = list(scope or ["investigations", "incidents", "rca", "runbooks", "known_issues", "conversations"])
+        want_episodes = bool({"investigations", "incidents"} & set(scope))
         apps = [a for a in (apps or []) if a]
         since = datetime.now(timezone.utc) - timedelta(days=since_days) if since_days else None
         out: dict[str, Any] = {"query": {"apps": apps, "mechanism": mechanism, "terms": terms, "since_days": since_days}}
@@ -108,6 +108,18 @@ class MemoryService:
                     items = await investigations.similar(s, mechanism=mechanism, apps=apps, q=terms,
                                                          exclude_id=exclude_investigation, limit=limit)
                 out["investigations"] = [inv_brief(i) for i in items]
+            if want_episodes:
+                cur = await s.get(Investigation, exclude_investigation) if exclude_investigation else None
+                if cur is not None and cur.report:
+                    # Analiz turu: güncel investigation'ın belirti parmak iziyle benzer episode'lar (kelimeden bağımsız)
+                    fp = episodes.fingerprint(cur.report)
+                    out["episodes"] = await episodes.similar(
+                        s, fp, apps=sorted(set(cur.source_apps) | set(cur.affected_apps)) or apps,
+                        exclude_id=exclude_investigation, limit=limit)
+                    out["current_symptoms"] = fp["symptoms"]
+                else:
+                    out["episodes"] = await episodes.search(s, q=terms, mechanism=mechanism, apps=apps, since=since,
+                                                            limit=limit)
             if "incidents" in scope:
                 page = await incidents.list_(s, application_id=apps[0] if len(apps) == 1 else None, since=since,
                                              q=terms if not mechanism else None, size=limit)
@@ -149,5 +161,5 @@ class MemoryService:
             f = await self.app_findings(a, 3)
             if f:
                 out.setdefault("app_memory", {})[a] = f
-        out["counts"] = {k: len(v) for k, v in out.items() if isinstance(v, list)}
+        out["counts"] = {k: len(v) for k, v in out.items() if isinstance(v, list) and k != "current_symptoms"}
         return out

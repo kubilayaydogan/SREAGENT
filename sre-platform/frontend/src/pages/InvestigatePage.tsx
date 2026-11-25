@@ -8,6 +8,7 @@ import { Button, Skeleton } from "@/components/ui/primitives";
 import { ErrorState } from "@/components/ui/states";
 import { Composer, type TimeChoice } from "@/features/chat/Composer";
 import { ConversationSidebar } from "@/features/chat/ConversationSidebar";
+import { FocusBar } from "@/features/chat/FocusBar";
 import { InvestigationCard } from "@/features/chat/InvestigationCard";
 import { errorToast, useConversation, useMessages } from "@/hooks/queries";
 import type { RunState } from "@/hooks/runReducer";
@@ -158,6 +159,7 @@ export default function InvestigatePage() {
         qc.invalidateQueries({ queryKey: ["conversations"] }),
         qc.invalidateQueries({ queryKey: ["conversation"] }),
         qc.invalidateQueries({ queryKey: ["dashboard"] }),
+        qc.invalidateQueries({ queryKey: ["wm"] }),
       ]).then(() => {
         setPendingUser(null);
         if (!runFailed.current) run.detach(); // hata/iptal mesajı ekranda kalsın
@@ -244,6 +246,7 @@ export default function InvestigatePage() {
               <Loader2 className="size-3.5 animate-spin" /> çalışıyor
             </span>
           )}
+          <FocusBar conversationId={conversationId} busy={busy} canEdit={canRun} />
         </div>
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-4xl space-y-4 px-4 py-5">

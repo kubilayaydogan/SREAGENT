@@ -27,6 +27,7 @@ import type {
   Runbook,
   SystemInfo,
   ToolExecution,
+  WorkingMemory,
 } from "@/types/api";
 
 export function errorToast(e: unknown, title = "İşlem başarısız") {
@@ -118,6 +119,22 @@ export const useMessages = (id?: string) =>
     queryFn: () => api.get<Page<Message>>(`/conversations/${id}/messages?size=200`),
     enabled: !!id,
   });
+
+export const useWorkingMemory = (id?: string) =>
+  useQuery({
+    queryKey: ["wm", id ?? ""],
+    queryFn: () => api.get<WorkingMemory>(`/conversations/${id}/memory`),
+    enabled: !!id,
+  });
+
+export function useClearFocus(id?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.del(`/conversations/${id}/memory/focus`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wm", id ?? ""] }),
+    onError: (e) => errorToast(e, "Odak temizlenemedi"),
+  });
+}
 
 export function useConversationMutations() {
   const qc = useQueryClient();

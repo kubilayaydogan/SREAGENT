@@ -1,7 +1,7 @@
 """sre-platform komut satırı.
 
   sre-platform migrate [--seed]        Alembic upgrade head + LangGraph checkpoint/store kurulumu (+ bilgi bankası tohumu)
-  sre-platform migrate --downgrade REV Alembic downgrade (ör. 0002: Settings tablolarını kaldırır — veri kaybı)
+  sre-platform migrate --downgrade REV Alembic downgrade (ör. 0003: episode tablosunu kaldırır — veri kaybı)
   sre-platform serve [--port 8000]     FastAPI (tek worker; SSE çalıştırma kaydı süreç içidir)
   sre-platform worker                  zamanlanmış işler (watch / sağlık kontrolü / saklama)
   sre-platform create-user NAME ROLE   parola ortamdan: SRE_NEW_USER_PASSWORD
@@ -35,6 +35,8 @@ def cmd_migrate(a) -> int:
     migrate.upgrade(ps.database_url)
     migrate.setup_langgraph(ps.libpq_url)
     log.info("migration tamam", extra={"revision": migrate.current_revision(ps.database_url)})
+    from .seed import backfill_episodes
+    log.info("episode backfill", extra={"episodes_created": asyncio.run(backfill_episodes(ps), loop_factory=_loop_factory())})
     if a.seed:
         from .seed import run_seed
         n = asyncio.run(run_seed(ps), loop_factory=_loop_factory())

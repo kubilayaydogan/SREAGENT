@@ -741,3 +741,51 @@ class AuditEvent(Base):
     after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     result: Mapped[str] = mapped_column(String(16), nullable=False)               # ok | rejected | error
     detail: Mapped[str | None] = mapped_column(Text)
+
+
+class AgentEpisode(Base):
+    """Episodic memory: bir investigation'ın 'ne görüldü → ne düşünüldü → ne çıktı' özeti.
+
+    Yalnız kayda değer koşular için yazılır (impact / mechanism / bağlı incident / feedback). Ayrıntı her zaman
+    investigation kaydından okunur; episode türetilmiş bir görünümdür ve investigation silinince silinir.
+    Belirti parmak izi (symptoms) sorunun kelimelerinden bağımsızdır: "app:latency", "app:errors", "source:app",
+    "lock:blocker>waiter" gibi deterministik etiketler.
+    """
+    __tablename__ = "agent_episodes"
+    __table_args__ = (Index("ix_episodes_created", text("created_at DESC")),
+                      Index("ix_episodes_symptoms", "symptoms", postgresql_using="gin"),
+                      Index("ix_episodes_apps", "apps", postgresql_using="gin"),
+                      Index("ix_episodes_mechanism", "mechanism"),
+                      Index("ix_episodes_tsv", "tsv", postgresql_using="gin"),
+                      CheckConstraint("outcome IN ('unverified', 'confirmed', 'partially_confirmed', 'rejected')",
+                                      name="ck_episodes_outcome"),
+                      {"schema": SCHEMA})
+    investigation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.investigations.id", ondelete="CASCADE"), primary_key=True)
+    incident_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(f"{SCHEMA}.incidents.id", ondelete="SET NULL"))
+    trigger: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)   # investigation zamanı
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    apps: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
+    source_apps: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list,
+                                                   server_default=text("'{}'"))
+    mechanism: Mapped[str | None] = mapped_column(String(64))
+    mechanisms: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list,
+                                                  server_default=text("'{}'"))
+    symptoms: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list,
+                                                server_default=text("'{}'"))
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    risk_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
+    confidence: Mapped[str | None] = mapped_column(String(16))
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    hypothesis: Mapped[str | None] = mapped_column(Text)
+    outcome: Mapped[str] = mapped_column(String(24), nullable=False, default="unverified",
+                                         server_default="unverified")
+    feedback: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
+                                                     server_default=text("'{}'::jsonb"))     # {correct, partial, …}
+    feedback_note: Mapped[str | None] = mapped_column(Text)
+    resolution: Mapped[str | None] = mapped_column(Text)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = _updated()
+    tsv: Mapped[Any] = _tsv("summary", "hypothesis", "resolution", "feedback_note", "mechanism")

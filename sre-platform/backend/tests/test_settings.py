@@ -272,8 +272,10 @@ def test_migration_0003_downgrade_and_upgrade(db_url):
         assert "settings_sections" not in tables() and "audit_events" not in tables()
         migrate.upgrade(db_url)
         assert {"settings_sections", "settings_revisions", "connectors", "llm_profiles", "secrets",
-                "audit_events"} <= tables()
-        assert migrate.current_revision(db_url) == "0003"
+                "audit_events", "agent_episodes"} <= tables()
+        assert migrate.current_revision(db_url) == "0004"
+        migrate.downgrade(db_url, "0003")                       # episodic memory tek başına geri alınabilir
+        assert "agent_episodes" not in tables() and "settings_sections" in tables()
     finally:
         migrate.upgrade(db_url)
         eng.dispose()
