@@ -53,8 +53,8 @@ def cmd_doctor(a):
     print("== Yapılandırma")
     for name, val in [("DT_ENV", s.dt_env), ("DT_MCP_URL", s.mcp_url), ("DT_PLATFORM_TOKEN", s.dt_token),
                       ("ANTHROPIC_API_KEY", s.anthropic_key), ("CLAUDE_MODEL", s.claude_model),
-                      ("LANGSMITH_API_KEY", s.langsmith_key)]:
-        shown = val if name in ("DT_ENV", "DT_MCP_URL", "CLAUDE_MODEL") else ("tanımlı" if val else "YOK")
+                      ("CLAUDE_RCA_MODEL", s.claude_rca_model), ("LANGSMITH_API_KEY", s.langsmith_key)]:
+        shown = val if name in ("DT_ENV", "DT_MCP_URL", "CLAUDE_MODEL", "CLAUDE_RCA_MODEL") else ("tanımlı" if val else "YOK")
         print(f"  {name:20} {shown or 'YOK'}")
     print(f"  {'veri dizini':20} {s.data_dir.resolve()}  (yazılabilir: {_writable(s.data_dir)})")
     print("== Dynatrace MCP")

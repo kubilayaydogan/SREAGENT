@@ -90,6 +90,11 @@ budgets:
   llm_max_tokens: 2500
   llm_timeout_seconds: 90
   llm_retries: 2
+  # RCA açıklaması (Claude Opus 5.5): thinking her zaman açık ve max_tokens'a dahil; effort varsayılanı medium olduğu
+  # için açıkça high verilir. Refusal'da sunucu tarafı fallback ("default") açık.
+  rca_max_tokens: 16000
+  rca_timeout_seconds: 150
+  rca_effort: high
 
 watch:
   poll_seconds: 60

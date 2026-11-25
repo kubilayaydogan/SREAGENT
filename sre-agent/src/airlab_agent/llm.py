@@ -81,6 +81,14 @@ class Llm:
         self.chat = ChatAnthropic(model=settings.claude_model, api_key=settings.anthropic_key,
                                   max_tokens=b["llm_max_tokens"], max_retries=b["llm_retries"],
                                   default_request_timeout=b["llm_timeout_seconds"])
+        # RCA açıklaması ayrı istemciyle (varsayılan claude-opus-5-5). Thinking parametresi gönderilmez (Opus 5.5'te
+        # her zaman adaptive); derinlik effort ile ayarlanır. Refusal olursa sunucu tarafı fallback devreye girer.
+        self.rca_chat = ChatAnthropic(model=settings.claude_rca_model, api_key=settings.anthropic_key,
+                                      max_tokens=b["rca_max_tokens"], max_retries=b["llm_retries"],
+                                      default_request_timeout=b["rca_timeout_seconds"],
+                                      output_config={"effort": b["rca_effort"]},
+                                      betas=["server-side-fallback-2026-07-01"],
+                                      model_kwargs={"fallbacks": "default"})
         self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
 
     def _track(self, msg) -> None:
@@ -113,11 +121,14 @@ class Llm:
         human = (f"Kullanıcı sorusu: {question}\n\n" if question else "") + \
             f"<analysis_data>\n{payload}\n</analysis_data>\n\nBu bulguları açıkla."
         try:
-            msg = self.chat.invoke([("system", SYSTEM_EXPLAIN), ("human", human)],
+            msg = self.rca_chat.invoke([("system", SYSTEM_EXPLAIN), ("human", human)],
                                    config={"callbacks": self.callbacks, "run_name": "explain_findings"})
             self._track(msg)
+            if (msg.response_metadata or {}).get("stop_reason") == "refusal":
+                raise LlmUnavailable("model yanıtı reddetti (refusal)")
+            # Opus 5.5 yanıtı thinking + text bloklarıyla gelir; yalnız text blokları alınır.
             text = msg.content if isinstance(msg.content, str) else "".join(
-                c.get("text", "") for c in msg.content if isinstance(c, dict))
+                c.get("text", "") for c in msg.content if isinstance(c, dict) and c.get("type", "text") == "text")
             if not text.strip():
                 raise LlmUnavailable("boş yanıt")
             _log_terminology(text, "explain_findings")

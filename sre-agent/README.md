@@ -67,6 +67,7 @@ sre-agent report list | report show <id> [--json]
 | `DT_ENV` / `DT_MCP_URL` | Tenant kimliği (URL ondan türetilir) ya da tam MCP URL'si |
 | `DT_PLATFORM_TOKEN` | MCP platform token (gizli) |
 | `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` | Claude (varsayılan `claude-sonnet-5-5`); anahtar yoksa deterministik mod |
+| `CLAUDE_RCA_MODEL` | RCA açıklamasını yazan model (varsayılan `claude-opus-5-5`, effort `high`, refusal'da sunucu tarafı fallback). Soru yorumlama ve sohbet `CLAUDE_MODEL` ile kalır |
 | `LANGSMITH_API_KEY`, `LANGSMITH_TRACING`, `LANGSMITH_PROJECT` | İzleme (redakte) |
 | `AGENT_DATA_DIR` | Durum, checkpoint, rapor dizini (container'da `/data`) |
 | `AGENT_CONFIG` | `defaults.yaml` üzerine birleştirilecek YAML (eşikler, ağırlıklar, bütçeler) |
