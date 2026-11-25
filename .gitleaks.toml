@@ -1,0 +1,14 @@
+# gitleaks yapılandırması: varsayılan kurallar + sentetik test fixture'ları için DAR allowlist.
+# Allowlist'e yalnız açıkça sahte olduğu doğrulanmış sabit değerler eklenir (dizin bazlı muafiyet yok).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Redaction testlerindeki sentetik token biçimli değerler (gerçek credential değil)"
+regexes = [
+  '''sk-ant-api03-SECRETSECRETSECRET''',                                  # tests/test_langsmith_sync.py
+  '''dt0c01\.ABCDEFGHIJKLMNOPQRSTUVWX\.ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUV''',  # tests/test_persistence.py
+  '''hooks\.slack\.com/services/T000/B000/secretsecret''',               # tests/test_slack_notify.py
+  '''ci-only-password''',                                                # .github/workflows/ci.yml geçici CI veritabanı
+  '''test-x{40}''',                                                       # tests/conftest.py JWT test secret'ı
+]

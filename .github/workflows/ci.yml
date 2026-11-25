@@ -1,0 +1,95 @@
+# CI: regresyon testleri + güvenlik taramaları (docs/security/SECURITY_IMPLEMENTATION_PLAN.md P0.9).
+# Secret gerektirmez: testler sahte MCP/LLM ve geçici PostgreSQL kullanır. Dış servise (Dynatrace, Anthropic,
+# LangSmith, Slack) istek atılmaz.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend + agent tests (PostgreSQL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.7-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      SRE_TEST_DATABASE_URL: postgresql+psycopg://ci:ci-only-password@localhost:5432/ci
+      PYTHONPATH: ${{ github.workspace }}/sre-agent/src:${{ github.workspace }}/sre-platform/backend
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - name: install (kilitli bağımlılıklar)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r sre-agent/requirements.lock -r sre-platform/backend/requirements.lock
+          pip install --no-deps ./sre-agent ./sre-platform/backend
+          pip install pytest==9.2.0 httpx
+      - name: sre-agent tests
+        working-directory: sre-agent
+        run: python -m pytest -q -p no:cacheprovider tests
+      - name: backend tests (gerçek PostgreSQL)
+        working-directory: sre-platform/backend
+        run: python -m pytest -q -p no:cacheprovider tests
+
+  frontend:
+    name: frontend typecheck + tests + build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sre-platform/frontend
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sre-platform/frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc -b --noEmit
+      - run: npx vitest run
+      - run: npm run build
+
+  security:
+    name: secret scan + dependency audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, persist-credentials: false }      # tüm geçmiş taranır
+      - name: gitleaks (secret scan, tüm geçmiş)
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.3 \
+            git /repo --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - name: pip-audit (Python bağımlılıkları)
+        run: |
+          pip install pip-audit
+          pip-audit --strict -r sre-agent/requirements.lock -r sre-platform/backend/requirements.lock
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: npm audit (üretim bağımlılıkları)
+        working-directory: sre-platform/frontend
+        run: npm audit --omit=dev --audit-level=high

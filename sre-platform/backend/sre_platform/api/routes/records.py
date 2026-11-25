@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...db.models import (ApprovalStatus, IncidentSource, IncidentStatus, InvestigationStatus, Severity, Trigger,
                           User)
 from ...repositories import approvals, incidents, investigations, jobs, knowledge, rca
+from ...repositories.base import Conflict, InvalidTransition
+from ...security import audit
 from ...services import rca_service
 from ..deps import admin, current_user, db, sre
 from ..schemas import (ApprovalIn, ApprovalOut, DecisionIn, EvidenceOut, FeedbackIn, FeedbackOut, IncidentEventOut,
@@ -178,7 +180,8 @@ async def get_rca(rca_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSe
 
 
 @router.get("/rca/{rca_id}/markdown", response_class=PlainTextResponse, tags=["rca"])
-async def rca_markdown(rca_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def rca_markdown(rca_id: uuid.UUID, u: User = Depends(current_user), s: AsyncSession = Depends(db)):
+    await audit.record(s, actor=u.username, action="export.rca_markdown", section="export", target=str(rca_id))
     r = await rca.get(s, rca_id)
     return PlainTextResponse(r.markdown, media_type="text/markdown; charset=utf-8",
                              headers={"Content-Disposition": f'attachment; filename="rca-{r.id}.md"'})
@@ -270,20 +273,35 @@ async def list_approvals(status_: str | None = Query(None, alias="status"), page
 async def request_approval(body: ApprovalIn, u: User = Depends(sre), s: AsyncSession = Depends(db)):
     if body.runbook_id:
         await knowledge.get_runbook(s, body.runbook_id)
-    return await approvals.request(s, action_type=body.action_type, target=body.target,
-                                   justification=body.justification, requested_by=u.id,
-                                   investigation_id=body.investigation_id, incident_id=body.incident_id,
-                                   runbook_id=body.runbook_id)
+    a = await approvals.request(s, action_type=body.action_type, target=body.target,
+                                justification=body.justification, requested_by=u.id,
+                                investigation_id=body.investigation_id, incident_id=body.incident_id,
+                                runbook_id=body.runbook_id)
+    await audit.record(s, actor=u.username, action="approval.request", section="approvals", target=str(a.id),
+                       after={"action_type": a.action_type, "target": a.target})
+    return a
 
 
 @router.post("/approvals/{aid}/decision", response_model=ApprovalOut, tags=["approvals"])
-async def decide(aid: uuid.UUID, body: DecisionIn, u: User = Depends(admin), s: AsyncSession = Depends(db)):
-    return await approvals.decide(s, aid, approve=body.approve, decided_by=u.id, comment=body.comment)
+async def decide(aid: uuid.UUID, body: DecisionIn, request: Request, u: User = Depends(admin),
+                 s: AsyncSession = Depends(db)):
+    try:
+        a = await approvals.decide(s, aid, approve=body.approve, decided_by=u.id, comment=body.comment)
+    except (Conflict, InvalidTransition) as e:
+        await audit.record_separate(request.app.state.rt.sm, actor=u.username, action="approval.decide",
+                                    section="approvals", target=str(aid), result="denied",
+                                    reason_code="four_eyes" if isinstance(e, Conflict) else "invalid_state", detail=str(e))
+        raise
+    await audit.record(s, actor=u.username, action="approval.decide", section="approvals", target=str(aid),
+                       after={"status": a.status.value})
+    return a
 
 
 @router.post("/approvals/{aid}/cancel", response_model=ApprovalOut, tags=["approvals"])
 async def cancel_approval(aid: uuid.UUID, u: User = Depends(sre), s: AsyncSession = Depends(db)):
-    return await approvals.cancel(s, aid, u.id)
+    a = await approvals.cancel(s, aid, u.id)
+    await audit.record(s, actor=u.username, action="approval.cancel", section="approvals", target=str(aid))
+    return a
 
 
 # ---------------------------------------------------------------- zamanlanmış işler

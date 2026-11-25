@@ -56,6 +56,18 @@ describe("streamRun", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("session_revoked: oturum iptal edilince yeniden bağlanmaz, 401 olarak biter", async () => {
+    const revoked = `event: session_revoked
+data: ${JSON.stringify({ type: "session_revoked" })}
+
+`;
+    const fetchImpl = vi.fn(async () => new Response(body([frame(1, "token", { text: "a" }), revoked]), { status: 200 })) as unknown as typeof fetch;
+    const got: AgentEvent[] = [];
+    await expect(streamRun("/x", { fetchImpl, onEvent: (e) => got.push(e), retryDelayMs: () => 0 })).rejects.toMatchObject({ status: 401 });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(got.map((e) => e.type)).toEqual(["token"]);
+  });
+
   it("done gelmeden kapanan akış sınırlı sayıda yeniden denenir", async () => {
     const fetchImpl = vi.fn(async () => new Response(body([]), { status: 200 })) as unknown as typeof fetch;
     await expect(streamRun("/x", { fetchImpl, onEvent: () => {}, maxRetries: 2, retryDelayMs: () => 0 })).rejects.toThrow();

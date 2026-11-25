@@ -20,6 +20,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
 
   const logout = useCallback(() => {
+    // Sunucu tarafı oturum iptali (token yalnız tarayıcıdan silinmez); ağ hatası çıkışı engellemez
+    if (tokenStore.get()) void api.post("/auth/logout").catch(() => undefined);
     tokenStore.clear();
     setUser(null);
     qc.clear();

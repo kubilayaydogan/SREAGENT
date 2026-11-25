@@ -206,6 +206,14 @@ async def gateway_factory(s: AsyncSession, agent_settings) -> tuple[Any, dict]:
         token = await secrets.resolve(s, c.secret_ref)
     except secrets.SecretError as e:
         return unavailable_factory(f"MCP connector '{c.name}': {e}"), {**info, "available": False}
+    try:
+        await netguard.check_runtime(c.endpoint)    # P0.5: kayıt anı değil, her koşu öncesi (fail-closed)
+    except netguard.UnsafeUrl as e:
+        from ..security import audit
+        await audit.record(s, actor="system:agent", action="egress.denied", section="connectors", target=c.name,
+                           result="denied", reason_code="ssrf_guard", detail=str(e))
+        return unavailable_factory(f"MCP connector '{c.name}' engellendi: {e}"), {**info, "available": False,
+                                                                                   "egress_denied": True}
     from airlab_agent.mcp_gateway import McpGateway
     b = agent_settings.cfg["budgets"]
     # Agent ayarı ile connector sınırının küçüğü uygulanır (connector daha sıkı bir sınır koyabilir).

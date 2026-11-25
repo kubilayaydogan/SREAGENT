@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
+import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -61,6 +63,10 @@ async def health_check(rt, params: dict) -> dict[str, Any]:
     try:
         srt.check_allowed(eff, "scheduled")
     except srt.RunNotAllowed as e:
+        from .security import audit
+        await audit.record_separate(rt.sm, actor="system:scheduler", action="run.denied", section="agent",
+                                    target="health_check", result="denied", reason_code="policy_agent_settings",
+                                    detail=str(e))
         return {"skipped": str(e)}
     lag = rt.agent.cfg["windows"]["ingest_lag_seconds"]
     end = (datetime.now(timezone.utc) - timedelta(seconds=lag)).replace(second=0, microsecond=0)
@@ -130,12 +136,26 @@ async def retention(rt, params: dict) -> dict[str, Any]:
             res = await s.execute(text(sql), {"cut": now - timedelta(days=int(days[name]))})
             out[name] = res.rowcount or 0
         out["approvals_expired"] = await approvals.expire_due(s)
+        from .security import sessions
+        out["auth_sessions_purged"] = await sessions.purge_expired(s)     # süresi 30+ gün önce dolmuş oturumlar
     return out
 
 
 async def langsmith_sync(rt, params: dict) -> dict[str, Any]:
     from .services.langsmith_sync import sync
     return await sync(rt, params)
+
+
+HEARTBEAT = os.getenv("SRE_WORKER_HEARTBEAT", os.path.join(tempfile.gettempdir(), "sre-worker.heartbeat"))
+
+
+def _heartbeat() -> None:
+    """Container healthcheck'i için: başarılı her turdan sonra dosya zamanı güncellenir (DB'ye erişebilen canlı worker)."""
+    try:
+        with open(HEARTBEAT, "w") as f:
+            f.write(datetime.now(timezone.utc).isoformat())
+    except OSError:
+        pass
 
 
 HANDLERS = {"health_check": health_check, "retention": retention, "langsmith_sync": langsmith_sync}
@@ -210,6 +230,7 @@ async def main(ps: PlatformSettings, *, once: bool = False, runtime=None) -> int
         while not STOP.is_set():
             try:
                 await run_due(rt, wid, handlers, lease_s=lease)
+                _heartbeat()
             except Exception:  # noqa: BLE001 — DB kesintisi vb.: bekle ve tekrar dene
                 log.exception("worker turu başarısız")
             if once:

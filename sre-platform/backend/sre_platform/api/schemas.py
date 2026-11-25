@@ -72,6 +72,21 @@ class UserCreateIn(In):
     password: str = Field(min_length=10, max_length=256)
 
 
+class PasswordChangeIn(In):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=10, max_length=256)
+
+
+class SessionOut(Out):
+    id: str
+    created_at: datetime
+    last_seen_at: datetime
+    expires_at: datetime
+    ip: str | None
+    user_agent: str | None
+    current: bool = False
+
+
 class UserUpdateIn(In):
     display_name: str | None = Field(None, max_length=128)
     role: Role | None = None

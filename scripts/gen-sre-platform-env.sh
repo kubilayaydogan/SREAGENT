@@ -14,6 +14,7 @@ PG=$(rnd 32)
   echo "POSTGRES_PASSWORD=${PG}"
   echo "SRE_DB_PASSWORD=${PG}"
   echo "SRE_JWT_SECRET=$(rnd 64)"
+  echo "SRE_SETTINGS_KEY=$(rnd 48)"   # Settings secret deposu (Fernet); kaybolursa saklanan secret'lar çözülemez
   echo "SRE_ADMIN_USERNAME=admin"
   echo "SRE_ADMIN_PASSWORD=$(rnd 20)"
   echo "SRE_ENVIRONMENT=lab"

@@ -25,9 +25,8 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airlab_agent.redact import redact
 
-from ..db.models import AuditEvent, SettingsRevision, SettingsSection
+from ..db.models import SettingsRevision, SettingsSection
 from .schemas import SECTIONS, field_meta
 
 log = logging.getLogger("sre.settings")
@@ -210,12 +209,11 @@ def view(rt, section: str, rows: dict[str, SettingsSection]) -> dict:
 # ------------------------------------------------------------------------------------------------ yazma
 async def audit(s: AsyncSession, *, actor: str, action: str, section: str, target: str | None = None,
                 revision: int | None = None, before: dict | None = None, after: dict | None = None,
-                result: str = "ok", detail: str | None = None) -> None:
-    s.add(AuditEvent(actor=actor, action=action, section=section, target=target, revision=revision,
-                     before=redact(before) if before is not None else None,
-                     after=redact(after) if after is not None else None, result=result,
-                     detail=(detail or "")[:2000] or None))
-    await s.flush()
+                result: str = "ok", detail: str | None = None, **kw) -> None:
+    """Settings audit'i ortak güvenlik audit'ine yazar (redaksiyon + istek bağlamı orada)."""
+    from ..security import audit as sec_audit
+    await sec_audit.record(s, actor=actor, action=action, section=section, target=target, revision=revision,
+                           before=before, after=after, result=result, detail=detail, **kw)
 
 
 def _diff(a: dict, b: dict) -> tuple[dict, dict]:

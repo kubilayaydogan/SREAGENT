@@ -1,43 +1,63 @@
+"""Kimlik doğrulama, oturum yaşam döngüsü ve kullanıcı yönetimi.
+
+Güvenlik (P0): kalıcı login throttle, sunucu tarafı oturumlar (logout / iptal / idle), parola değişikliğinde ve
+yetki değişikliğinde oturum iptali, tüm olaylar için audit (sre.audit_events).
+"""
 from __future__ import annotations
 
-import time
 import uuid
-from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...core.security import create_token
-from ...db.models import User
+from ...core.security import create_token, verify_password
+from ...db.models import AuthSession, User
 from ...repositories import users
+from ...security import audit, context, sessions, throttle
 from ..deps import admin, current_user, db
-from ..schemas import LoginIn, PageOut, TokenOut, UserCreateIn, UserOut, UserUpdateIn, page_of
+from ..schemas import (LoginIn, PageOut, PasswordChangeIn, SessionOut, TokenOut, UserCreateIn, UserOut, UserUpdateIn,
+                       page_of)
 
 router = APIRouter(tags=["auth"])
-_FAILS: dict[str, deque] = defaultdict(deque)
-MAX_FAILS, WINDOW_S = 5, 300
 
 
-def _throttled(key: str) -> bool:
-    q, now = _FAILS[key], time.monotonic()
-    while q and now - q[0] > WINDOW_S:
-        q.popleft()
-    return len(q) >= MAX_FAILS
+def _ps(request: Request):
+    return request.app.state.rt.ps
 
 
 @router.post("/auth/login", response_model=TokenOut)
 async def login(body: LoginIn, request: Request, s: AsyncSession = Depends(db)):
-    key = f"{body.username.lower()}|{request.client.host if request.client else '-'}"
-    if _throttled(key):
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "çok fazla başarısız deneme; 5 dakika sonra tekrar deneyin")
+    ps, sm = _ps(request), request.app.state.rt.sm
+    ip = context.client_ip.get()
+    key = throttle.key_for(body.username, ip)
+    who = f"anonymous:{body.username[:40]}"
+    if await throttle.login_throttled(s, key, max_fails=ps.login_max_fails, window_s=ps.login_window_s):
+        await audit.record_separate(sm, actor=who, action="auth.login", section="auth", result="denied",
+                                    reason_code="throttled")
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "çok fazla başarısız deneme; 5 dakika sonra tekrar deneyin",
+                            headers={"Retry-After": str(ps.login_window_s)})
     u = await users.authenticate(s, body.username, body.password)
     if u is None:
-        _FAILS[key].append(time.monotonic())
+        await throttle.login_failed(sm, key)
+        await audit.record_separate(sm, actor=who, action="auth.login", section="auth", result="denied",
+                                    reason_code="bad_credentials")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "kullanıcı adı veya parola hatalı")
-    _FAILS.pop(key, None)
-    ps = request.app.state.rt.ps
-    tok, exp = create_token(str(u.id), u.role.value, ps.jwt_secret, ps.jwt_ttl_minutes)
+    await throttle.login_succeeded(s, key)
+    sid = sessions.new_id()
+    exp = datetime.now(timezone.utc) + timedelta(minutes=ps.jwt_ttl_minutes)
+    await sessions.create(s, u.id, exp, ip=ip, user_agent=request.headers.get("user-agent"), sid=sid)
+    tok, exp = create_token(str(u.id), u.role.value, ps.jwt_secret, ps.jwt_ttl_minutes, jti=sid, exp=exp)
+    await audit.record(s, actor=u.username, action="auth.login", section="auth", session_id=sid)
     return TokenOut(access_token=tok, expires_at=exp, user=UserOut.model_validate(u))
+
+
+@router.post("/auth/logout", status_code=204)
+async def logout(request: Request, u: User = Depends(current_user), s: AsyncSession = Depends(db)):
+    sid = request.state.session_id
+    await sessions.revoke(s, sid, "logout")
+    await audit.record(s, actor=u.username, action="auth.logout", section="auth", target=_short(sid))
+    return Response(status_code=204)
 
 
 @router.get("/auth/me", response_model=UserOut)
@@ -45,6 +65,50 @@ async def me(u: User = Depends(current_user)):
     return u
 
 
+@router.post("/auth/password", status_code=204)
+async def change_password(body: PasswordChangeIn, request: Request, u: User = Depends(current_user),
+                          s: AsyncSession = Depends(db)):
+    """Kendi parolasını değiştirme: mevcut parola zorunlu; diğer tüm oturumlar iptal edilir (bu oturum kalır)."""
+    if not verify_password(body.current_password, u.password_hash):
+        await audit.record_separate(request.app.state.rt.sm, actor=u.username, action="auth.password.change",
+                                    section="auth", result="denied", reason_code="bad_current_password")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "mevcut parola hatalı")
+    if body.current_password == body.new_password:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "yeni parola eskisiyle aynı olamaz")
+    await users.set_password(s, u.id, body.new_password)
+    n = await sessions.revoke_user(s, u.id, "password_change", keep=request.state.session_id)
+    await audit.record(s, actor=u.username, action="auth.password.change", section="auth",
+                       detail=f"{n} diğer oturum iptal edildi")
+    return Response(status_code=204)
+
+
+def _short(sid: str | None) -> str | None:
+    return f"{sid[:8]}…" if sid else None
+
+
+def _session_out(r: AuthSession, current: str | None) -> SessionOut:
+    # Oturum kimliğinin tamamı bearer token'ın parçası değildir ama yine de yalnız sahibine/admin'e gösterilir.
+    return SessionOut(id=r.id, created_at=r.created_at, last_seen_at=r.last_seen_at, expires_at=r.expires_at,
+                      ip=r.ip, user_agent=r.user_agent, current=r.id == current)
+
+
+@router.get("/auth/sessions", response_model=list[SessionOut])
+async def my_sessions(request: Request, u: User = Depends(current_user), s: AsyncSession = Depends(db)):
+    return [_session_out(r, request.state.session_id) for r in await sessions.list_active(s, u.id)]
+
+
+@router.delete("/auth/sessions/{sid}", status_code=204)
+async def revoke_session(sid: str, request: Request, u: User = Depends(current_user), s: AsyncSession = Depends(db)):
+    from ...db.models import Role
+    row = await s.get(AuthSession, sid)
+    if row is None or (row.user_id != u.id and u.role != Role.ADMIN):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "oturum bulunamadı")      # başkasının oturumu: varlık sızdırılmaz
+    await sessions.revoke(s, sid, "user_revoke" if row.user_id == u.id else "admin_revoke")
+    await audit.record(s, actor=u.username, action="auth.session.revoke", section="auth", target=_short(sid))
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- kullanıcı yönetimi (admin)
 @router.get("/users", response_model=PageOut[UserOut])
 async def list_users(page: int = 1, size: int = 50, sort: str | None = None, _: User = Depends(admin),
                      s: AsyncSession = Depends(db)):
@@ -52,8 +116,17 @@ async def list_users(page: int = 1, size: int = 50, sort: str | None = None, _: 
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
-async def create_user(body: UserCreateIn, _: User = Depends(admin), s: AsyncSession = Depends(db)):
-    return await users.create(s, body.username, body.display_name, body.role, body.password)
+async def create_user(body: UserCreateIn, me_: User = Depends(admin), s: AsyncSession = Depends(db)):
+    u = await users.create(s, body.username, body.display_name, body.role, body.password)
+    await audit.record(s, actor=me_.username, action="user.create", section="users", target=u.username,
+                       after={"role": u.role.value, "is_active": u.is_active})
+    return u
+
+
+@router.get("/users/{user_id}/sessions", response_model=list[SessionOut])
+async def user_sessions(user_id: uuid.UUID, _: User = Depends(admin), s: AsyncSession = Depends(db)):
+    await users.get(s, user_id)
+    return [_session_out(r, None) for r in await sessions.list_active(s, user_id)]
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
@@ -61,7 +134,21 @@ async def update_user(user_id: uuid.UUID, body: UserUpdateIn, me_: User = Depend
                       s: AsyncSession = Depends(db)):
     if user_id == me_.id and (body.is_active is False or (body.role and body.role != me_.role)):
         raise HTTPException(status.HTTP_409_CONFLICT, "kendi rolünüzü düşüremez veya hesabınızı kapatamazsınız")
+    cur = await users.get(s, user_id)
+    before = {"role": cur.role.value, "is_active": cur.is_active, "display_name": cur.display_name}
     u = await users.update(s, user_id, role=body.role, is_active=body.is_active, display_name=body.display_name)
+    after = {"role": u.role.value, "is_active": u.is_active, "display_name": u.display_name}
+    changed = {k for k in before if before[k] != after[k]}
+    revoked = 0
+    if "role" in changed or (body.is_active is False and "is_active" in changed):
+        # Yetki değişikliği / devre dışı: mevcut oturumlar eski yetki bağlamında açılmıştır → iptal
+        revoked = await sessions.revoke_user(s, user_id, "role_change" if "role" in changed else "disabled")
     if body.password:
         await users.set_password(s, user_id, body.password)
+        revoked += await sessions.revoke_user(s, user_id, "password_reset")
+    action = ("user.role_change" if "role" in changed else "user.disable" if "is_active" in changed and not u.is_active
+              else "user.update")
+    await audit.record(s, actor=me_.username, action=action, section="users", target=u.username,
+                       before={k: before[k] for k in changed} or None, after={k: after[k] for k in changed} or None,
+                       detail=("parola sıfırlandı; " if body.password else "") + f"{revoked} oturum iptal edildi")
     return u

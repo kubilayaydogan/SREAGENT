@@ -247,6 +247,7 @@ services:
               "-c", "log_min_duration_statement=2000", "-c", "idle_in_transaction_session_timeout=300000"]
     volumes: ["sre-pg-data:/var/lib/postgresql/data"]
     networks: [sre-data]                   # port yayımlanmaz; yalnız backend/worker erişir
+    security_opt: ["no-new-privileges:true"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sre -d sre"]
       interval: 10s
@@ -266,6 +267,10 @@ services:
     command: ["migrate", "--seed"]
     env_file: [sre-platform.env]
     restart: "no"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:mode=1777", "/home/sre:mode=1777"]
     healthcheck: { disable: true }
     depends_on:
       sre-postgres: { condition: service_healthy }
@@ -283,6 +288,12 @@ services:
     env_file: [agent.env, sre-platform.env]
     environment:
       AGENT_DATA_DIR: /data
+      # X-Forwarded-For yalnız Docker ağlarındaki eşlerden (sre-frontend nginx) kabul edilir; backend portu yayımlanmaz
+      SRE_TRUSTED_PROXIES: ${SRE_TRUSTED_PROXIES:-172.16.0.0/12}
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:mode=1777", "/home/sre:mode=1777"]
     volumes: ["sre-platform-data:/data"]
     depends_on:
       sre-migrate: { condition: service_completed_successfully }
@@ -299,6 +310,10 @@ services:
     command: ["worker"]
     restart: unless-stopped
     env_file: [agent.env, sre-platform.env]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:mode=1777", "/home/sre:mode=1777"]
     environment:
       AGENT_DATA_DIR: /data
       SRE_WORKER_ID: sre-worker-1
@@ -309,7 +324,13 @@ services:
     depends_on:
       sre-migrate: { condition: service_completed_successfully }
     networks: [sre-data, agent]
-    healthcheck: { disable: true }         # HTTP sunmaz; canlılık: Agent Activity → Zamanlanmış kontroller
+    healthcheck:                           # HTTP sunmaz: başarılı her worker turunda /tmp/sre-worker.heartbeat yenilenir
+      # Uzun iş (health check ≤ run_timeout + lease) sırasında tur sürer → eşik 900 sn
+      test: ["CMD", "python", "-c", "import os,sys,time; p='/tmp/sre-worker.heartbeat'; sys.exit(0 if os.path.exists(p) and time.time()-os.path.getmtime(p) < 900 else 1)"]
+      interval: 60s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
     mem_limit: 640m
     cpus: 0.75
     stop_grace_period: 60s                 # SIGTERM → mevcut iş biter; kira süresi dolarsa iş başka worker'a geçer
@@ -321,7 +342,12 @@ services:
     build: { context: ../sre-platform/frontend }
     container_name: sre-frontend
     restart: unless-stopped
-    ports: ["${SRE_UI_PORT:-8090}:80"]
+    # Telafi edici kontrol (TLS yok, kabul edilmiş risk): yayın arayüzü SRE_UI_BIND_IP ile daraltılabilir
+    ports: ["${SRE_UI_BIND_IP:-0.0.0.0}:${SRE_UI_PORT:-8090}:8080"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:mode=1777", "/var/cache/nginx:uid=101,gid=101"]   # nginx kullanıcısı (uid 101)
     depends_on:
       sre-backend: { condition: service_healthy }
     networks: [sre-web]

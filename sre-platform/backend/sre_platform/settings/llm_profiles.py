@@ -176,6 +176,17 @@ async def task_profiles(s: AsyncSession, llm_eff: dict) -> tuple[dict[str, dict]
             profiles[task] = None
             snap[task] = {"profile": name, "secret_error": True}
             continue
+        if p.base_url:
+            try:
+                await netguard.check_runtime(p.base_url)        # P0.5: özel base_url her koşu öncesi kontrol
+            except netguard.UnsafeUrl as e:
+                from ..security import audit
+                await audit.record(s, actor="system:agent", action="egress.denied", section="llm", target=name,
+                                   result="denied", reason_code="ssrf_guard", detail=str(e))
+                notes.append(f"LLM profili '{name}' base_url engellendi ({e}); bu görevde LLM kullanılmadı")
+                profiles[task] = None
+                snap[task] = {"profile": name, "egress_denied": True}
+                continue
         profiles[task] = {"model": p.model, "api_key": key, "base_url": p.base_url, "max_tokens": p.max_tokens,
                           "timeout_s": p.timeout_s, "effort": p.effort, "retries": p.retries}
         snap[task] = {"profile": name, "profile_revision": p.revision, "model": p.model}

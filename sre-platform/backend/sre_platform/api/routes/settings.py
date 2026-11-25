@@ -175,16 +175,22 @@ async def public(request: Request, _: User = Depends(current_user), s: AsyncSess
 
 # ------------------------------------------------------------------------------------------------ audit / güvenlik
 @router.get("/audit")
-async def audit_log(section: str | None = None, page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200),
-                    _: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def audit_log(section: str | None = None, action: str | None = Query(None, max_length=48),
+                    result: str | None = Query(None, max_length=16), page: int = Query(1, ge=1),
+                    size: int = Query(50, ge=1, le=200), _: User = Depends(sre), s: AsyncSession = Depends(db)):
     q = select(AuditEvent)
     if section:
         q = q.where(AuditEvent.section == section)
+    if action:
+        q = q.where(AuditEvent.action == action)
+    if result:
+        q = q.where(AuditEvent.result == result)
     total = await s.scalar(select(func.count()).select_from(q.subquery()))
     rows = (await s.execute(q.order_by(AuditEvent.ts.desc()).offset((page - 1) * size).limit(size))).scalars()
     items = [{"id": r.id, "ts": r.ts.isoformat(), "actor": r.actor, "action": r.action, "section": r.section,
               "target": r.target, "revision": r.revision, "before": r.before, "after": r.after, "result": r.result,
-              "detail": r.detail} for r in rows]
+              "detail": r.detail, "actor_type": r.actor_type, "source_ip": r.source_ip, "reason_code": r.reason_code,
+              "correlation_id": r.correlation_id, "run_id": r.run_id} for r in rows]
     return {"items": items, "total": total or 0, "page": page, "size": size, "pages": -(-(total or 0) // size)}
 
 

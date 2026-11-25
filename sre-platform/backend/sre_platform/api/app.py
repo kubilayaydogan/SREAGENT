@@ -65,9 +65,17 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
             await app.state.runs.shutdown()
             await rt.close()
 
-    app = FastAPI(title="airlab SRE Operations Platform", version="0.1.0", lifespan=lifespan,
-                  docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
     ps0 = settings
+    try:
+        ps_cfg = ps0 or get_settings()
+    except RuntimeError:
+        ps_cfg = None
+    docs = bool(ps_cfg and ps_cfg.api_docs)       # varsayılan kapalı: kimliksiz API şeması/keşif yüzeyi yok
+    app = FastAPI(title="airlab SRE Operations Platform", version="0.1.0", lifespan=lifespan,
+                  docs_url="/api/docs" if docs else None, openapi_url="/api/openapi.json" if docs else None,
+                  redoc_url=None)
+    from ..security import context as sec_ctx
+    trusted = sec_ctx.parse_networks(ps_cfg.trusted_proxies if ps_cfg else ())
     origins = list((ps0.cors_origins if ps0 else None) or [])
     if not origins:
         try:
@@ -85,6 +93,9 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
         cid = request.headers.get("X-Request-ID", "")
         cid = cid if CID_RE.match(cid) else new_correlation_id()
         token = correlation_id.set(cid)
+        sec_ctx.client_ip.set(sec_ctx.resolve_client_ip(request.client.host if request.client else None,
+                                                        request.headers.get("x-forwarded-for"), trusted))
+        sec_ctx.session_id.set(None)
         t0 = time.monotonic()
         try:
             response = await call_next(request)
@@ -131,8 +142,15 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
         return _err(422, "invalid_settings", str(e), e.details or None)
 
     @app.exception_handler(RunNotAllowed)
-    async def _rn(_, e):
+    async def _rn(request: Request, e):
+        from ..security import audit
+        await audit.record_separate(request.app.state.rt.sm, actor=_actor(request), action="run.denied", section="agent",
+                                    target=f"{request.method} {request.url.path}"[:128], result="denied",
+                                    reason_code="policy_agent_settings", detail=str(e))
         return _err(409, "agent_disabled", str(e))
+
+    def _actor(request: Request) -> str:
+        return getattr(request.state, "username", None) or getattr(request.state, "user_id", None) or "anonymous"
 
     @app.exception_handler(ValidationError)
     async def _pv(_, e: ValidationError):

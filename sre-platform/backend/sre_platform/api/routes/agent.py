@@ -15,6 +15,7 @@ from ...agent.chat import ChatOrchestrator, TurnContext
 from ...agent.investigation import InvestigationRunner
 from ...db.models import Role, Trigger, User
 from ...repositories import applications, conversations, incidents, investigations
+from ...security import audit, sessions as sec_sessions, throttle
 from ...services.runs import Run
 from ...settings import runtime as settings_runtime
 from ...settings import service as settings_service
@@ -83,6 +84,7 @@ async def clear_focus(conv_id: uuid.UUID, request: Request, u: User = Depends(cu
     busy = request.app.state.runs.active_for_conversation(c.id)
     if busy or not await ChatOrchestrator(request.app.state.rt).clear_focus(c.thread_id):
         raise HTTPException(status.HTTP_409_CONFLICT, "konuşmada süren ya da yarım kalan bir tur var")
+    await audit.record(s, actor=u.username, action="memory.focus.clear", section="memory", target=str(c.id))
 
 
 # ---------------------------------------------------------------- çalıştırma başlatma
@@ -95,6 +97,21 @@ def _check_limits(request: Request, u: User, conv_id: uuid.UUID | None = None):
                             f"aynı anda en fazla {MAX_RUNS_PER_USER} çalıştırma başlatabilirsiniz")
 
 
+async def _admit(request: Request, u: User, s: AsyncSession, kind: str) -> None:
+    """Kalıcı hız sınırı: kullanıcının son 60 sn'deki run.start audit olayları (restart'tan etkilenmez)."""
+    limit = request.app.state.rt.ps.run_rate_per_minute
+    if limit > 0 and await throttle.runs_last_minute(s, u.username) >= limit:
+        await audit.record_separate(request.app.state.rt.sm, actor=u.username, action="run.denied", section="agent",
+                                    target=kind, result="denied", reason_code="rate_limited")
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, f"dakikada en fazla {limit} çalıştırma başlatılabilir",
+                            headers={"Retry-After": "60"})
+
+
+async def _started(request: Request, u: User, run: Run, kind: str, target: str | None) -> None:
+    await audit.record_separate(request.app.state.rt.sm, actor=u.username, action="run.start", section="agent",
+                                target=f"{kind}:{target}" if target else kind, run_id=run.id)
+
+
 def _run_out(run: Run, **kw) -> RunOut:
     return RunOut(run_id=run.id, kind=run.kind, stream_url=f"/api/agent/stream/{run.id}", **kw)
 
@@ -102,6 +119,7 @@ def _run_out(run: Run, **kw) -> RunOut:
 @router.post("/agent/chat", response_model=RunOut, status_code=202)
 async def chat(body: ChatIn, request: Request, u: User = Depends(sre), s: AsyncSession = Depends(db)):
     settings_runtime.check_allowed(await settings_service.effective(request.app.state.rt, s), "manual")
+    await _admit(request, u, s, "chat")
     if body.application_id:
         await applications.get(s, body.application_id)
     if body.conversation_id:
@@ -122,12 +140,16 @@ async def chat(body: ChatIn, request: Request, u: User = Depends(sre), s: AsyncS
         await ChatOrchestrator(rt).turn(ctx, body.message)
 
     run = request.app.state.runs.start("chat", u.id, go, conversation_id=conv_id)
+    await _started(request, u, run, "chat", str(conv_id))
     return _run_out(run, conversation_id=conv_id)
 
 
 @router.post("/conversations/{conv_id}/resume", response_model=RunOut, status_code=202)
 async def resume(conv_id: uuid.UUID, request: Request, u: User = Depends(sre), s: AsyncSession = Depends(db)):
     conv = await conversations.get(s, conv_id, u.id)
+    # P0.3: resume de yeni bir LLM/MCP çalıştırmasıdır → chat ile aynı policy kapısı (agent devre dışı / mod)
+    settings_runtime.check_allowed(await settings_service.effective(request.app.state.rt, s), "manual")
+    await _admit(request, u, s, "resume")
     _check_limits(request, u, conv.id)
     rt = request.app.state.rt
     if not await ChatOrchestrator(rt).pending(conv.thread_id):
@@ -139,6 +161,7 @@ async def resume(conv_id: uuid.UUID, request: Request, u: User = Depends(sre), s
         await ChatOrchestrator(rt).resume(ctx)
 
     run = request.app.state.runs.start("chat", u.id, go, conversation_id=conv_id)
+    await _started(request, u, run, "resume", str(conv_id))
     return _run_out(run, conversation_id=conv_id)
 
 
@@ -147,6 +170,7 @@ async def investigate(body: InvestigateIn, request: Request, u: User = Depends(s
     _check_limits(request, u)
     rt = request.app.state.rt
     settings_runtime.check_allowed(await settings_service.effective(rt, s), "manual")
+    await _admit(request, u, s, "investigate")
     if body.application_id:
         await applications.get(s, body.application_id)
     if body.incident_id:
@@ -184,6 +208,7 @@ async def investigate(body: InvestigateIn, request: Request, u: User = Depends(s
 
     run = request.app.state.runs.start("investigate", u.id, go)
     run.investigation_id = str(inv_id)
+    await _started(request, u, run, "investigate", str(inv_id))
     return _run_out(run, investigation_id=inv_id)
 
 
@@ -204,11 +229,17 @@ async def stream(run_id: str, request: Request, after: int = Query(0, ge=0),
     registry = request.app.state.runs
     import json
 
+    sm, sid = request.app.state.rt.sm, getattr(request.state, "session_id", None)
+
     async def gen():
         async for e in registry.stream(run, start):
             if await request.is_disconnected():
                 return                                         # istemci gitti; çalıştırma sürer
             if e is None:
+                # Zero-trust: uzun süren akışta oturum her keepalive'da yeniden doğrulanır (logout / iptal → akış kapanır)
+                if not await sec_sessions.is_active(sm, sid):
+                    yield {"event": "session_revoked", "data": json.dumps({"type": "session_revoked"})}
+                    return
                 yield {"comment": "keepalive"}
                 continue
             yield {"id": str(e["seq"]), "event": e["type"], "data": json.dumps(e, ensure_ascii=False, default=str)}
@@ -232,6 +263,8 @@ async def cancel(run_id: str, request: Request, u: User = Depends(current_user))
     if run.done:
         raise HTTPException(status.HTTP_409_CONFLICT, "çalıştırma zaten bitti")
     run.cancel.set()
+    await audit.record_separate(request.app.state.rt.sm, actor=u.username, action="run.cancel", section="agent",
+                                target=run.kind, run_id=run.id)
     await run.emit("agent_thinking", {"step": "start", "message": "İptal istendi; mevcut adım bitince durdurulacak."})
     return run.status()
 

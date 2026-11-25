@@ -729,7 +729,9 @@ class StoredSecret(Base):
 class AuditEvent(Base):
     """Yapılandırma değişikliği denetim kaydı (redakte before/after). Uygulama yalnız INSERT eder."""
     __tablename__ = "audit_events"
-    __table_args__ = (Index("ix_audit_ts", text("ts DESC")), Index("ix_audit_section", "section"), {"schema": SCHEMA})
+    __table_args__ = (Index("ix_audit_ts", text("ts DESC")), Index("ix_audit_section", "section"),
+                      Index("ix_audit_action", "action"), Index("ix_audit_actor_ts", "actor", text("ts DESC")),
+                      {"schema": SCHEMA})
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     ts: Mapped[datetime] = _created_clock()
     actor: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -739,8 +741,41 @@ class AuditEvent(Base):
     revision: Mapped[int | None] = mapped_column(Integer)
     before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    result: Mapped[str] = mapped_column(String(16), nullable=False)               # ok | rejected | error
+    result: Mapped[str] = mapped_column(String(16), nullable=False)               # ok | rejected | error | denied
     detail: Mapped[str | None] = mapped_column(Text)
+    # 0006: güvenlik olayı bağlamı (DB tetikleyicisiyle append-only)
+    actor_type: Mapped[str | None] = mapped_column(String(16))                    # user | system | anonymous
+    source_ip: Mapped[str | None] = mapped_column(String(64))
+    correlation_id: Mapped[str | None] = mapped_column(String(64))
+    session_id: Mapped[str | None] = mapped_column(String(64))
+    run_id: Mapped[str | None] = mapped_column(String(64))
+    reason_code: Mapped[str | None] = mapped_column(String(48))
+
+
+class AuthSession(Base):
+    """Sunucu tarafı oturum: access token `jti`'si. Her istekte iptal / mutlak süre / idle süre kontrol edilir."""
+    __tablename__ = "auth_sessions"
+    __table_args__ = (Index("ix_auth_sessions_user", "user_id"), Index("ix_auth_sessions_expires", "expires_at"),
+                      {"schema": SCHEMA})
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.users.id", ondelete="CASCADE"),
+                                               nullable=False)
+    created_at: Mapped[datetime] = _created()
+    last_seen_at: Mapped[datetime] = _created()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_reason: Mapped[str | None] = mapped_column(String(32))
+    ip: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(256))
+
+
+class AuthLoginFailure(Base):
+    """Başarısız giriş denemesi (kalıcı throttle; anahtar = kullanıcı adı | istemci IP)."""
+    __tablename__ = "auth_login_failures"
+    __table_args__ = (Index("ix_auth_login_failures_key_ts", "key", "ts"), {"schema": SCHEMA})
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(200), nullable=False)
+    ts: Mapped[datetime] = _created_clock()
 
 
 class AgentEpisode(Base):

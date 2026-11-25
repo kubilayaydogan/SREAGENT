@@ -77,7 +77,9 @@ def should_notify(inv: Investigation, threshold: float) -> bool:
 
 
 async def _post(url: str, payload: dict, attempts: int = 3) -> None:
-    async with httpx.AsyncClient(timeout=10) as c:
+    from ..settings import netguard
+    await netguard.check_runtime(url)               # P0.5: her gönderimde SSRF kontrolü (redirect takip edilmez)
+    async with httpx.AsyncClient(timeout=10, follow_redirects=False) as c:
         for i in range(attempts):
             try:
                 r = await c.post(url, json=payload)
@@ -131,6 +133,12 @@ async def notify_rca(rt, inv_id: uuid.UUID) -> bool:
             await _post(url, payload)
         except Exception as e:  # noqa: BLE001
             error = redact_text(str(e)).replace(url, "<webhook>")
+            from ..settings.netguard import UnsafeUrl
+            if isinstance(e, UnsafeUrl):
+                from ..security import audit
+                await audit.record_separate(rt.sm, actor="system:notifier", action="egress.denied",
+                                            section="notifications", target="slack_webhook", result="denied",
+                                            reason_code="ssrf_guard", detail=error)
         if error:
             span.error(error)
         else:

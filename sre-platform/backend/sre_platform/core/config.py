@@ -42,6 +42,13 @@ class PlatformSettings:
     public_url: str = "http://172.20.229.26:8090"   # bildirimdeki araştırma linki için arayüz adresi
     langsmith_sync_minutes: int = 5               # LangSmith → sre.llm_runs senkron aralığı (0 = kapalı)
     langsmith_backfill_days: int = 7              # ilk senkronda geriye dönük gün (LangSmith base trace ~14 gün tutar)
+    # Güvenlik P0
+    session_idle_minutes: int = 30                # işlem yapılmayan oturum bu süreden sonra geçersiz (0 = kapalı)
+    login_max_fails: int = 5                      # pencere içinde başarısız giriş sınırı (kullanıcı adı + IP)
+    login_window_s: int = 300
+    run_rate_per_minute: int = 6                  # kullanıcı başına dakikada başlatılabilecek agent çalıştırması
+    trusted_proxies: tuple[str, ...] = ()         # X-Forwarded-For yalnız bu eşlerden kabul edilir (CIDR)
+    api_docs: bool = False                        # /api/docs ve /api/openapi.json (varsayılan kapalı)
 
     @property
     def libpq_url(self) -> str:
@@ -90,6 +97,12 @@ def load_platform_settings() -> PlatformSettings:
         public_url=os.getenv("SRE_PUBLIC_URL", "http://172.20.229.26:8090").rstrip("/"),
         langsmith_sync_minutes=_int("SRE_LANGSMITH_SYNC_MINUTES", 5),
         langsmith_backfill_days=_int("SRE_LANGSMITH_BACKFILL_DAYS", 7),
+        session_idle_minutes=_int("SRE_SESSION_IDLE_MINUTES", 30),
+        login_max_fails=_int("SRE_LOGIN_MAX_FAILS", 5),
+        login_window_s=_int("SRE_LOGIN_WINDOW_S", 300),
+        run_rate_per_minute=_int("SRE_RUN_RATE_PER_MINUTE", 6),
+        trusted_proxies=tuple(_list("SRE_TRUSTED_PROXIES")),
+        api_docs=os.getenv("SRE_API_DOCS", "false").lower() in ("1", "true", "yes"),
     )
 
 

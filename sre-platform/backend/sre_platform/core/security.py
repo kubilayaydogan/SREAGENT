@@ -38,12 +38,15 @@ def verify_password(password: str, stored: str) -> bool:
 DUMMY_HASH = "scrypt$16384$8$1$" + base64.b64encode(b"0" * 16).decode() + "$" + base64.b64encode(b"0" * 32).decode()
 
 
-def create_token(user_id: str, role: str, secret: str, ttl_minutes: int) -> tuple[str, datetime]:
-    exp = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
+def create_token(user_id: str, role: str, secret: str, ttl_minutes: int, *, jti: str | None = None,
+                 exp: datetime | None = None) -> tuple[str, datetime]:
+    """jti = sunucu tarafı oturum kimliği (sre.auth_sessions.id); token ancak oturum aktifse geçerlidir."""
+    exp = exp or datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
     tok = jwt.encode({"sub": user_id, "role": role, "exp": exp, "iat": datetime.now(timezone.utc),
-                      "jti": secrets.token_hex(8)}, secret, algorithm=ALGO)
+                      "jti": jti or secrets.token_hex(8)}, secret, algorithm=ALGO)
     return tok, exp
 
 
 def decode_token(token: str, secret: str) -> dict:
-    return jwt.decode(token, secret, algorithms=[ALGO], options={"require": ["sub", "exp", "role"]})
+    # Algoritma sabit (alg=none / RS-HS karışıklığı yok); sub, exp, role, jti zorunlu.
+    return jwt.decode(token, secret, algorithms=[ALGO], options={"require": ["sub", "exp", "role", "jti"]})

@@ -90,6 +90,8 @@ export async function streamRun(url: string, opts: StreamOptions): Promise<numbe
           } catch {
             continue;
           }
+          // Sunucu oturumu iptal etti (logout / parola değişikliği / admin): kalıcı hata, yeniden bağlanılmaz
+          if ((ev.type as string) === "session_revoked") throw new ApiError(401, "session_revoked", "Oturum sona erdi; yeniden giriş yapın");
           if (typeof ev.seq === "number") {
             if (ev.seq <= last) continue; // yeniden bağlanmada tekrar gelen olay
             last = ev.seq;

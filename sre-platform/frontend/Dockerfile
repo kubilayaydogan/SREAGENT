@@ -6,10 +6,11 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-# ---- serve (statik dosyalar + /api ters vekil)
+# ---- serve (statik dosyalar + /api ters vekil) — root OLMADAN (nginx kullanıcısı, uid 101), port 8080
 FROM nginx:1.29-alpine
-RUN rm -f /etc/nginx/conf.d/default.conf
+RUN rm -f /etc/nginx/conf.d/default.conf  && sed -i -e '/^user /d' -e 's#^pid .*#pid /tmp/nginx.pid;#' /etc/nginx/nginx.conf  && chown -R nginx:nginx /var/cache/nginx
 COPY nginx.conf /etc/nginx/conf.d/sre.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1
+USER nginx
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1

@@ -61,7 +61,14 @@ def _clean(request):
         tables = [r[0] for r in c.execute(sa.text(
             "select tablename from pg_tables where schemaname='sre' and tablename <> 'alembic_version'"))]
         if tables:
+            # audit_events append-only (0006 tetikleyicileri) → test temizliği için geçici olarak devre dışı
+            guarded = "audit_events" in tables and c.execute(sa.text(
+                "select 1 from pg_trigger where tgname = 'audit_events_no_truncate'")).first() is not None
+            if guarded:
+                c.execute(sa.text("ALTER TABLE sre.audit_events DISABLE TRIGGER USER"))
             c.execute(sa.text("TRUNCATE " + ", ".join(f"sre.{t}" for t in tables) + " RESTART IDENTITY CASCADE"))
+            if guarded:
+                c.execute(sa.text("ALTER TABLE sre.audit_events ENABLE TRIGGER USER"))
     eng.dispose()
 
 

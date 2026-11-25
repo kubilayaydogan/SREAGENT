@@ -83,3 +83,10 @@ def check_url(url: str, *, resolver=None) -> str:
             raise UnsafeUrl(f"{host} iç/özel ağ adresine çözümleniyor ({ip}); gerekiyorsa deployment "
                             f"SRE_OUTBOUND_ALLOWLIST'e eklenmeli")
     return parts.geturl()
+
+
+async def check_runtime(url: str) -> str:
+    """Çalışma anında (her bağlantı kurulmadan önce) aynı kural; kayıt sonrası DNS değişimini (rebinding) yakalar.
+    Bloklayan DNS çözümü thread'de yapılır. Güvenli değilse UnsafeUrl."""
+    import asyncio
+    return await asyncio.to_thread(check_url, url)
