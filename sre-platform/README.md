@@ -121,6 +121,19 @@ kapsanır. Aynı araştırma bir kez bildirilir; gönderim hatası araştırmay�
 görünür. Kurulum: Slack'te bir app oluşturup Incoming Webhook ekleyin, URL'yi `sre-platform.env` içindeki
 `SRE_SLACK_WEBHOOK_URL`'ye yazın, `sre-backend` ve `sre-worker`'ı yeniden başlatın.
 
+## LangSmith ve LLM Monitoring
+
+- **Tracing:** her sohbet turu tek trace'tir (`chat-turn`; run id = kullanıcı mesajının id'si). Analiz grafı, Dynatrace
+  DQL sorguları (tool run), cevap ve Slack bildirimi altındadır. `conversation_id` metadata'sı LangSmith Threads
+  görünümünde turları birleştirir. Investigation'ın run id'si investigation id'sidir; risk, severity, mechanism,
+  kapsam ve kısmi veri koşu sonunda feedback olarak yazılır. Detay sayfasında "LangSmith'te aç" bağlantısı vardır.
+- **LLM Monitoring (`/llm`, sre/admin):** worker işi `langsmith-sync` (`SRE_LANGSMITH_SYNC_MINUTES`, varsayılan 5)
+  LangSmith'ten kök trace ve LLM çağrısı özetlerini `sre.llm_runs`'a çeker. Prompt/cevap içeriği **tutulmaz**;
+  yalnız token, maliyet (LangSmith fiyat tahmini), latency, ilk token süresi, durum ve kimlikler. Pano
+  (`GET /api/observability/llm?range=24h|7d|30d`) yalnız bu tablodan okur; LangSmith kapalıyken de çalışır.
+- İmleç `kv['langsmith_sync']`. Yeniden doldurmak için bu anahtarı silin; sonraki tur `SRE_LANGSMITH_BACKFILL_DAYS`
+  geriye gider (upsert idempotent). Kayıtlar `SRE_RETENTION_DAYS` sonra silinir.
+
 ## Bilinen sınırlar
 
 - SSE çalıştırma kaydı süreç içidir → backend tek uvicorn worker; yeniden başlatmada canlı akış kesilir (araştırma

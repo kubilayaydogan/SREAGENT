@@ -17,6 +17,8 @@ import type {
   KnownIssue,
   KnownIssueDetail,
   LlmModelState,
+  LlmObservability,
+  LlmRange,
   Message,
   Page,
   RangeKey,
@@ -130,6 +132,14 @@ export const useInvestigation = (id?: string, live = false) =>
     queryFn: () => api.get<InvestigationDetail>(`/investigations/${id}`),
     enabled: !!id,
     refetchInterval: (q) => (live || ["PENDING", "RUNNING"].includes(q.state.data?.status ?? "") ? 3000 : false),
+  });
+
+export const useLlmObservability = (range: LlmRange) =>
+  useQuery({
+    queryKey: ["llm-observability", range],
+    queryFn: () => api.get<LlmObservability>(`/observability/llm?range=${range}`),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
   });
 
 export const useTraceUrl = (id?: string) =>

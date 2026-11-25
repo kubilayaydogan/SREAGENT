@@ -6,6 +6,7 @@ dolunca iş başka worker'a geçer.
   watch         (poll_seconds)        eski sre-agent watch'unun PG durumlu hali → incident + araştırma
   health_check  (SRE_HEALTH_CHECK_MINUTES) son N dakikanın tam analizi (LLM'siz) → araştırma kaydı
   retention     (saatlik)             eski kayıtların temizliği + süresi dolan onaylar
+  langsmith_sync (SRE_LANGSMITH_SYNC_MINUTES) LangSmith trace/LLM özetleri → sre.llm_runs (LLM izleme panosu)
 """
 from __future__ import annotations
 
@@ -106,6 +107,7 @@ RETENTION_SQL = [
         AND i.conversation_id IS NULL"""),
     ("watch_events", "DELETE FROM sre.watch_events WHERE ts < :cut"),
     ("job_runs", "DELETE FROM sre.job_runs WHERE started_at < :cut_short"),
+    ("llm_runs", "DELETE FROM sre.llm_runs WHERE start_time < :cut"),
 ]
 
 
@@ -121,7 +123,12 @@ async def retention(rt, params: dict) -> dict[str, Any]:
     return out
 
 
-HANDLERS = {"health_check": health_check, "retention": retention}
+async def langsmith_sync(rt, params: dict) -> dict[str, Any]:
+    from .services.langsmith_sync import sync
+    return await sync(rt, params)
+
+
+HANDLERS = {"health_check": health_check, "retention": retention, "langsmith_sync": langsmith_sync}
 
 
 async def ensure_jobs(rt) -> None:
@@ -131,6 +138,9 @@ async def ensure_jobs(rt) -> None:
         await jobs.ensure(s, "health-check", "health_check", max(ps.health_check_minutes, 1) * 60,
                           {"window_minutes": ps.health_check_window_minutes}, enabled=ps.health_check_minutes > 0)
         await jobs.ensure(s, "retention", "retention", 3600, {"days": ps.retention_days})
+        await jobs.ensure(s, "langsmith-sync", "langsmith_sync", max(ps.langsmith_sync_minutes, 1) * 60,
+                          {"backfill_days": ps.langsmith_backfill_days},
+                          enabled=ps.langsmith_sync_minutes > 0 and bool(getattr(rt, "callbacks", None)))
 
 
 # ---------------------------------------------------------------- döngü

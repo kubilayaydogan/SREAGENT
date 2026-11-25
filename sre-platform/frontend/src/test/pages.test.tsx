@@ -8,6 +8,7 @@ import { ActivityTimeline, toolsFromRecords } from "@/components/ActivityTimelin
 import { AppLayout } from "@/layouts/AppLayout";
 import DashboardPage from "@/pages/DashboardPage";
 import InvestigationDetailPage from "@/pages/InvestigationDetailPage";
+import LlmObservabilityPage, { fillSeries } from "@/pages/LlmObservabilityPage";
 import LoginPage from "@/pages/LoginPage";
 import { AuthProvider } from "@/services/auth";
 import { tokenStore } from "@/services/api";
@@ -206,5 +207,53 @@ describe("InvestigationDetailPage", () => {
     renderAt({ url: null });
     expect(await screen.findByText("Periyodik analiz")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /LangSmith'te aç/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("LlmObservabilityPage", () => {
+  const agg = { calls: 3, errors: 1, input_tokens: 11000, output_tokens: 510, cost_usd: 0.13, p50_ms: 8000, p95_ms: 23300 };
+  const obs = {
+    range: "24h", start: "2026-11-24T12:00:00Z", end: "2026-11-25T12:00:00Z", bucket: "1 hour",
+    sync: { last_ok_at: new Date().toISOString(), last_error: null, last_error_at: null, project: "airlab-sre-agent" },
+    totals: { ...agg, p95_first_token_ms: 1500, traces: 3, trace_errors: 1, error_rate: 1 / 3 },
+    by_model: [{ ...agg, model: "claude-opus-5-5" }],
+    by_call: [{ ...agg, name: "explain_findings" }],
+    by_trigger: [{ trigger: "scheduled", traces: 1, errors: 1, cost_usd: 0.01, p95_ms: 30000 }],
+    series: [{ ...agg, t: "2026-11-25T10:00:00Z" }],
+    top_cost: [
+      { id: "t1", name: "chat-turn", trigger: "chat", model: "claude-opus-5-5", status: "success", error: null,
+        start_time: "2026-11-25T11:30:00Z", latency_ms: 12000, investigation_id: null, conversation_id: "c1",
+        cost_usd: 0.12, tokens: 4510, llm_calls: 2, url: "https://smith.test/r/t1" },
+    ],
+    slowest: [], errors: [], llm_errors: [],
+  };
+
+  it("özet kutuları, kırılımlar ve LangSmith bağlantısı gösterilir", async () => {
+    tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
+    mockFetch({ "/api/auth/me": USER, "/api/observability/llm": obs });
+    wrap(<LlmObservabilityPage />);
+    expect(await within(await screen.findByRole("group", { name: "Error rate" })).findByText("%33,3")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Maliyet" })).getByText("$0.1300")).toBeInTheDocument();
+    expect(screen.getByText("RCA açıklaması")).toBeInTheDocument();
+    expect(screen.getByText("Periyodik kontrol")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "LangSmith'te aç" })).toHaveAttribute("href", "https://smith.test/r/t1");
+    expect(screen.getByRole("link", { name: /konuşma/ })).toHaveAttribute("href", "/investigate/c1");
+  });
+
+  it("senkron hatası açıkça gösterilir", async () => {
+    tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
+    const old = new Date(Date.now() - 3_600_000).toISOString();
+    mockFetch({
+      "/api/auth/me": USER,
+      "/api/observability/llm": { ...obs, sync: { last_ok_at: old, last_error: "ConnectError: down", last_error_at: new Date().toISOString(), project: null } },
+    });
+    wrap(<LlmObservabilityPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("ConnectError: down");
+  });
+
+  it("boş kovalar: çağrı/maliyet 0, latency boşluk", () => {
+    const pts = fillSeries({ start: "2026-11-25T08:00:00Z", end: "2026-11-25T11:00:00Z", bucket: "1 hour", series: [{ ...agg, t: "2026-11-25T10:00:00+00:00" }] });
+    expect(pts.map((p) => p.calls)).toEqual([0, 0, 3, 0]);
+    expect(pts.map((p) => p.p95)).toEqual([null, null, 23300, null]);
   });
 });

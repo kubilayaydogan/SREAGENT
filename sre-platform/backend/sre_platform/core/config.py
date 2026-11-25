@@ -40,6 +40,8 @@ class PlatformSettings:
     slack_webhook_url: str = field(default="", repr=False)   # Slack Incoming Webhook; boşsa bildirim kapalı
     slack_risk_threshold: float = 75.0           # risk_score >= eşik olan tamamlanmış RCA'lar bildirilir
     public_url: str = "http://172.20.229.26:8090"   # bildirimdeki araştırma linki için arayüz adresi
+    langsmith_sync_minutes: int = 5               # LangSmith → sre.llm_runs senkron aralığı (0 = kapalı)
+    langsmith_backfill_days: int = 7              # ilk senkronda geriye dönük gün (LangSmith base trace ~14 gün tutar)
 
     @property
     def libpq_url(self) -> str:
@@ -86,6 +88,8 @@ def load_platform_settings() -> PlatformSettings:
         slack_webhook_url=os.getenv("SRE_SLACK_WEBHOOK_URL", "").strip(),
         slack_risk_threshold=float(os.getenv("SRE_SLACK_RISK_THRESHOLD", "75")),
         public_url=os.getenv("SRE_PUBLIC_URL", "http://172.20.229.26:8090").rstrip("/"),
+        langsmith_sync_minutes=_int("SRE_LANGSMITH_SYNC_MINUTES", 5),
+        langsmith_backfill_days=_int("SRE_LANGSMITH_BACKFILL_DAYS", 7),
     )
 
 

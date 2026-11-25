@@ -468,3 +468,62 @@ export interface JobRun {
   result: Record<string, unknown>;
   error: string | null;
 }
+
+// ---------------------------------------------------------------- LLM izleme (LangSmith senkronu)
+export type LlmRange = "24h" | "7d" | "30d";
+
+export interface LlmAgg {
+  calls: number;
+  errors: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  p50_ms: number | null;
+  p95_ms: number | null;
+}
+
+export interface LlmTrace {
+  id: string;
+  name: string;
+  trigger: string | null;
+  model: string | null;
+  status: "success" | "error" | "pending";
+  error: string | null;
+  start_time: string;
+  latency_ms: number | null;
+  investigation_id: string | null;
+  conversation_id: string | null;
+  cost_usd: number;
+  tokens: number;
+  llm_calls: number;
+  url: string | null;
+}
+
+export interface LlmCallError {
+  id: string;
+  trace_id: string;
+  name: string;
+  model: string | null;
+  error: string | null;
+  start_time: string;
+  latency_ms: number | null;
+  investigation_id: string | null;
+  url: string | null;
+}
+
+export interface LlmObservability {
+  range: LlmRange;
+  start: string;
+  end: string;
+  bucket: string;
+  sync: { last_ok_at: string | null; last_error: string | null; last_error_at: string | null; project: string | null };
+  totals: LlmAgg & { p95_first_token_ms: number | null; traces: number; trace_errors: number; error_rate: number | null };
+  by_model: (LlmAgg & { model: string })[];
+  by_call: (LlmAgg & { name: string })[];
+  by_trigger: { trigger: string; traces: number; errors: number; cost_usd: number; p95_ms: number | null }[];
+  series: (LlmAgg & { t: string })[];
+  top_cost: LlmTrace[];
+  slowest: LlmTrace[];
+  errors: LlmTrace[];
+  llm_errors: LlmCallError[];
+}

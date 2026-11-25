@@ -17,6 +17,7 @@ const Rcas = lazy(() => import("@/pages/RcaListPage"));
 const RcaDetail = lazy(() => import("@/pages/RcaDetailPage"));
 const Knowledge = lazy(() => import("@/pages/KnowledgePage"));
 const Approvals = lazy(() => import("@/pages/ApprovalsPage"));
+const LlmObservability = lazy(() => import("@/pages/LlmObservabilityPage"));
 
 function Loading() {
   return (
@@ -57,6 +58,7 @@ const router = createBrowserRouter([
       { path: "rca/:id", element: s(<RcaDetail />) },
       { path: "knowledge", element: s(<Knowledge />) },
       { path: "approvals", element: s(<Approvals />) },
+      { path: "llm", element: s(<LlmObservability />) },
       { path: "*", element: <EmptyState title="Sayfa bulunamadı" description="Adres hatalı olabilir." /> },
     ],
   },

@@ -601,3 +601,30 @@ class KeyValue(Base):
     key: Mapped[str] = mapped_column(String(128), primary_key=True)
     value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     updated_at: Mapped[datetime] = _updated()
+
+
+class LlmRun(Base):
+    """LangSmith'ten senkronlanan özet (worker `langsmith-sync`). Prompt/cevap içeriği TUTULMAZ; yalnız sayılar ve kimlikler.
+    kind='trace': kök trace (chat-turn, airlab-scheduled …; token/maliyet aynı trace_id'li llm satırlarının toplamıdır).
+    kind='llm'  : tek LLM çağrısı (name = çağrının amacı: route_question, answer, explain_findings …)."""
+    __tablename__ = "llm_runs"
+    __table_args__ = (Index("ix_llm_runs_kind_start", "kind", text("start_time DESC")),
+                      Index("ix_llm_runs_trace", "trace_id"),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)          # LangSmith run id
+    trace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(64))
+    trigger: Mapped[str | None] = mapped_column(String(32))
+    investigation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(String(16), nullable=False)                       # success | error | pending
+    error: Mapped[str | None] = mapped_column(Text)                                        # redakte, kısaltılmış
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    first_token_ms: Mapped[int | None] = mapped_column(Integer)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    synced_at: Mapped[datetime] = _updated()

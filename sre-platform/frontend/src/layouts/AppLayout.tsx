@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Bot, ClipboardCheck, FileText, History, LayoutDashboard, LogOut, Menu, Siren, X } from "lucide-react";
+import { Activity, BookOpen, Bot, ClipboardCheck, FileText, Gauge, History, LayoutDashboard, LogOut, Menu, Siren, X } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import { Badge, Select } from "@/components/ui/primitives";
@@ -15,6 +15,7 @@ const NAV = [
   { to: "/rca", label: "RCA Raporları", icon: FileText },
   { to: "/knowledge", label: "Bilgi Bankası", icon: BookOpen },
   { to: "/approvals", label: "Onaylar", icon: ClipboardCheck },
+  { to: "/llm", label: "LLM Monitoring", icon: Gauge, role: "sre" as const },
 ];
 
 const ROLE_LABEL = { admin: "Yönetici", sre: "SRE", viewer: "İzleyici" } as const;
@@ -63,7 +64,7 @@ function ModelSwitch({ fallback }: { fallback: string | null }) {
 }
 
 export function AppLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
   const [open, setOpen] = useState(false);
   return (
     <div className="flex h-full">
@@ -86,7 +87,7 @@ export function AppLayout() {
           </button>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-2" aria-label="ana menü">
-          {NAV.map((n) => (
+          {NAV.filter((n) => !("role" in n) || !n.role || can(n.role)).map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

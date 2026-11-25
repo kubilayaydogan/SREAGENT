@@ -95,6 +95,10 @@ def test_health_auth_rbac(api_settings, tmp_path):
         assert (await c.get("/api/users", headers=v)).status_code == 403
         assert (await c.put("/api/system/llm-model", headers=v, json={"model": "claude-sonnet-5-5"})).status_code == 403
         assert (await c.get("/api/system/llm-model", headers=v)).status_code == 200      # okuma herkese açık
+        assert (await c.get("/api/observability/llm", headers=v)).status_code == 403      # LLM izleme: sre/admin
+        o = await c.get("/api/observability/llm?range=7d", headers=h)
+        assert o.status_code == 200 and o.json()["totals"]["calls"] == 0 and o.json()["totals"]["error_rate"] is None
+        assert (await c.get("/api/observability/llm?range=1y", headers=h)).status_code == 422
         for _ in range(5):
             await c.post("/api/auth/login", json={"username": "izleyici", "password": "yanlis-parola"})
         assert (await c.post("/api/auth/login", json={"username": "izleyici",

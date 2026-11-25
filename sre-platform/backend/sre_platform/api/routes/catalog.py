@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db.models import IncidentStatus, InvestigationStatus, User, WatchCondition
 from ...repositories import applications, incidents, investigations
-from ..deps import admin, current_user, db
+from ..deps import admin, current_user, db, sre
 from ..schemas import ApplicationOut, IncidentOut, InvestigationOut, RangeKey
 
 router = APIRouter(tags=["applications"])
@@ -161,3 +161,18 @@ async def put_llm_model(request: Request, body: dict, u: User = Depends(admin)):
         return await model_switch.select(rt, str(body.get("model", "")), username=u.username)
     except ValueError as e:
         raise HTTPException(422, str(e)) from None
+
+
+@router.get("/observability/llm", tags=["observability"])
+async def llm_observability(request: Request, range: str = Query("24h", pattern="^(24h|7d|30d)$"),
+                            _: User = Depends(sre), s: AsyncSession = Depends(db)):
+    """LLM izleme: LangSmith'ten worker'ın senkronladığı özetler (sre.llm_runs). İçerik (prompt/cevap) yok."""
+    from ...services import langsmith_trace, llm_observability
+    out = await llm_observability.summary(s, range)
+    rt = request.app.state.rt
+    base = await langsmith_trace.run_url(rt, "{run_id}") if langsmith_trace.tracer(rt) else None
+    for key in ("top_cost", "slowest", "errors", "llm_errors"):
+        for item in out[key]:
+            tid = item.get("trace_id") or item.get("id")
+            item["url"] = base.replace("{run_id}", tid) if base and tid else None
+    return out
