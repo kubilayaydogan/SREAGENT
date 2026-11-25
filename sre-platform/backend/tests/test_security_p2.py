@@ -428,3 +428,71 @@ def test_secret_hygiene_alert_once_per_day(api_settings, tmp_path, monkeypatch):
 
 async def _noop():
     return None
+
+
+# ------------------------------------------------------------------------------------------------ P2.7 retention
+async def _ckpt(s, thread, age):
+    from sqlalchemy import text
+    await s.execute(text(
+        "INSERT INTO langgraph.checkpoints (thread_id, checkpoint_ns, checkpoint_id, type, checkpoint, metadata) "
+        "VALUES (:t, '', :c, 'json', jsonb_build_object('ts', (now() - CAST(:a AS interval))::text), '{}'::jsonb)"),
+        {"t": thread, "c": thread + "-c1", "a": age})
+
+
+def test_retention_memory_and_security_tables(api_settings, tmp_path):
+    async def fn(c, app):
+        from datetime import datetime, timedelta, timezone
+        from sqlalchemy import text
+        from sre_platform.db.models import Trigger
+        from sre_platform.repositories import investigations
+        from sre_platform.worker import retention
+        h = await login(c)
+        rt = app.state.rt
+        t0 = datetime.now(timezone.utc) - timedelta(days=400)
+        async with rt.sm() as s, s.begin():
+            await _ckpt(s, "orphan-old", "2 days")
+            await _ckpt(s, "orphan-new", "1 hour")
+            for run_id, status in (("inv-done", "COMPLETED"), ("inv-running", "RUNNING")):
+                await investigations.create(s, run_id=run_id, trigger=Trigger.MANUAL, title=run_id,
+                                            window_start=t0, window_end=t0 + timedelta(minutes=15))
+                await s.execute(text("UPDATE sre.investigations SET status = CAST(:st AS sre.investigation_status) "
+                                     "WHERE run_id = :r"), {"st": status, "r": run_id})
+                await _ckpt(s, run_id, "400 days")
+            await s.execute(text("INSERT INTO langgraph.store (prefix, key, value, created_at, updated_at, expires_at) "
+                                 "VALUES ('t', 'expired', '{}', now(), now(), now() - interval '1 hour'), "
+                                 "('t', 'old', '{}', now() - interval '400 days', now() - interval '400 days', NULL)"))
+            await s.execute(text("INSERT INTO sre.auth_login_failures (key, ts) VALUES "
+                                 "('x|1.2.3.4', now() - interval '2 days'), ('y|1.2.3.4', now())"))
+            await s.execute(text("INSERT INTO sre.llm_usage (ts, run_id, task, input_tokens, output_tokens, denied) "
+                                 "VALUES (now() - interval '400 days', 'eski', 'chat', 1, 1, false), "
+                                 "(now(), 'yeni', 'chat', 1, 1, false)"))
+            audit_before = await s.scalar(text("SELECT count(*) FROM sre.audit_events"))
+        pv = (await c.get("/api/settings/retention/preview", headers=h)).json()
+        assert pv["counts"]["checkpoint_threads_orphan"] == 1 and pv["counts"]["checkpoint_threads_ttl"] == 0
+        assert pv["counts"]["store_items"] == 1 and pv["counts"]["auth_login_failures"] == 1
+        assert pv["counts"]["llm_usage"] == 1 and "_threads" not in pv["counts"]
+        out = await retention(rt, {})
+        assert out["checkpoint_threads_orphan"] == 1 and out["store_items"] == 1 and out["llm_usage"] == 1
+
+        async def threads():
+            async with rt.sm() as s:
+                return {r[0] for r in await s.execute(text("SELECT DISTINCT thread_id FROM langgraph.checkpoints"))}
+        assert {"orphan-new", "inv-done", "inv-running"} <= await threads() and "orphan-old" not in await threads()
+        async with rt.sm() as s:
+            assert await s.scalar(text("SELECT count(*) FROM langgraph.store WHERE prefix='t'")) == 1   # yaş TTL kapalı
+            assert await s.scalar(text("SELECT count(*) FROM sre.audit_events")) > audit_before        # audit silinmez
+        purge = (await c.get("/api/settings/audit", headers=h, params={"action": "retention.purge"})).json()["items"]
+        assert purge and purge[0]["actor"] == "system:retention" and purge[0]["after"]["checkpoint_threads_orphan"] == 1
+        # TTL açılır: eski ama aktif (RUNNING) thread korunur, tamamlanmış olan silinir; store yaş TTL'i
+        cur = (await c.get("/api/settings/retention", headers=h)).json()
+        bad = await c.patch("/api/settings/retention", headers=h, json={"revision": cur["revision"],
+                                                                        "values": {"checkpoints_days": 3}})
+        assert bad.status_code == 422                                                   # 0 ya da ≥7
+        r = await c.patch("/api/settings/retention", headers=h, json={"revision": cur["revision"], "values": {
+            "checkpoints_days": 30, "store_days": 30}})
+        assert r.status_code == 200, r.text
+        out = await retention(rt, {})
+        assert out["checkpoint_threads_ttl"] == 1 and out["store_items"] == 1
+        left = await threads()
+        assert "inv-running" in left and "inv-done" not in left and "orphan-new" in left
+    with_client(api_settings, tmp_path, fn)

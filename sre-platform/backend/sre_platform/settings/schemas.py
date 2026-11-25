@@ -256,6 +256,23 @@ class RetentionSettings(_Section):
         env="SRE_RETENTION_DAYS", apply="next_tick", help="LLM Monitoring özetleri", unit="gün"))
     job_runs_days: int = Field(30, ge=7, le=3650, json_schema_extra=_meta(
         apply="next_tick", help="Zamanlanmış iş çalıştırma geçmişi (operational log)", unit="gün"))
+    # P2.7 ajan hafızası (LangGraph). Muhafazakâr varsayılanlar: yalnız sahibi silinmiş veri otomatik temizlenir.
+    orphan_checkpoints_cleanup: bool = Field(True, json_schema_extra=_meta(
+        apply="next_tick", help="Investigation'ı ya da konuşması artık olmayan thread'lerin checkpoint'lerini sil "
+                                "(son checkpoint en az 1 gün önce)"))
+    checkpoints_days: int = Field(0, ge=0, le=3650, json_schema_extra=_meta(
+        apply="next_tick", help="Bu süreden eski thread checkpoint'lerini sil (aktif investigation hariç). "
+                                "0 = kapalı; açılırsa en az 7", unit="gün"))
+    store_days: int = Field(0, ge=0, le=3650, json_schema_extra=_meta(
+        apply="next_tick", help="Bu süredir güncellenmeyen Store öğelerini sil. 0 = kapalı; açılırsa en az 7. "
+                                "Süresi dolmuş (expires_at) öğeler her zaman silinir", unit="gün"))
+
+    @field_validator("checkpoints_days", "store_days")
+    @classmethod
+    def _zero_or_week(cls, v):
+        if 0 < v < 7:
+            raise ValueError("0 (kapalı) ya da en az 7 gün olmalı")
+        return v
 
 
 SECTIONS: dict[str, type[_Section]] = {
@@ -291,6 +308,8 @@ LABELS = {
     "alert_policy_denied": "Threshold: policy reddi",
     "investigations_days": "Investigation kayıtları", "watch_events_days": "Watch olayları",
     "llm_runs_days": "LLM Monitoring özetleri", "job_runs_days": "İş geçmişi",
+    "orphan_checkpoints_cleanup": "Sahipsiz checkpoint temizliği", "checkpoints_days": "Checkpoint TTL",
+    "store_days": "Store TTL",
 }
 
 

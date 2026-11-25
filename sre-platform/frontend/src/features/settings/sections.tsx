@@ -8,6 +8,7 @@ import { cn, fmtNum, fmtRelative, fmtTime } from "@/lib/utils";
 import {
   useJobs,
   useMemoryStatus,
+  useRetentionPreview,
   useSecrets,
   useSettingsAction,
   type RiskFixtureRow,
@@ -486,12 +487,37 @@ function MemoryPanel() {
   );
 }
 
+export const RETENTION_LABEL: Record<string, string> = {
+  investigations: "Investigation",
+  watch_events: "Watch olayı",
+  job_runs: "İş çalıştırma kaydı",
+  llm_runs: "LLM Monitoring özeti",
+  llm_usage: "LLM kullanım kaydı",
+  auth_login_failures: "Başarısız giriş kaydı",
+  checkpoint_threads_orphan: "Sahipsiz checkpoint thread'i",
+  checkpoint_threads_ttl: "Süresi dolan checkpoint thread'i",
+  store_items: "Store öğesi",
+};
+
+function RetentionPreviewCard() {
+  const q = useRetentionPreview();
+  if (!q.data) return null;
+  const rows = Object.entries(q.data.counts).map(([k, n]) => [RETENTION_LABEL[k] ?? k, String(n)] as [string, string]);
+  return (
+    <StatusCard
+      title="Bir sonraki turda silinecekler (önizleme, kaydedilmiş ayarlarla)"
+      rows={[...rows, ["Audit kayıtları", q.data.audit], ["Zamanlama", q.data.schedule]]}
+    />
+  );
+}
+
 export function RetentionSection() {
   return (
     <SectionForm
       section="retention"
       title="Retention & Memory"
-      description="Saklama süreleri saatlik retention işi tarafından uygulanır. Incident'a bağlı, RCA'lı, feedback'li ya da sohbette yer alan investigation'lar silinmez."
+      description="Saklama süreleri saatlik retention işi tarafından uygulanır. Incident'a bağlı, RCA'lı, feedback'li ya da sohbette yer alan investigation'lar silinmez. Sahibi silinmiş checkpoint'ler 1 gün sonra temizlenir; checkpoint/Store yaş TTL'leri varsayılan kapalıdır. Her silme turu audit'e özetlenir; audit kayıtları silinmez."
+      aside={() => <RetentionPreviewCard />}
     >
       {() => <MemoryPanel />}
     </SectionForm>

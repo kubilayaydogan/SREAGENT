@@ -20,7 +20,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import text
 
 from .core.config import PlatformSettings
 from .core.logging import new_correlation_id, correlation_id
@@ -111,34 +110,24 @@ async def health_check(rt, params: dict) -> dict[str, Any]:
     return out
 
 
-RETENTION_SQL = [
-    # incident'a bağlı veya RCA'sı olan araştırmalar saklanır
-    ("investigations", """DELETE FROM sre.investigations i WHERE i.created_at < :cut
-        AND NOT EXISTS (SELECT 1 FROM sre.incident_investigations x WHERE x.investigation_id = i.id)
-        AND NOT EXISTS (SELECT 1 FROM sre.rca_reports r WHERE r.investigation_id = i.id)
-        AND NOT EXISTS (SELECT 1 FROM sre.agent_feedback f WHERE f.investigation_id = i.id)
-        AND i.conversation_id IS NULL"""),
-    ("watch_events", "DELETE FROM sre.watch_events WHERE ts < :cut"),
-    ("job_runs", "DELETE FROM sre.job_runs WHERE started_at < :cut"),
-    ("llm_runs", "DELETE FROM sre.llm_runs WHERE start_time < :cut"),
-]
-
-
 async def retention(rt, params: dict) -> dict[str, Any]:
-    """Kategori başına saklama süresi Settings > Retention'dan (yoksa SRE_RETENTION_DAYS; job_runs 30 gün)."""
+    """Kategori başına saklama süresi Settings > Retention'dan (services/retention.py). Silme olduysa tek audit."""
+    from .security import audit, sessions
+    from .services import retention as ret_svc
     from .settings import runtime as srt
     ret = (await srt.effective(rt))["retention"]
-    days = {"investigations": ret["investigations_days"], "watch_events": ret["watch_events_days"],
-            "llm_runs": ret["llm_runs_days"], "job_runs": ret["job_runs_days"]}
-    now = datetime.now(timezone.utc)
-    out: dict[str, Any] = {"retention_days": days}
+    out: dict[str, Any] = {"retention_days": {k: ret[k] for k in ("investigations_days", "watch_events_days",
+                                                                 "llm_runs_days", "job_runs_days", "checkpoints_days",
+                                                                 "store_days")}}
     async with transaction(rt.sm) as s:
-        for name, sql in RETENTION_SQL:
-            res = await s.execute(text(sql), {"cut": now - timedelta(days=int(days[name]))})
-            out[name] = res.rowcount or 0
+        counts = await ret_svc.purge(s, ret)
+        out.update(counts)
         out["approvals_expired"] = await approvals.expire_due(s)
-        from .security import sessions
         out["auth_sessions_purged"] = await sessions.purge_expired(s)     # süresi 30+ gün önce dolmuş oturumlar
+        deleted = {k: v for k, v in counts.items() if v}
+        if deleted:
+            await audit.record(s, actor="system:retention", action="retention.purge", section="retention",
+                               after=deleted, detail=", ".join(f"{k}={v}" for k, v in deleted.items()))
     return out
 
 

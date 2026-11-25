@@ -668,9 +668,25 @@ async def memory_status(request: Request, _: User = Depends(perm(P.SETTINGS_READ
         "note": "Checkpoint uzun vadeli hafıza değildir: yarım kalan koşu/turun sürdürülmesi ve konuşmanın working "
                 "memory'si (odak + tur özetleri) içindir.",
         "active_threads": active_inv,
-        "retention": {"checkpoints": "otomatik silinmez; aşağıdan thread bazında silinebilir",
+        "retention": {"checkpoints": ("sahipsiz thread'ler otomatik silinir" if eff["orphan_checkpoints_cleanup"]
+                                      else "sahipsiz thread temizliği kapalı")
+                                     + (f"; {eff['checkpoints_days']} günden eski thread'ler silinir"
+                                        if eff["checkpoints_days"] else "; yaş bazlı TTL kapalı")
+                                     + "; aşağıdan thread bazında da silinebilir",
+                      "store": (f"{eff['store_days']} gün güncellenmeyen öğeler silinir" if eff["store_days"]
+                                else "yaş bazlı TTL kapalı") + "; süresi dolmuş (expires_at) öğeler silinir",
                       "investigations_days": eff["investigations_days"]},
     }
+
+
+@router.get("/retention/preview")
+async def retention_preview(request: Request, _: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
+    """Şu anki ayarlarla bir sonraki retention turunda silinecek kayıt SAYILARI (hiçbir şey silinmez).
+    Audit kayıtları retention kapsamında değildir."""
+    from ...services import retention as ret_svc
+    eff = (await service.effective(_rt(request), s))["retention"]
+    return {"counts": ret_svc.public(await ret_svc.plan(s, eff)), "audit": "silinmez (append-only)",
+            "schedule": "saatlik (worker retention işi)"}
 
 
 @router.post("/memory/threads/{thread_id}/delete")

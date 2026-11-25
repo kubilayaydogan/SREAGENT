@@ -232,6 +232,9 @@ Gereksinim: [`SECURITY_IMPLEMENTATION.md`](SECURITY_IMPLEMENTATION.md) · Tarih:
 
 ## 5. P2 — orta
 
+> Durum (2026-11-25): P2.8, P2.2, P2.3 ve P2.4 canlıda (alembic 0010). P2.7 kodlandı ve push edildi, deploy edilmedi.
+> P2.1 (IdP), P2.5 (yedekleme) ve P2.6 (host firewall) kullanıcı kararıyla ertelendi. Kanıt: `SECURITY_P2_EVIDENCE.md`.
+
 | Adım | Gereksinim | Özet | Kabul |
 |---|---|---|---|
 | P2.1 OIDC SSO + MFA | IAM-01 | `authlib` code flow + PKCE, issuer/audience/nonce doğrulaması, grup → rol eşlemesi; yerel giriş break-glass (admin, audit'li) | Sahte IdP ile negatif testler |

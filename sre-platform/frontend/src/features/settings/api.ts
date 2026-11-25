@@ -313,6 +313,14 @@ export const useLlmProfiles = () => useQuery({ queryKey: skeys.llm, queryFn: () 
 export const useSecrets = () => useQuery({ queryKey: skeys.secrets, queryFn: () => api.get<SecretsList>("/settings/secrets") });
 export const useJobs = () =>
   useQuery({ queryKey: skeys.jobs, queryFn: () => api.get<{ items: JobStatus[] }>("/settings/scheduling/jobs"), refetchInterval: 15_000 });
+/** P2.7: bir sonraki retention turunda silinecek kayıt sayıları (hiçbir şey silinmez). */
+export interface RetentionPreview {
+  counts: Record<string, number>;
+  audit: string;
+  schedule: string;
+}
+export const useRetentionPreview = () =>
+  useQuery({ queryKey: ["settings", "retention-preview"], queryFn: () => api.get<RetentionPreview>("/settings/retention/preview") });
 export const useMemoryStatus = () => useQuery({ queryKey: skeys.memory, queryFn: () => api.get<MemoryStatus>("/settings/memory") });
 export const useSecurity = () => useQuery({ queryKey: skeys.security, queryFn: () => api.get<SecurityInfo>("/settings/security") });
 export const useAudit = (p: { section?: string; action?: string; result?: string; page: number; size?: number }) =>

@@ -44,3 +44,11 @@ describe("secret süre sonu", () => {
     expect(Object.keys(LIFECYCLE_LABEL).sort()).toEqual(["expired", "expiring", "ok", "rotation_due"]);
   });
 });
+
+describe("retention önizleme", () => {
+  it("backend kategorilerinin hepsinin etiketi var", async () => {
+    const { RETENTION_LABEL } = await import("@/features/settings/sections");
+    for (const k of ["investigations", "watch_events", "job_runs", "llm_runs", "llm_usage", "auth_login_failures", "checkpoint_threads_orphan", "checkpoint_threads_ttl", "store_items"])
+      expect(RETENTION_LABEL[k]).toBeTruthy();
+  });
+});

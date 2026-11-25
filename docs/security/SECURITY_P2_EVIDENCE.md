@@ -115,9 +115,42 @@ Vault yok; metadata `sre.secrets` tablosunda tutulur (migration 0010: `expires_a
 - R-P2.4c: Süresi dolan secret çözülmediğinde ayrı bir audit kaydı yazılmaz; günlük hijyen alarmı ve çağıran bileşenin hatası görünür.
 - R-P2.4d: Son kullanım zamanı tutulmaz (okuma yolunda yazma yükü olmaması için).
 
+## P2.7 Retention (kodlandı, test edildi, commit edildi; henüz deploy edilmedi)
+
+Saatlik `retention` işi ile önizleme ucu aynı planı kullanır (`services/retention.py`). Önizleme ucu `GET /settings/retention/preview` hiçbir şey silmez. Migration yok.
+
+| Kategori | Varsayılan | Not |
+|---|---|---|
+| investigations, watch_events, job_runs, llm_runs | Mevcut süreler (180/180/30/180 gün) | Davranış değişmedi; incident'a bağlı, RCA'lı, feedback'li ve sohbetteki investigation'lar saklanır |
+| `llm_usage` (P1.6) | `llm_runs_days` | Yeni; daha önce hiç silinmiyordu |
+| `auth_login_failures` | 1 gün | Throttle penceresi 5 dk; daha eskisinin işlevi yok |
+| Sahipsiz checkpoint thread'leri | **Açık** | Thread'in investigation'ı ya da konuşması yoksa ve son checkpoint 1 günden eskiyse (investigation retention'ının bıraktığı artıklar) |
+| Checkpoint TTL | **Kapalı (0)** | Açılırsa en az 7 gün; aktif (PENDING/RUNNING) investigation thread'i asla silinmez |
+| Store | Süresi dolmuş (`expires_at`) öğeler her zaman; yaş TTL'i **kapalı (0)** | Açılırsa en az 7 gün |
+| Audit | **Silinmez** | Append-only tetikleyiciler; audit retention P1.5'e (DB rolleri) bağlı ve ertelendi |
+
+- Silme olan her turda tek `retention.purge` audit kaydı yazılır (actor `system:retention`, kategori sayıları).
+- Bir turda en çok 1000 thread silinir.
+- Settings › Retention ekranında "bir sonraki turda silinecekler" önizleme kartı var. Memory panelindeki retention metni gerçek ayarı gösterir.
+
+**Test:** `test_retention_memory_and_security_tables`
+- Önizleme sayıları doğru.
+- Sahipsiz eski thread silinir; yeni olan (grace süresi) ve sahibi olanlar kalır.
+- Süresi dolmuş store öğesi silinir, eski ama TTL'i kapalı öğe kalır.
+- Eski `auth_login_failures` ve `llm_usage` satırları silinir.
+- Audit sayısı azalmaz ve `retention.purge` yazılır.
+- `checkpoints_days=3` → 422.
+- TTL açılınca: tamamlanmış investigation'ın thread'i silinir, RUNNING olan korunur; store yaş TTL'i uygulanır.
+
+**Kalan riskler**
+- R-P2.7a: Audit kayıtları sınırsız büyür; P1.5 (DB rol ayrımı) ile owner fonksiyonu gelene kadar silinmez.
+- R-P2.7b: Konuşma silme ucu yok (yalnız arşiv). Konuşma thread'leri yalnız TTL açılırsa silinir.
+- R-P2.7c: Checkpoint yaşı `checkpoint->>'ts'` alanından okunur. LangGraph bu biçimi değiştirirse sorgu güncellenmelidir (test bunu yakalar).
+
 ## Regresyon
 
 - P2.8 + P2.2 (deploy edilen): backend 126 geçti / 1 atlandı, frontend 41/41.
+- P2.7 sonrası (CI ile aynı koşullar): backend 135 geçti; frontend `tsc` temiz, vitest 44/44, build başarılı.
 - P2.4 sonrası (CI ile aynı koşullar): backend 134 geçti (terminoloji testinin frontend kontrolü dahil; migration testi 0010 dahil), sre-agent 126 geçti; frontend `tsc` temiz, vitest 43/43, `vite build` başarılı.
 - P2.3 sonrası: backend 130 geçti, 1 atlandı (migration testi 0009 ve geri alma kontrolü içeriyor); frontend `tsc` temiz, vitest 42/42, `vite build` başarılı.
 
@@ -143,7 +176,7 @@ Vault yok; metadata `sre.secrets` tablosunda tutulur (migration 0010: `expires_a
 | P2.2 Service account API anahtarları | Deploy edildi (alembic 0008) |
 | P2.3 SIEM outbox ve alarm kuralları (varsayılan kapalı) | Deploy edildi (alembic 0009) |
 | P2.4 Secret rotation/expiry metadata | Deploy edildi (alembic 0010) |
-| P2.7 Retention | Sırada; silme varsayılanları muhafazakâr olacak |
-| P2.1 IdP/SSO | Karar bekliyor (IdP seçilmedi) |
-| P2.5 Yedekleme | Karar bekliyor (hedef konum ve şifreleme anahtarı) |
-| P2.6 Host firewall | Onay bekliyor (VM ağ değişikliği) |
+| P2.7 Retention | Kodlandı, test edildi ve push edildi; deploy edilmedi (kullanıcı yalnız commit/push istedi) |
+| P2.1 IdP/SSO | Ertelendi (kullanıcı kararı, 2026-11-25; IdP seçilmedi) |
+| P2.5 Yedekleme | Ertelendi (kullanıcı kararı, 2026-11-25; hedef konum ve şifreleme anahtarı belirsiz) |
+| P2.6 Host firewall | Ertelendi (kullanıcı kararı, 2026-11-25; VM ağ değişikliği) |
