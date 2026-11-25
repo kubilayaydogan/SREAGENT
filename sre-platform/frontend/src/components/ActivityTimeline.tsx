@@ -15,10 +15,10 @@ const STEP_ICON: Record<StepState, ReactElement> = {
 const STEP_TEXT: Record<StepState, string> = { pending: "bekliyor", running: "çalışıyor", done: "tamam", failed: "hata", skipped: "atlandı" };
 
 const TOOL_TEXT: Record<ToolItem["state"], [string, string]> = {
-  running: ["çalışıyor", "text-accent"],
-  ok: ["veri alındı", "text-st-good"],
+  running: ["çalışıyor", "text-accent-text"],
+  ok: ["veri alındı", "text-ink-2"],
   empty: ["veri yok", "text-muted"],
-  failed: ["başarısız", "text-st-critical"],
+  failed: ["başarısız", "text-st-critical-ink"],
   skipped: ["bütçe doldu", "text-muted"],
 };
 
@@ -73,7 +73,7 @@ export function ActivityTimeline({ steps, tools, compact, hideEmpty }: { steps: 
         const isOpen = openStep === s.id || (!compact && openStep === null && st === "running");
         return (
           <li key={s.id} className="relative pb-3 pl-7 last:pb-0">
-            {i < shown.length - 1 && <span aria-hidden className="absolute top-5 bottom-0 left-[7px] w-px bg-line-strong" />}
+            {i < shown.length - 1 && <span aria-hidden className="absolute top-5 bottom-0 left-[7px] w-px bg-line" />}
             <span className="absolute top-0.5 left-0" aria-label={STEP_TEXT[st]}>
               {STEP_ICON[st]}
             </span>
@@ -83,10 +83,10 @@ export function ActivityTimeline({ steps, tools, compact, hideEmpty }: { steps: 
               onClick={() => setOpenStep(isOpen ? "" : s.id)}
               className="flex w-full items-center gap-2 text-left disabled:cursor-default"
             >
-              <span className={cn("text-sm", st === "pending" ? "text-muted" : "text-ink")}>{s.label}</span>
+              <span className={cn("text-[13px]", st === "pending" ? "text-muted" : "text-ink")}>{s.label}</span>
               {ts.length > 0 && (
                 <span className="text-xs text-muted">
-                  {ts.length} sorgu{failedN ? ` · ${failedN} hata` : ""}
+                  {ts.length} query{failedN ? ` · ${failedN} hata` : ""}
                   {dur ? ` · ${fmtDuration(dur)}` : ""}
                 </span>
               )}
@@ -94,7 +94,7 @@ export function ActivityTimeline({ steps, tools, compact, hideEmpty }: { steps: 
             </button>
             {!compact && st === "pending" && <div className="text-xs text-muted">{s.hint}</div>}
             {isOpen && ts.length > 0 && (
-              <ul className="mt-1.5 space-y-1 rounded-md border border-line bg-page/60 p-2">
+              <ul className="mt-1.5 space-y-1 rounded-md border border-line bg-surface-2 p-2">
                 {ts.map((t) => (
                   <ToolRow key={t.id} t={t} />
                 ))}
@@ -114,17 +114,17 @@ function ToolRow({ t }: { t: ToolItem }) {
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         {t.state === "running" ? <Loader2 className="size-3 animate-spin text-accent" /> : t.state === "failed" ? <CircleSlash className="size-3 text-st-critical" /> : <span className="size-3" />}
         <span className="text-ink-2">{SIGNAL_LABEL[t.signal] ?? t.signal}</span>
-        <span className="font-mono text-[10px] text-muted">{t.tool}</span>
+        <span className="font-mono text-2xs text-muted">{t.tool}</span>
         <span className={cls}>{label}</span>
         {t.records != null && t.state !== "failed" && <span className="text-muted">{t.records} kayıt</span>}
         {t.durationMs != null && <span className="text-muted">{fmtDuration(t.durationMs)}</span>}
         {t.queryId && (
-          <span className="font-mono text-[10px] text-muted" title="Dynatrace queryId (evidence referansı)">
+          <span className="font-mono text-2xs text-muted" title="Dynatrace queryId (evidence referansı)">
             q:{t.queryId.slice(0, 12)}
           </span>
         )}
       </div>
-      {t.error && <div className="mt-0.5 pl-5 font-mono text-[11px] break-all text-[#f08a8a]">{t.error}</div>}
+      {t.error && <div className="mt-0.5 pl-5 font-mono text-2xs break-all text-st-critical-ink">{t.error}</div>}
     </li>
   );
 }

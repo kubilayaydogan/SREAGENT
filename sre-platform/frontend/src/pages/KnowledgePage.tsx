@@ -6,7 +6,7 @@ import { AppSelect, SearchInput } from "@/components/filters";
 import { Markdown } from "@/components/Markdown";
 import { Button, Card, CardBody, Input, Label, Select, Skeleton, Textarea } from "@/components/ui/primitives";
 import { Dialog, TabPanel, Tabs } from "@/components/ui/overlay";
-import { EmptyState, ErrorState, PageHeader, Pagination } from "@/components/ui/states";
+import { EmptyState, ErrorState, Page, PageHeader, Pagination } from "@/components/ui/states";
 import { errorToast, useKnownIssue, useKnownIssues, useRunbooks } from "@/hooks/queries";
 import { api } from "@/services/api";
 import { useAuth } from "@/services/auth";
@@ -16,7 +16,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Runbook } from "@/types/api";
 
-const RISK_CLS = { low: "text-st-good", medium: "text-st-warning", high: "text-st-serious" } as const;
+const RISK_CLS = { low: "text-ink-2", medium: "text-st-warning-ink", high: "text-st-serious-ink" } as const;
 const RISK_TR = { low: "düşük", medium: "orta", high: "yüksek" } as const;
 
 function IssueDetail({ id }: { id: string }) {
@@ -24,12 +24,12 @@ function IssueDetail({ id }: { id: string }) {
   if (error) return <ErrorState error={error} />;
   if (isLoading || !k) return <Skeleton className="m-4 h-64" />;
   return (
-    <div className="space-y-4 p-4 text-sm">
+    <div className="space-y-4 p-4 text-[13px]">
       <div>
-        <h2 className="text-base font-semibold text-ink">{k.title}</h2>
+        <h2 className="text-[15px] font-semibold text-ink">{k.title}</h2>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
           {k.verified && (
-            <span className="inline-flex items-center gap-1 text-st-good">
+            <span className="inline-flex items-center gap-1 text-st-good-ink">
               <BadgeCheck className="size-3.5" /> doğrulanmış
             </span>
           )}
@@ -37,7 +37,7 @@ function IssueDetail({ id }: { id: string }) {
           {k.mechanism && <span>{mechanismLabel(k.mechanism)}</span>}
           <span>· {k.origin}</span>
           {k.tags.map((t) => (
-            <span key={t} className="rounded bg-surface-3 px-1.5">
+            <span key={t} className="rounded-sm border border-line-strong px-1 text-2xs">
               {t}
             </span>
           ))}
@@ -51,13 +51,13 @@ function IssueDetail({ id }: { id: string }) {
       ].map(([t, v]) =>
         v ? (
           <div key={t}>
-            <div className="mb-1 text-xs font-medium text-ink">{t}</div>
+            <div className="mb-1 text-xs font-medium text-muted">{t}</div>
             <Markdown>{v}</Markdown>
           </div>
         ) : null,
       )}
       <div>
-        <div className="mb-1 text-xs font-medium text-ink">İlgili geçmiş incident'lar</div>
+        <div className="mb-1 text-xs font-medium text-muted">İlgili geçmiş incident'lar</div>
         {k.related_incidents.length ? (
           <ul className="divide-y divide-line rounded-md border border-line">
             {k.related_incidents.map((i) => (
@@ -75,7 +75,7 @@ function IssueDetail({ id }: { id: string }) {
         )}
       </div>
       <div>
-        <div className="mb-1 text-xs font-medium text-ink">Aynı mechanism ile araştırmalar</div>
+        <div className="mb-1 text-xs font-medium text-muted">Aynı mechanism ile investigation'lar</div>
         {k.related_investigations.length ? (
           <ul className="divide-y divide-line rounded-md border border-line">
             {k.related_investigations.map((i) => (
@@ -89,7 +89,7 @@ function IssueDetail({ id }: { id: string }) {
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted">Eşleşen araştırma yok.</p>
+          <p className="text-xs text-muted">Eşleşen investigation yok.</p>
         )}
       </div>
     </div>
@@ -98,12 +98,12 @@ function IssueDetail({ id }: { id: string }) {
 
 function RunbookDetail({ rb }: { rb: Runbook }) {
   return (
-    <div className="space-y-3 p-4 text-sm">
-      <h2 className="text-base font-semibold text-ink">{rb.title}</h2>
+    <div className="space-y-3 p-4 text-[13px]">
+      <h2 className="text-[15px] font-semibold text-ink">{rb.title}</h2>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
         <span className={RISK_CLS[rb.risk_level]}>risk: {RISK_TR[rb.risk_level]}</span>
         {rb.requires_approval && (
-          <span className="inline-flex items-center gap-1 text-st-serious">
+          <span className="inline-flex items-center gap-1 text-st-serious-ink">
             <ShieldAlert className="size-3.5" /> uygulamadan önce onay gerekli
           </span>
         )}
@@ -111,11 +111,11 @@ function RunbookDetail({ rb }: { rb: Runbook }) {
         {rb.mechanism && <span>{mechanismLabel(rb.mechanism)}</span>}
       </div>
       {rb.description && <p className="text-ink-2">{rb.description}</p>}
-      <div className="rounded-md border border-line bg-page/50 p-3">
+      <div className="rounded-md border border-line bg-surface-2 p-3">
         <Markdown>{rb.procedure}</Markdown>
       </div>
       {rb.requires_approval && (
-        <Link to="/approvals" className="inline-block text-xs text-accent hover:underline">
+        <Link to="/approvals" className="inline-block text-xs text-accent-text hover:underline">
           Onay talebi oluştur →
         </Link>
       )}
@@ -159,17 +159,17 @@ function NewIssue({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boo
     >
       <div className="space-y-3">
         <div>
-          <Label>Başlık</Label>
-          <Input value={f.title} maxLength={300} onChange={(e) => setF({ ...f, title: e.target.value })} />
+          <Label htmlFor="ki-title">Başlık</Label>
+          <Input id="ki-title" value={f.title} maxLength={300} onChange={(e) => setF({ ...f, title: e.target.value })} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>Uygulama</Label>
+            <Label>Servis</Label>
             <AppSelect value={f.application_id} onChange={(v) => setF({ ...f, application_id: v })} allLabel="—" className="w-full" />
           </div>
           <div>
-            <Label>Mechanism</Label>
-            <Select value={f.mechanism} onChange={(e) => setF({ ...f, mechanism: e.target.value })}>
+            <Label htmlFor="ki-mech">Mechanism</Label>
+            <Select id="ki-mech" value={f.mechanism} onChange={(e) => setF({ ...f, mechanism: e.target.value })}>
               <option value="">—</option>
               {Object.entries(MECHANISM_LABEL).map(([k, l]) => (
                 <option key={k} value={k}>
@@ -181,8 +181,8 @@ function NewIssue({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boo
         </div>
         {(["symptoms", "root_cause", "resolution"] as const).map((k) => (
           <div key={k}>
-            <Label>{{ symptoms: "Belirtiler", root_cause: "Root Cause", resolution: "Çözüm" }[k]}</Label>
-            <Textarea rows={3} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+            <Label htmlFor={`ki-${k}`}>{{ symptoms: "Belirtiler", root_cause: "Root Cause", resolution: "Çözüm" }[k]}</Label>
+            <Textarea id={`ki-${k}`} rows={3} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
           </div>
         ))}
         <label className="flex items-center gap-2 text-xs text-ink-2">
@@ -216,14 +216,14 @@ export default function KnowledgePage() {
   const selRunbook = runbooks.data?.items.find((r) => r.id === selected);
 
   return (
-    <div className="mx-auto max-w-[1500px] p-4 lg:p-6">
+    <Page>
       <PageHeader
-        title="Bilgi Bankası"
-        description="Bilinen sorunlar ve runbook'lar — ajan benzer durumlarda bunları önerir"
+        title="Bilgi bankası"
+        description="Bilinen sorunlar ve runbook'lar · agent benzer durumlarda bunları Recommended Actions'ta önerir"
         actions={
           can("sre") &&
           tab === "issues" && (
-            <Button variant="primary" onClick={() => setAdding(true)}>
+            <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
               <Plus /> Bilinen sorun
             </Button>
           )
@@ -237,7 +237,7 @@ export default function KnowledgePage() {
           { value: "runbooks", label: "Runbook'lar" },
         ]}
       >
-        <div className="mb-3 flex flex-wrap gap-2">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           <SearchInput value={g("q")} onChange={(v) => set({ q: v, page: "" })} placeholder="Ara…" />
           <AppSelect value={g("app")} onChange={(v) => set({ app: v, page: "" })} />
           <Select aria-label="mechanism" value={g("mechanism")} onChange={(e) => set({ mechanism: e.target.value, page: "" })} className="w-52">
@@ -251,8 +251,8 @@ export default function KnowledgePage() {
         </div>
         {(["issues", "runbooks"] as const).map((t) => (
           <TabPanel key={t} value={t}>
-            <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
-              <Card className="h-fit">
+            <div className="grid items-start gap-3 lg:grid-cols-[22rem_1fr]">
+              <Card className="lg:sticky lg:top-3">
                 {list.isLoading ? (
                   <Skeleton className="m-4 h-64" />
                 ) : list.error ? (
@@ -264,11 +264,18 @@ export default function KnowledgePage() {
                     <ul className="divide-y divide-line">
                       {(list.data.items as { id: string; title: string; mechanism: string | null; application_id: string | null }[]).map((x) => (
                         <li key={x.id}>
-                          <button onClick={() => set({ id: x.id })} className={cn("block w-full px-4 py-2.5 text-left hover:bg-surface-2", selected === x.id && "bg-surface-3")}>
-                            <div className="text-sm text-ink">{x.title}</div>
-                            <div className="text-[11px] text-muted">
+                          <button
+                            onClick={() => set({ id: x.id })}
+                            aria-current={selected === x.id ? "true" : undefined}
+                            className={cn(
+                              "block w-full border-l-2 px-3 py-2 text-left hover:bg-surface-2",
+                              selected === x.id ? "border-accent bg-surface-2" : "border-transparent",
+                            )}
+                          >
+                            <div className="text-[13px] text-ink">{x.title}</div>
+                            <div className="mt-0.5 flex items-center gap-2 text-2xs text-muted">
                               {mechanismLabel(x.mechanism)}
-                              {x.application_id ? ` · ${x.application_id}` : ""}
+                              {x.application_id && <AppTag id={x.application_id} />}
                             </div>
                           </button>
                         </li>
@@ -280,7 +287,7 @@ export default function KnowledgePage() {
               </Card>
               <Card className="min-h-64">
                 {!selected ? (
-                  <EmptyState title="Bir kayıt seçin" />
+                  <EmptyState title="Bir kayıt seçin" description="Soldaki listeden bir bilinen sorun ya da runbook seçin." />
                 ) : t === "issues" ? (
                   <IssueDetail id={selected} />
                 ) : selRunbook ? (
@@ -296,7 +303,7 @@ export default function KnowledgePage() {
         ))}
       </Tabs>
       {adding && <NewIssue open={adding} onOpenChange={setAdding} />}
-    </div>
+    </Page>
   );
 }
 

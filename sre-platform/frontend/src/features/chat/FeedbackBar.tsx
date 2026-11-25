@@ -25,7 +25,7 @@ export function FeedbackBar({ investigationId, rcaId, className }: { investigati
   return (
     <div className={cn("flex items-center gap-1", className)}>
       {mine && (
-        <span className="mr-1 inline-flex items-center gap-1 text-[11px] text-muted">
+        <span className="mr-1 inline-flex items-center gap-1 text-2xs text-muted">
           <Check className="size-3" /> {VERDICT_LABEL[mine.verdict]}
           {mine.rating ? ` · ${mine.rating}/5` : ""}
         </span>

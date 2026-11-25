@@ -8,7 +8,8 @@ import { AppSelect } from "@/components/filters";
 import { ToolTable } from "@/components/RecordTables";
 import { JobsCard } from "@/features/JobsCard";
 import { Button, Card, CardBody, CardHeader, Input, Label, Select, Skeleton } from "@/components/ui/primitives";
-import { EmptyState, ErrorState, PageHeader } from "@/components/ui/states";
+import { EmptyState, ErrorState, Page, PageHeader } from "@/components/ui/states";
+import { MetricStrip, StatTile } from "@/components/StatTile";
 import { errorToast, useInvestigation, useInvestigations, useTools } from "@/hooks/queries";
 import { useAgentRun } from "@/hooks/useAgentRun";
 import { api } from "@/services/api";
@@ -39,22 +40,22 @@ function ManualInvestigation() {
       });
       void run.attach(r.run_id, r.stream_url);
     } catch (e) {
-      errorToast(e, "Araştırma başlatılamadı");
+      errorToast(e, "Investigation başlatılamadı");
     }
   }
 
   return (
     <Card>
-      <CardHeader title="Manuel araştırma" description="Sohbet olmadan tam telemetri analizi; adımlar canlı izlenir" />
+      <CardHeader title="Manuel investigation" description="Sohbet olmadan tam telemetri analizi · adımlar canlı izlenir" />
       <CardBody className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <Label>Uygulama</Label>
+            <Label>Servis</Label>
             <AppSelect value={app} onChange={setApp} className="w-full" />
           </div>
           <div>
-            <Label>Pencere</Label>
-            <Select value={minutes} onChange={(e) => setMinutes(e.target.value)}>
+            <Label htmlFor="mi-win">Pencere</Label>
+            <Select id="mi-win" value={minutes} onChange={(e) => setMinutes(e.target.value)}>
               {[
                 ["15", "Son 15 dk"],
                 ["30", "Son 30 dk"],
@@ -70,37 +71,37 @@ function ManualInvestigation() {
           </div>
         </div>
         <div>
-          <Label>Başlık (isteğe bağlı)</Label>
-          <Input value={title} maxLength={300} onChange={(e) => setTitle(e.target.value)} placeholder="örn. Check-in latency 14:20" />
+          <Label htmlFor="mi-title">Başlık (isteğe bağlı)</Label>
+          <Input id="mi-title" value={title} maxLength={300} onChange={(e) => setTitle(e.target.value)} placeholder="örn. Check-in latency 14:20" />
         </div>
         <label className="flex items-center gap-2 text-xs text-ink-2">
-          <input type="checkbox" checked={useLlm} onChange={(e) => setUseLlm(e.target.checked)} className="accent-[#3987e5]" />
+          <input type="checkbox" checked={useLlm} onChange={(e) => setUseLlm(e.target.checked)} className="accent-accent" />
           Claude ile açıklama üret (kapalıysa deterministik özet)
         </label>
         <div className="flex gap-2">
           {busy ? (
-            <Button variant="outline" onClick={run.cancel}>
+            <Button size="sm" variant="outline" onClick={run.cancel}>
               <Square /> Durdur
             </Button>
           ) : (
-            <Button variant="primary" onClick={start}>
+            <Button size="sm" variant="primary" onClick={start}>
               <Play /> Başlat
             </Button>
           )}
           {run.state.investigationId && run.state.phase !== "streaming" && (
-            <Button variant="ghost" onClick={() => nav(`/investigations/${run.state.investigationId}`)}>
+            <Button size="sm" variant="ghost" onClick={() => nav(`/investigations/${run.state.investigationId}`)}>
               Sonucu aç →
             </Button>
           )}
         </div>
         {run.state.phase !== "idle" && (
-          <div className="rounded-md border border-line bg-page/40 p-3">
+          <div className="rounded-md border border-line bg-surface-2 p-3">
             <div className="mb-2 text-xs text-muted" aria-live="polite">
               {run.state.thinking[run.state.thinking.length - 1]?.message ?? "Başlatılıyor…"}
-              {run.state.connection === "reconnecting" && <span className="ml-2 text-st-warning">yeniden bağlanılıyor…</span>}
+              {run.state.connection === "reconnecting" && <span className="ml-2 text-st-warning-ink">yeniden bağlanılıyor…</span>}
             </div>
             <ActivityTimeline steps={run.state.steps} tools={run.state.tools} />
-            {run.state.error && <p className="mt-2 text-xs text-[#f08a8a]">{run.state.error.message}</p>}
+            {run.state.error && <p className="mt-2 text-xs text-st-critical-ink">{run.state.error.message}</p>}
           </div>
         )}
       </CardBody>
@@ -123,8 +124,9 @@ function InvestigationActivity({ id }: { id: string }) {
     if (inv.data.status === "FAILED") steps.rca = "failed";
   }
   const totalMs = (tools.data ?? []).reduce((a, t) => a + (t.duration_ms ?? 0), 0);
+  const failedN = (tools.data ?? []).filter((t) => t.execution_status === "FAILED").length;
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Card>
         <CardHeader
           title={inv.data?.title ?? "…"}
@@ -147,39 +149,32 @@ function InvestigationActivity({ id }: { id: string }) {
             )
           }
         />
-        <CardBody className="grid gap-6 lg:grid-cols-[340px_1fr]">
+        <CardBody className="grid gap-5 lg:grid-cols-[22rem_1fr]">
           <div>
             {tools.isLoading ? <Skeleton className="h-64" /> : <ActivityTimeline steps={steps} tools={items} />}
           </div>
-          <div className="space-y-2 text-sm">
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <div className="rounded-md border border-line p-2">
-                <div className="text-muted">Query</div>
-                <div className="text-lg text-ink tabular-nums">{tools.data?.length ?? "—"}</div>
-              </div>
-              <div className="rounded-md border border-line p-2">
-                <div className="text-muted">Başarısız</div>
-                <div className={cn("text-lg tabular-nums", (tools.data ?? []).some((t) => t.execution_status === "FAILED") ? "text-st-critical" : "text-ink")}>
-                  {(tools.data ?? []).filter((t) => t.execution_status === "FAILED").length}
-                </div>
-              </div>
-              <div className="rounded-md border border-line p-2">
-                <div className="text-muted">Toplam query süresi</div>
-                <div className="text-lg text-ink tabular-nums">{fmtDuration(totalMs)}</div>
-              </div>
-            </div>
+          <div className="space-y-2 text-[13px]">
+            <MetricStrip className="grid-cols-3">
+              <StatTile label="DQL query" value={tools.data?.length ?? "—"} />
+              <StatTile
+                label="Başarısız"
+                value={failedN}
+                tone={failedN ? "text-st-critical-ink" : undefined}
+              />
+              <StatTile label="Toplam query süresi" value={fmtDuration(totalMs)} />
+            </MetricStrip>
             {inv.data?.primary_mechanism && (
               <p className="text-xs text-ink-2">
-                Olası mechanism: <b className="text-ink">{mechanismLabel(inv.data.primary_mechanism)}</b>
+                Olası mechanism: <b className="font-medium text-ink">{mechanismLabel(inv.data.primary_mechanism)}</b>
               </p>
             )}
-            {inv.data?.error && <p className="font-mono text-xs text-[#f08a8a]">{inv.data.error}</p>}
+            {inv.data?.error && <p className="font-mono text-xs text-st-critical-ink">{inv.data.error}</p>}
           </div>
         </CardBody>
       </Card>
       <Card>
-        <CardHeader title="Araç çalıştırma geçmişi" description="Her satır bir Dynatrace MCP çağrısı (execute-dql) veya iç adım" />
-        {tools.isLoading ? <Skeleton className="m-4 h-40" /> : <ToolTable rows={tools.data ?? []} />}
+        <CardHeader title="Tool executions" description="Her satır bir Dynatrace MCP çağrısı (execute-dql) veya iç adım" />
+        {tools.isLoading ? <Skeleton className="m-3 h-40" /> : <ToolTable rows={tools.data ?? []} />}
       </Card>
     </div>
   );
@@ -190,24 +185,28 @@ export default function ActivityPage() {
   const { can } = useAuth();
   const recent = useInvestigations({ size: 15 });
   return (
-    <div className="mx-auto max-w-[1500px] p-4 lg:p-6">
-      <PageHeader title="Agent Activity" description="Ajanın çalışma adımları: araç, durum, süre, error ve evidence referansları" />
-      <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
-        <div className="space-y-4">
+    <Page>
+      <PageHeader title="Agent Activity" description="Agent'ın çalışma adımları: tool, durum, süre, error ve evidence referansları" />
+      <div className="grid items-start gap-3 xl:grid-cols-[20rem_1fr]">
+        <div className="space-y-3">
           <Card>
-            <CardHeader title="Son araştırmalar" />
+            <CardHeader title="Son investigation'lar" />
             <ul className="max-h-[480px] divide-y divide-line overflow-y-auto">
               {recent.data?.items.map((i) => (
                 <li key={i.id}>
-                  <Link to={`/activity/${i.id}`} className={cn("block px-4 py-2 hover:bg-surface-2", i.id === investigationId && "bg-surface-3")}>
-                    <div className="truncate text-sm text-ink">{i.title}</div>
-                    <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted">
+                  <Link
+                    to={`/activity/${i.id}`}
+                    aria-current={i.id === investigationId ? "page" : undefined}
+                    className={cn("block border-l-2 px-3 py-2 hover:bg-surface-2", i.id === investigationId ? "border-accent bg-surface-2" : "border-transparent")}
+                  >
+                    <div className="truncate text-[13px] text-ink">{i.title}</div>
+                    <div className="mt-0.5 flex items-center gap-2 text-2xs text-muted">
                       <InvestigationStatusBadge status={i.status} /> {fmtRelative(i.created_at)}
                     </div>
                   </Link>
                 </li>
               ))}
-              {recent.data && !recent.data.items.length && <EmptyState title="Henüz araştırma yok" />}
+              {recent.data && !recent.data.items.length && <EmptyState title="Henüz investigation yok" />}
             </ul>
           </Card>
           {can("sre") && <ManualInvestigation />}
@@ -218,11 +217,11 @@ export default function ActivityPage() {
             <InvestigationActivity id={investigationId} />
           ) : (
             <Card>
-              <EmptyState title="Bir araştırma seçin" description="Soldan bir araştırma seçin veya manuel araştırma başlatın. Sohbetteki canlı adımlar AI Investigation ekranında da görünür." />
+              <EmptyState title="Bir investigation seçin" description="Soldan bir investigation seçin veya manuel investigation başlatın. Sohbetteki canlı adımlar AI Investigation ekranında da görünür." />
             </Card>
           )}
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

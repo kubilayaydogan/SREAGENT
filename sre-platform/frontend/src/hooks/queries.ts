@@ -83,6 +83,20 @@ export const useDashboard = (range: RangeKey, app?: string) =>
     placeholderData: keepPreviousData,
   });
 
+/** Risk score geçmişi: zamanlanmış health check investigation'ları (her biri deterministik risk score taşır).
+ *  Mevcut /investigations API'si; yeni backend sözleşmesi yok. Health check tüm uygulamaları kapsar (application_id
+ *  boş); uygulama kırılımı her raporun risk.apps alanındadır. */
+export function useRiskHistory(hours = 24) {
+  const since = new Date(Math.floor(Date.now() / 300_000) * 300_000 - hours * 3_600_000).toISOString();
+  const p = { trigger: "scheduled", since, size: 200, sort: "-created_at" };
+  return useQuery({
+    queryKey: ["risk-history", hours],
+    queryFn: () => api.get<Page<Investigation>>(`/investigations${qs(p)}`),
+    refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
 // ---------------------------------------------------------------- konuşmalar
 export const useConversations = (q?: string) =>
   useQuery({

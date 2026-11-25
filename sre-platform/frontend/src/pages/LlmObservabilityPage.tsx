@@ -2,19 +2,20 @@ import { AlertTriangle, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
-import { StatTile } from "@/components/StatTile";
+import { MetricStrip, StatTile } from "@/components/StatTile";
+import { RangeTabs, RefreshControl } from "@/components/filters";
 import { buttonVariants, Card, CardBody, CardHeader } from "@/components/ui/primitives";
 import { TabPanel, Tabs } from "@/components/ui/overlay";
-import { EmptyState, ErrorState, PageHeader, TableSkeleton } from "@/components/ui/states";
+import { EmptyState, ErrorState, Page, PageHeader, TableSkeleton } from "@/components/ui/states";
 import { useLlmObservability } from "@/hooks/queries";
 import { CHART } from "@/lib/colors";
 import { cn, fmtMs, fmtNum, fmtPct, fmtRelative, fmtTime, shortId } from "@/lib/utils";
 import type { LlmAgg, LlmCallError, LlmObservability, LlmRange, LlmTrace } from "@/types/api";
 
-const RANGES: { value: LlmRange; label: string }[] = [
-  { value: "24h", label: "Son 24 saat" },
-  { value: "7d", label: "Son 7 gün" },
-  { value: "30d", label: "Son 30 gün" },
+const RANGES: { value: LlmRange; label: string; title: string }[] = [
+  { value: "24h", label: "24h", title: "Son 24 saat" },
+  { value: "7d", label: "7d", title: "Son 7 gün" },
+  { value: "30d", label: "30d", title: "Son 30 gün" },
 ];
 
 export const CALL_LABEL: Record<string, string> = {
@@ -29,8 +30,8 @@ export const TRIGGER_LABEL: Record<string, string> = {
   watch: "Watch",
   "watch-incident": "Watch incident",
   manual: "Manuel",
-  analyze: "CLI analiz",
-  ask: "CLI soru",
+  analyze: "Analiz (eski)",
+  ask: "Soru yorumlama (eski)",
   rca: "RCA raporu",
   "watch-recovery": "Watch recovery",
   "eval-real": "Eval",
@@ -62,24 +63,6 @@ export function fillSeries(d: Pick<LlmObservability, "start" | "end" | "bucket" 
   return out;
 }
 
-function RangeSwitch({ value, onChange }: { value: LlmRange; onChange: (v: LlmRange) => void }) {
-  return (
-    <div role="radiogroup" aria-label="zaman aralığı" className="inline-flex rounded-md border border-line-strong bg-surface-2 p-0.5">
-      {RANGES.map((r) => (
-        <button
-          key={r.value}
-          role="radio"
-          aria-checked={value === r.value}
-          onClick={() => onChange(r.value)}
-          className={cn("rounded px-2.5 py-1 text-xs font-medium transition-colors", value === r.value ? "bg-surface-3 text-ink" : "text-muted hover:text-ink")}
-        >
-          {r.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function SyncStatus({ d }: { d: LlmObservability }) {
   const { last_ok_at, last_error, last_error_at } = d.sync;
   const failing = last_error && (!last_ok_at || (last_error_at ?? "") > last_ok_at);
@@ -87,7 +70,7 @@ function SyncStatus({ d }: { d: LlmObservability }) {
     <div className="text-xs text-muted">
       {last_ok_at ? <>Son senkron {fmtRelative(last_ok_at)}</> : "Henüz senkron yapılmadı"}
       {failing && (
-        <div role="alert" className="mt-1 inline-flex items-center gap-1.5 text-st-serious">
+        <div role="alert" className="mt-1 inline-flex items-center gap-1.5 text-st-serious-ink">
           <AlertTriangle className="size-3.5" /> Son senkron başarısız ({fmtRelative(last_error_at)}): {last_error}
         </div>
       )}
@@ -99,33 +82,33 @@ function AggTable({ rows, keyLabel, label }: { rows: (LlmAgg & { key: string })[
   if (!rows.length) return <EmptyState title="Bu aralıkta LLM çağrısı yok" />;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="text-left text-xs text-muted">
-          <tr className="border-b border-line">
-            <th className="px-3 py-2 font-medium">{keyLabel}</th>
-            <th className="px-3 py-2 text-right font-medium">Çağrı</th>
-            <th className="px-3 py-2 text-right font-medium">Hata</th>
-            <th className="px-3 py-2 text-right font-medium">Token (girdi / çıktı)</th>
-            <th className="px-3 py-2 text-right font-medium">p50 / p95</th>
-            <th className="px-3 py-2 text-right font-medium">Maliyet</th>
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>{keyLabel}</th>
+            <th className="num">Çağrı</th>
+            <th className="num">Hata</th>
+            <th className="num">Token (girdi / çıktı)</th>
+            <th className="num">p50 / p95</th>
+            <th className="num">Maliyet</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.key} className="border-b border-line hover:bg-surface-2">
-              <td className="px-3 py-2 text-ink">
+            <tr key={r.key}>
+              <td className="primary">
                 {label(r.key)}
-                {label(r.key) !== r.key && <div className="font-mono text-[11px] text-muted">{r.key}</div>}
+                {label(r.key) !== r.key && <div className="font-mono text-2xs text-muted">{r.key}</div>}
               </td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink-2">{fmtNum(r.calls)}</td>
-              <td className={cn("px-3 py-2 text-right tabular-nums", r.errors ? "text-st-critical" : "text-ink-2")}>{fmtNum(r.errors)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink-2">
+              <td className="num">{fmtNum(r.calls)}</td>
+              <td className={cn("num", r.errors ? "text-st-critical-ink" : undefined)}>{fmtNum(r.errors)}</td>
+              <td className="num">
                 {fmtTok(r.input_tokens)} / {fmtTok(r.output_tokens)}
               </td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink-2">
+              <td className="num">
                 {fmtMs(r.p50_ms)} / {fmtMs(r.p95_ms)}
               </td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink">{fmtUsd(r.cost_usd)}</td>
+              <td className="num text-ink">{fmtUsd(r.cost_usd)}</td>
             </tr>
           ))}
         </tbody>
@@ -139,7 +122,7 @@ function Links({ url, investigationId, conversationId }: { url: string | null; i
     <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
       {investigationId && (
         <Link className="text-ink-2 hover:text-ink" to={`/investigations/${investigationId}`}>
-          araştırma {shortId(investigationId)}
+          investigation {shortId(investigationId)}
         </Link>
       )}
       {conversationId && (
@@ -160,37 +143,37 @@ function TraceTable({ rows, empty }: { rows: LlmTrace[]; empty: string }) {
   if (!rows.length) return <EmptyState title={empty} />;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="text-left text-xs text-muted">
-          <tr className="border-b border-line">
-            <th className="px-3 py-2 font-medium">Zaman</th>
-            <th className="px-3 py-2 font-medium">Trace</th>
-            <th className="px-3 py-2 font-medium">Model</th>
-            <th className="px-3 py-2 text-right font-medium">Süre</th>
-            <th className="px-3 py-2 text-right font-medium">LLM çağrısı</th>
-            <th className="px-3 py-2 text-right font-medium">Token</th>
-            <th className="px-3 py-2 text-right font-medium">Maliyet</th>
-            <th className="px-3 py-2" />
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Zaman</th>
+            <th>Trace</th>
+            <th>Model</th>
+            <th className="num">Süre</th>
+            <th className="num">LLM çağrısı</th>
+            <th className="num">Token</th>
+            <th className="num">Maliyet</th>
+            <th />
           </tr>
         </thead>
         <tbody>
           {rows.map((t) => (
-            <tr key={t.id} className={cn("border-b border-line align-top hover:bg-surface-2", t.status === "error" && "bg-st-critical/5")}>
-              <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-2">{fmtTime(t.start_time)}</td>
-              <td className="px-3 py-2">
+            <tr key={t.id} className={cn("[&>td]:align-top", t.status === "error" && "[&>td:first-child]:shadow-[inset_2px_0_0_var(--color-st-critical)]")}>
+              <td className="text-xs whitespace-nowrap">{fmtTime(t.start_time)}</td>
+              <td>
                 <div className="text-ink">
                   {ROOT_LABEL[t.name] ?? CALL_LABEL[t.name] ?? t.name}
                   {t.trigger && <span className="ml-1.5 text-xs text-muted">· {TRIGGER_LABEL[t.trigger] ?? t.trigger}</span>}
                 </div>
-                {t.status === "error" && <div className="mt-0.5 max-w-md truncate text-xs text-st-critical" title={t.error ?? ""}>hata: {t.error ?? "—"}</div>}
+                {t.status === "error" && <div className="mt-0.5 max-w-md truncate text-xs text-st-critical-ink" title={t.error ?? ""}>hata: {t.error ?? "—"}</div>}
                 {t.status === "pending" && <div className="mt-0.5 text-xs text-muted">sürüyor</div>}
               </td>
-              <td className="px-3 py-2 font-mono text-[11px] text-ink-2">{t.model ?? "—"}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink-2">{fmtMs(t.latency_ms)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink-2">{fmtNum(t.llm_calls)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink-2">{fmtTok(t.tokens)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink">{fmtUsd(t.cost_usd)}</td>
-              <td className="px-3 py-2">
+              <td className="font-mono text-2xs">{t.model ?? "—"}</td>
+              <td className="num">{fmtMs(t.latency_ms)}</td>
+              <td className="num">{fmtNum(t.llm_calls)}</td>
+              <td className="num">{fmtTok(t.tokens)}</td>
+              <td className="num text-ink">{fmtUsd(t.cost_usd)}</td>
+              <td>
                 <Links url={t.url} investigationId={t.investigation_id} conversationId={t.conversation_id} />
               </td>
             </tr>
@@ -205,26 +188,26 @@ function CallErrorTable({ rows }: { rows: LlmCallError[] }) {
   if (!rows.length) return <EmptyState title="Bu aralıkta hatalı LLM çağrısı yok" />;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="text-left text-xs text-muted">
-          <tr className="border-b border-line">
-            <th className="px-3 py-2 font-medium">Zaman</th>
-            <th className="px-3 py-2 font-medium">Çağrı</th>
-            <th className="px-3 py-2 font-medium">Model</th>
-            <th className="px-3 py-2 font-medium">Hata</th>
-            <th className="px-3 py-2 text-right font-medium">Süre</th>
-            <th className="px-3 py-2" />
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Zaman</th>
+            <th>Çağrı</th>
+            <th>Model</th>
+            <th>Hata</th>
+            <th className="num">Süre</th>
+            <th />
           </tr>
         </thead>
         <tbody>
           {rows.map((e) => (
-            <tr key={e.id} className="border-b border-line align-top hover:bg-surface-2">
-              <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-2">{fmtTime(e.start_time)}</td>
-              <td className="px-3 py-2 text-ink">{CALL_LABEL[e.name] ?? e.name}</td>
-              <td className="px-3 py-2 font-mono text-[11px] text-ink-2">{e.model ?? "—"}</td>
-              <td className="max-w-md px-3 py-2 text-xs text-st-critical">{e.error ?? "—"}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink-2">{fmtMs(e.latency_ms)}</td>
-              <td className="px-3 py-2">
+            <tr key={e.id} className="[&>td]:align-top">
+              <td className="text-xs whitespace-nowrap">{fmtTime(e.start_time)}</td>
+              <td className="primary">{CALL_LABEL[e.name] ?? e.name}</td>
+              <td className="font-mono text-2xs">{e.model ?? "—"}</td>
+              <td className="max-w-md text-xs text-st-critical-ink">{e.error ?? "—"}</td>
+              <td className="num">{fmtMs(e.latency_ms)}</td>
+              <td>
                 <Links url={e.url} investigationId={e.investigation_id} />
               </td>
             </tr>
@@ -244,16 +227,21 @@ export default function LlmObservabilityPage() {
   const t = d?.totals;
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-4 p-4 lg:p-6">
+    <Page className="space-y-3">
       <PageHeader
         title="LLM Monitoring"
-        description="LangSmith trace'lerinden periyodik senkronlanan özet: çağrı, token, maliyet, latency ve hatalar. Prompt/cevap içeriği platformda tutulmaz."
-        actions={<RangeSwitch value={range} onChange={setRange} />}
+        description="LangSmith trace'lerinden periyodik senkronlanan özet · prompt/cevap içeriği platformda tutulmaz"
+        meta={d && <SyncStatus d={d} />}
+        actions={
+          <>
+            <RangeTabs value={range} onChange={setRange} options={RANGES} />
+            <RefreshControl onRefresh={() => q.refetch()} fetching={q.isFetching} updatedAt={q.dataUpdatedAt} auto="60 sn" />
+          </>
+        }
       />
       {q.error && <ErrorState error={q.error} onRetry={() => q.refetch()} />}
-      {d && <SyncStatus d={d} />}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <MetricStrip className="grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <StatTile label="LLM çağrısı" loading={!d} value={fmtNum(t?.calls)} sub={t && `${fmtNum(t.traces)} trace`} />
         <StatTile
           label="Error rate"
@@ -266,21 +254,22 @@ export default function LlmObservabilityPage() {
         <StatTile label="Token (girdi / çıktı)" loading={!d} value={t ? `${fmtTok(t.input_tokens)} / ${fmtTok(t.output_tokens)}` : "—"} />
         <StatTile label="p95 LLM latency" loading={!d} missing={t?.p95_ms == null} value={fmtMs(t?.p95_ms)} sub={t && `p50 ${fmtMs(t.p50_ms)}`} />
         <StatTile label="p95 ilk token" loading={!d} missing={t?.p95_first_token_ms == null} value={fmtMs(t?.p95_first_token_ms)} sub="yalnız stream edilen cevaplar" />
-      </div>
+      </MetricStrip>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-3 xl:grid-cols-3">
         {(
           [
-            ["LLM çağrısı", "calls", (v: number | null) => fmtNum(v)],
-            ["Maliyet (USD)", "cost", fmtUsd],
-            ["p95 LLM latency", "p95", fmtMs],
+            ["LLM çağrısı", "calls", (v: number | null) => fmtNum(v), "çağrı / kova"],
+            ["Maliyet", "cost", fmtUsd, "USD / kova"],
+            ["p95 LLM latency", "p95", fmtMs, "ms"],
           ] as const
-        ).map(([title, k, fmt]) => (
+        ).map(([title, k, fmt, unit]) => (
           <Card key={k}>
-            <CardHeader title={title} />
+            <CardHeader title={title} description={d ? `kova: ${d.bucket}` : undefined} />
             <CardBody>
               <TimeSeriesChart
-                height={180}
+                height={170}
+                unit={unit}
                 series={[{ id: k, label: title, color: CHART.single, points: points.map((p) => ({ t: p.t, v: p[k] })) }]}
                 format={fmt}
                 emptyText="Bu aralıkta LLM çağrısı yok"
@@ -290,7 +279,7 @@ export default function LlmObservabilityPage() {
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         <Card>
           <CardHeader title="Model bazında" />
           <CardBody className="p-0">
@@ -306,7 +295,7 @@ export default function LlmObservabilityPage() {
       </div>
 
       <Card>
-        <CardHeader title="Tetikleyici bazında" description="Trace başına: sohbet turu, periyodik kontrol, watch…" />
+        <CardHeader title="Tetikleyici bazında" description="Trace başına: sohbet turu, health check, watch…" />
         <CardBody className="p-0">
           {!d ? (
             <TableSkeleton rows={3} cols={5} />
@@ -314,24 +303,24 @@ export default function LlmObservabilityPage() {
             <EmptyState title="Bu aralıkta trace yok" />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs text-muted">
-                  <tr className="border-b border-line">
-                    <th className="px-3 py-2 font-medium">Tetikleyici</th>
-                    <th className="px-3 py-2 text-right font-medium">Trace</th>
-                    <th className="px-3 py-2 text-right font-medium">Hata</th>
-                    <th className="px-3 py-2 text-right font-medium">p95 süre</th>
-                    <th className="px-3 py-2 text-right font-medium">Maliyet</th>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Tetikleyici</th>
+                    <th className="num">Trace</th>
+                    <th className="num">Hata</th>
+                    <th className="num">p95 süre</th>
+                    <th className="num">Maliyet</th>
                   </tr>
                 </thead>
                 <tbody>
                   {d.by_trigger.map((r) => (
-                    <tr key={r.trigger} className="border-b border-line hover:bg-surface-2">
-                      <td className="px-3 py-2 text-ink">{TRIGGER_LABEL[r.trigger] ?? r.trigger}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-ink-2">{fmtNum(r.traces)}</td>
-                      <td className={cn("px-3 py-2 text-right tabular-nums", r.errors ? "text-st-critical" : "text-ink-2")}>{fmtNum(r.errors)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-ink-2">{fmtMs(r.p95_ms)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-ink">{fmtUsd(r.cost_usd)}</td>
+                    <tr key={r.trigger}>
+                      <td className="primary">{TRIGGER_LABEL[r.trigger] ?? r.trigger}</td>
+                      <td className="num">{fmtNum(r.traces)}</td>
+                      <td className={cn("num", r.errors ? "text-st-critical-ink" : undefined)}>{fmtNum(r.errors)}</td>
+                      <td className="num">{fmtMs(r.p95_ms)}</td>
+                      <td className="num text-ink">{fmtUsd(r.cost_usd)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -342,7 +331,7 @@ export default function LlmObservabilityPage() {
       </Card>
 
       <Card>
-        <CardBody>
+        <CardBody className="pb-0">
           <Tabs
             value={tab}
             onValueChange={setTab}
@@ -360,6 +349,6 @@ export default function LlmObservabilityPage() {
           </Tabs>
         </CardBody>
       </Card>
-    </div>
+    </Page>
   );
 }

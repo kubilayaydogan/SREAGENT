@@ -12,6 +12,8 @@ import LlmObservabilityPage, { fillSeries } from "@/pages/LlmObservabilityPage";
 import LoginPage from "@/pages/LoginPage";
 import { AuthProvider } from "@/services/auth";
 import { tokenStore } from "@/services/api";
+import { ThemeProvider } from "@/lib/theme";
+import { contributions } from "@/lib/risk";
 import type { DashboardSummary, ToolExecution } from "@/types/api";
 
 function json(data: unknown, status = 200) {
@@ -48,6 +50,8 @@ function wrap(ui: ReactNode, path = "/") {
 
 const USER = { id: "u1", username: "nobetci", display_name: "Nöbetçi", role: "sre", is_active: true, last_login_at: null, created_at: "2026-11-21T00:00:00Z" };
 
+const PAGE0 = { items: [], total: 0, page: 1, size: 200, pages: 0 };
+
 const unavailable: DashboardSummary = {
   range: "1h",
   start: "2026-11-21T09:00:00Z",
@@ -75,15 +79,66 @@ afterEach(() => vi.unstubAllGlobals());
 describe("DashboardPage", () => {
   it("Dynatrace verisi yoksa bunu açıkça söyler ve metric'leri '—' gösterir (sahte değer yok)", async () => {
     tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
-    mockFetch({ "/api/auth/me": USER, "/api/dashboard/summary": unavailable, "/api/applications": [] });
+    mockFetch({ "/api/auth/me": USER, "/api/dashboard/summary": unavailable, "/api/applications": [], "/api/investigations": PAGE0 });
     wrap(<DashboardPage />);
     expect(await screen.findByText(/Dynatrace verisi alınamadı\./)).toBeInTheDocument();
     expect(screen.getByText("McpUnavailable: outage")).toBeInTheDocument();
-    for (const label of ["P95 (en kötü uygulama)", "P99 (en kötü uygulama)", "Throughput", "Error rate", "Ortalama yanıt", "PostgreSQL connection kullanımı"]) {
+    for (const label of ["P95 latency", "Throughput", "Error rate"]) {
       expect(within(screen.getByRole("group", { name: label })).getByText("—")).toBeInTheDocument();
     }
     expect(screen.queryByText("0 ms")).not.toBeInTheDocument();
     expect(screen.getAllByText(/Dynatrace verisi alınamadı/).length).toBeGreaterThan(1); // grafik boş durumu da
+    // risk geçmişi yoksa skor uydurulmaz
+    const risk = screen.getByRole("group", { name: "Overall risk score" });
+    expect(await within(risk).findByText("Health check ölçümü yok")).toBeInTheDocument();
+    expect(within(risk).getByText("—")).toBeInTheDocument();
+  });
+
+  it("risk score son health check'ten gelir, önceki ölçümle karşılaştırılır ve servis satırında bileşenlere açılır", async () => {
+    tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
+    const inv = (id: string, score: string, min: number) => ({
+      id, run_id: id, trigger: "scheduled", title: "Health check", description: null, status: "COMPLETED", severity: "high",
+      risk_score: score, data_coverage: "1", confidence: null, primary_mechanism: null, source_apps: [], affected_apps: [],
+      application_id: null, conversation_id: null, user_id: null, window_start: "2026-11-25T10:00:00Z", window_end: "2026-11-25T10:15:00Z",
+      baseline_start: null, baseline_end: null, started_at: null, completed_at: null, duration_ms: 1000, root_cause_hypothesis: null,
+      error: null, created_at: new Date(Date.now() - min * 60_000).toISOString(),
+    });
+    const detail = {
+      ...inv("h2", "62", 5), explanation: null, explanation_source: null,
+      report: { risk: { overall: { score: 62, band: "yüksek" }, apps: { "checkin-service": { score: 62, band: "yüksek", coverage: 1, missing: [],
+        components: { latency: 1, errors: 0.2, saturation: 0.8, lock: 0.5, resource: 0, _latency_ratio: 3.4 } } } } },
+    };
+    const app = { status: "degraded", reasons: ["p95 ×3.4"], throughput_rpm: 120, error_rate: 0.01, mean_ms: 20, p95_ms: 90, p99_ms: 140,
+      span_samples: 100, pool: { max_ratio: 0.9, last_ratio: 0.8, pending_max: 0 },
+      series: [{ t: "2026-11-25T10:00:00Z", rpm: 1, error_rate: 0, mean_ms: 10, p95_ms: 30, p99_ms: 40, pool_ratio: 0.1 },
+               { t: "2026-11-25T10:05:00Z", rpm: 1, error_rate: 0, mean_ms: 10, p95_ms: 90, p99_ms: 40, pool_ratio: 0.1 }] };
+    mockFetch({
+      "/api/auth/me": USER,
+      "/api/applications": [],
+      "/api/dashboard/summary": { ...unavailable, available: true, error: null, status_counts: { degraded: 1 }, monitored_applications: 1,
+        overall: { p95_ms_worst: 90, error_rate: 0.01, throughput_rpm: 120, mean_ms: 20 }, applications: { "checkin-service": app } },
+      "/api/investigations/h2": detail,
+      "/api/investigations": { items: [inv("h2", "62", 5), inv("h1", "40", 20)], total: 2, page: 1, size: 200, pages: 1 },
+    });
+    wrap(<DashboardPage />);
+    const risk = screen.getByRole("group", { name: "Overall risk score" });
+    expect(await within(risk).findByText("62")).toBeInTheDocument();
+    expect(within(risk).getByText(/\+22 önceki ölçüme göre/)).toBeInTheDocument();
+    const expand = await screen.findByRole("button", { name: "checkin risk bileşenleri" });
+    await userEvent.setup().click(expand);
+    const table = screen.getByRole("table", { name: "risk bileşenleri" });
+    // latency: 100·0.30·1 / 1.0 = 30 puan katkı
+    expect(within(table).getByText("Latency").closest("tr")).toHaveTextContent("30");
+    expect(within(table).getByText("×3,4 baseline")).toBeInTheDocument();
+  });
+});
+
+describe("risk contributions", () => {
+  it("katkı = 100·w·v / Σw (mevcut bileşenler); eksik bileşen hesaba girmez", () => {
+    const c = contributions({ score: null, band: null, coverage: 0.7, missing: ["lock", "resource"], components: { latency: 1, errors: 0, saturation: 0.5, lock: null } });
+    expect(c.latency).toBeCloseTo((100 * 0.3) / 0.75);
+    expect(c.saturation).toBeCloseTo((100 * 0.2 * 0.5) / 0.75);
+    expect(c.lock).toBeUndefined();
   });
 });
 
@@ -153,6 +208,27 @@ describe("LLM model seçici", () => {
     await vi.waitFor(() => expect(puts).toEqual(["claude-sonnet-5-5"]));
   });
 
+  it("menü daraltılır (tercih kalıcı) ve tema değiştirilir", async () => {
+    tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
+    localStorage.clear();
+    mockFetch({ "/api/auth/me": USER, "/api/system/info": info, "/api/system/llm-model": state("claude-opus-5-5") });
+    wrap(
+      <ThemeProvider>
+        <AppLayout />
+      </ThemeProvider>,
+    );
+    const u = userEvent.setup();
+    expect((await screen.findAllByText("Overview")).length).toBeGreaterThan(0);
+    await u.click(screen.getByRole("button", { name: "menüyü daralt" }));
+    expect(localStorage.getItem("sre.sidebar")).toBe("collapsed");
+    expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument(); // ikon modunda erişilebilir ad korunur
+    const before = document.documentElement.dataset.theme;
+    await u.click(screen.getByRole("button", { name: /^Tema:/ }));
+    expect(localStorage.getItem("sre.theme")).toBe("light");
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(before === undefined || typeof before === "string").toBe(true);
+  });
+
   it("yönetici olmayan kullanıcı yalnız modeli görür", async () => {
     tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
     mockFetch({ "/api/auth/me": USER, "/api/system/info": info, "/api/system/llm-model": state("claude-sonnet-5-5") });
@@ -171,16 +247,17 @@ describe("InvestigationDetailPage", () => {
     started_at: null, completed_at: null, duration_ms: 1000, root_cause_hypothesis: null, error: null,
     created_at: "2026-11-25T10:16:00Z", explanation: null, explanation_source: null, report: null,
   };
-  function renderAt(trace: { url: string | null }) {
+  function renderAt(trace: { url: string | null }, detail: Record<string, unknown> = inv, extra: Record<string, unknown> = {}) {
     tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
     mockFetch({
+      ...extra,
       "/api/auth/me": USER,
       "/api/investigations/i1/trace": trace,
       "/api/investigations/i1/similar": [],
       "/api/investigations/i1/feedback": [],
       "/api/investigations/i1/recommendations": { known_issues: [], runbooks: [] },
       "/api/rca": { items: [], total: 0, page: 1, size: 20, pages: 0 },
-      "/api/investigations/i1": inv,
+      "/api/investigations/i1": detail,
     });
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
@@ -201,6 +278,39 @@ describe("InvestigationDetailPage", () => {
     const a = await screen.findByRole("link", { name: /LangSmith'te aç/ });
     expect(a).toHaveAttribute("href", "https://smith.test/o/t/projects/p/p1/r/i1?poll=true");
     expect(a).toHaveAttribute("target", "_blank");
+  });
+
+  it("analiz bölümlerini gösterir; evidence referansı Evidence sekmesinde ilgili satırı açar", async () => {
+    const report = {
+      mechanisms: [{ id: "row_lock", title: "Row lock wait", mechanism: "Açık transaction row lock tutuyor.", chain_path: "checkin-service → reservation-service",
+        source_apps: ["checkin-service"], affected_apps: ["reservation-service"], evidence_ids: ["ev-1"], confidence: "high", signals: ["blocking_edge logları"] }],
+      evidence: [{ id: "ev-1", signal: "edges", status: "OK", records: 49, dql: "fetch logs | filter edge", dynatrace_query_id: "q-1" },
+                 { id: "ev-2", signal: "http", status: "ERROR", records: null, dql: "timeseries x", error: "timeout" }],
+      impacted: { "reservation-service": { reasons: ["latency ×22.9"], latency_ratio: 22.9 } },
+      data_coverage: { ratio: 0.5, signals_ok: 1, signals_total: 2 },
+      data_gaps: ["http: timeout"],
+      human_review: ["checkin transaction süresini kontrol edin"],
+      alternatives: ["Bağımsız load artışı dışlanamadı"],
+      windows: [{ name: "baseline", start: "2026-11-25T09:45:00Z", end: "2026-11-25T10:00:00Z" }, { name: "window", start: "2026-11-25T10:00:00Z", end: "2026-11-25T10:15:00Z" }],
+      risk: { overall: { score: 72.5, band: "yüksek", scored_apps: 1, total_apps: 1 }, apps: { "reservation-service": { score: 72.5, band: "yüksek", coverage: 1, missing: [], components: { latency: 1 } } } },
+    };
+    renderAt({ url: null }, { ...inv, report, root_cause_hypothesis: "checkin-service row lock" }, {
+      "/api/investigations/i1/evidence": [
+        { id: "e1", evidence_key: "ev-1", evidence_type: "LOG", source: "dynatrace", signal: "edges", data_status: "OK", application_id: "checkin-service",
+          entity_id: null, trace_id: null, span_id: null, metric_name: null, query_reference: "fetch logs | filter edge", dynatrace_query_id: "q-1",
+          timestamp: null, content: "edges: 49 kayıt", metadata: {} },
+      ],
+    });
+    for (const h of ["Executive Summary", "Root Cause", "Confidence", "Impacted Services", "Risk Score", "Supporting Evidence", "Incident Timeline", "Alternative Hypotheses", "Recommended Actions", "Data Quality"])
+      expect(await screen.findByRole("heading", { name: h })).toBeInTheDocument();
+    expect(screen.getAllByText("Row lock wait").length).toBeGreaterThan(0);
+    expect(screen.getByText("Bağımsız load artışı dışlanamadı")).toBeInTheDocument();
+    expect(screen.getByText("http: timeout")).toBeInTheDocument();
+    const u = userEvent.setup();
+    await u.click(screen.getAllByRole("button", { name: /Blocking edge/ })[0]);
+    const rows = await screen.findAllByText("edges: 49 kayıt");
+    expect(rows[0].closest("tr")).toHaveAttribute("id", "evidence-ev-1");
+    expect(screen.getAllByText("fetch logs | filter edge").length).toBeGreaterThan(0); // DQL drill-down açık
   });
 
   it("trace yoksa bağlantı gösterilmez", async () => {

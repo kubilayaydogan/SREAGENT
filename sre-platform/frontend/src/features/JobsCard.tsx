@@ -36,38 +36,38 @@ export function JobsCard() {
             const invId = r?.result?.investigation_id as string | undefined;
             const open = r?.result?.open_conditions as string[] | undefined;
             return (
-              <li key={j.id} className="px-4 py-2.5 text-xs">
+              <li key={j.id} className="px-3 py-2 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-ink">{JOB_TR[j.job_type] ?? j.name}</span>
+                  <span className="text-[13px] text-ink">{JOB_TR[j.job_type] ?? j.name}</span>
                   <span className="text-muted">her {j.interval_seconds % 60 === 0 ? `${j.interval_seconds / 60} dk` : fmtDuration(j.interval_seconds * 1000)}</span>
                   {can("admin") ? (
                     <button
                       onClick={() => toggle.mutate(j)}
-                      className={cn("ml-auto rounded border px-1.5 py-0.5", j.enabled ? "border-st-good/50 text-st-good" : "border-line-strong text-muted")}
+                      aria-pressed={j.enabled} className={cn("ml-auto rounded-sm border border-line-strong px-1.5 py-0.5", j.enabled ? "text-ink" : "text-muted")}
                     >
                       {j.enabled ? "açık" : "kapalı"}
                     </button>
                   ) : (
-                    <span className={cn("ml-auto", j.enabled ? "text-st-good" : "text-muted")}>{j.enabled ? "açık" : "kapalı"}</span>
+                    <span className={cn("ml-auto", j.enabled ? "text-ink-2" : "text-muted")}>{j.enabled ? "açık" : "kapalı"}</span>
                   )}
                 </div>
                 <div className="mt-0.5 text-muted">
                   {r ? (
                     <>
                       son: {fmtRelative(r.finished_at ?? r.started_at)} ·{" "}
-                      <span className={r.status === "FAILED" ? "text-st-critical" : r.status === "RUNNING" ? "text-accent" : "text-st-good"}>
+                      <span className={r.status === "FAILED" ? "text-st-critical-ink" : r.status === "RUNNING" ? "text-accent-text" : "text-ink-2"}>
                         {r.status === "SUCCEEDED" ? "başarılı" : r.status === "FAILED" ? "başarısız" : "çalışıyor"}
                       </span>
                       {invId && (
                         <>
                           {" · "}
                           <Link to={`/investigations/${invId}`} className="hover:text-ink">
-                            araştırma →
+                            investigation →
                           </Link>
                         </>
                       )}
-                      {open && open.length > 0 && <span className="text-st-warning"> · açık koşul: {open.join(", ")}</span>}
-                      {r.error && <div className="font-mono text-[11px] break-all text-[#f08a8a]">{r.error}</div>}
+                      {open && open.length > 0 && <span className="text-st-warning-ink"> · açık koşul: {open.join(", ")}</span>}
+                      {r.error && <div className="font-mono text-2xs break-all text-st-critical-ink">{r.error}</div>}
                     </>
                   ) : (
                     "henüz çalışmadı"

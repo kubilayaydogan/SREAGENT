@@ -62,11 +62,11 @@ export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app
   }
 
   return (
-    <div className="border-t border-line bg-surface/80 p-3">
+    <div className="border-t border-line bg-surface p-3">
       <div className="mx-auto max-w-4xl">
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <AppSelect value={app} onChange={onApp} allLabel="Uygulama: tümü" className="h-8 w-44 text-xs" />
-          <Select aria-label="zaman aralığı" value={preset} onChange={(e) => setPreset(e.target.value)} className="h-8 w-40 text-xs">
+          <AppSelect value={app} onChange={onApp} allLabel="Servis: tümü" className="h-7 w-40 text-xs" />
+          <Select aria-label="zaman aralığı" value={preset} onChange={(e) => setPreset(e.target.value)} className="h-7 w-36 text-xs">
             {PRESETS.map((p) => (
               <option key={p.v} value={p.v}>
                 {p.l}
@@ -75,14 +75,14 @@ export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app
           </Select>
           {preset === "custom" && (
             <>
-              <Input aria-label="başlangıç" type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 w-48 text-xs" />
+              <Input aria-label="başlangıç" type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} className="h-7 w-48 text-xs" />
               <span className="text-xs text-muted">→</span>
-              <Input aria-label="bitiş" type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 w-48 text-xs" />
-              {customInvalid && <span className="text-xs text-st-warning">geçerli bir aralık seçin</span>}
+              <Input aria-label="bitiş" type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} className="h-7 w-48 text-xs" />
+              {customInvalid && <span className="text-xs text-st-warning-ink">geçerli bir aralık seçin</span>}
             </>
           )}
         </div>
-        <div className="flex items-end gap-2 rounded-lg border border-line-strong bg-surface-2 p-2 focus-within:border-accent">
+        <div className="flex items-end gap-2 rounded-lg border border-line-strong bg-surface p-1.5 focus-within:border-accent">
           <textarea
             ref={ref}
             aria-label="soru"
@@ -93,7 +93,7 @@ export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app
             onKeyDown={onKey}
             disabled={disabled}
             placeholder={disabled ? disabledReason : "Örn. Reservation uygulaması neden yavaşladı?  (Enter: gönder, Shift+Enter: satır)"}
-            className="max-h-40 flex-1 resize-none bg-transparent px-1 py-1 text-sm text-ink placeholder:text-muted focus:outline-none"
+            className="max-h-40 flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] text-ink placeholder:text-muted focus:outline-none"
           />
           {busy ? (
             <Button variant="outline" size="md" onClick={onCancel} aria-label="durdur">
@@ -105,8 +105,8 @@ export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app
             </Button>
           )}
         </div>
-        <p className="mt-1.5 text-[11px] text-muted">
-          Ajan yalnız okuma yapar (Dynatrace MCP query'leri). Sonuçlar correlation temelli hipotezdir; kritik aksiyonlar onay akışından geçer.
+        <p className="mt-1.5 text-2xs text-muted">
+          Agent yalnız okuma yapar (Dynatrace MCP query'leri). Sonuçlar correlation temelli hipotezdir; kritik aksiyonlar onay akışından geçer.
         </p>
       </div>
     </div>

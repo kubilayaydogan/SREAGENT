@@ -1,20 +1,22 @@
-import { Check, X } from "lucide-react";
-import { useState } from "react";
+import { Ban, Check, CheckCircle2, Clock, X, XCircle } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Badge, Button, Card, Select, Textarea } from "@/components/ui/primitives";
+import { StatusLabel } from "@/components/badges";
+import { FilterBar } from "@/components/table";
+import { Button, Card, Segmented, Textarea } from "@/components/ui/primitives";
 import { Dialog } from "@/components/ui/overlay";
-import { EmptyState, ErrorState, PageHeader, TableSkeleton } from "@/components/ui/states";
+import { EmptyState, ErrorState, Page, PageHeader, TableSkeleton } from "@/components/ui/states";
 import { useApprovalMutations, useApprovals } from "@/hooks/queries";
 import { useAuth } from "@/services/auth";
 import { cn, fmtRelative, fmtTime } from "@/lib/utils";
 import type { Approval } from "@/types/api";
 
-const ST_TR: Record<Approval["status"], [string, string]> = {
-  PENDING: ["Bekliyor", "border-st-warning/50 text-st-warning"],
-  APPROVED: ["Onaylandı", "border-st-good/50 text-st-good"],
-  REJECTED: ["Reddedildi", "border-st-critical/50 text-[#f08a8a]"],
-  EXPIRED: ["Süresi doldu", "text-muted"],
-  CANCELLED: ["İptal", "text-muted"],
+const ST: Record<Approval["status"], { label: string; tone: "warning" | "good" | "critical" | "unknown"; icon: ReactNode }> = {
+  PENDING: { label: "Bekliyor", tone: "warning", icon: <Clock /> },
+  APPROVED: { label: "Onaylandı", tone: "good", icon: <CheckCircle2 /> },
+  REJECTED: { label: "Reddedildi", tone: "critical", icon: <XCircle /> },
+  EXPIRED: { label: "Süresi doldu", tone: "unknown", icon: <Clock /> },
+  CANCELLED: { label: "İptal", tone: "unknown", icon: <Ban /> },
 };
 
 export default function ApprovalsPage() {
@@ -26,20 +28,25 @@ export default function ApprovalsPage() {
   const [comment, setComment] = useState("");
 
   return (
-    <div className="mx-auto max-w-[1500px] p-4 lg:p-6">
+    <Page>
       <PageHeader
-        title="Onaylar (human-in-the-loop)"
-        description="Ajan salt-okunurdur. Yeniden başlatma, rollback, DB ayarı, SQL yazma gibi aksiyonlar talep edenden farklı bir yöneticinin onayıyla, elle uygulanır."
-        actions={
-          <Select aria-label="durum" value={status} onChange={(e) => setStatus(e.target.value)} className="w-40">
-            <option value="PENDING">Bekleyenler</option>
-            <option value="APPROVED">Onaylananlar</option>
-            <option value="REJECTED">Reddedilenler</option>
-            <option value="">Tümü</option>
-          </Select>
-        }
+        title="Onaylar"
+        description="Human-in-the-loop · agent salt-okunurdur; restart, rollback, DB ayarı, SQL yazma gibi aksiyonlar talep edenden farklı bir yöneticinin onayıyla elle uygulanır"
       />
       <Card>
+        <FilterBar right={data && <span className="text-xs text-muted tabular-nums">{data.total} talep</span>}>
+          <Segmented
+            label="durum"
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "PENDING", label: "Bekleyen" },
+              { value: "APPROVED", label: "Onaylanan" },
+              { value: "REJECTED", label: "Reddedilen" },
+              { value: "", label: "Tümü" },
+            ]}
+          />
+        </FilterBar>
         {isLoading ? (
           <TableSkeleton />
         ) : error ? (
@@ -47,46 +54,48 @@ export default function ApprovalsPage() {
         ) : !data?.items.length ? (
           <EmptyState title="Onay talebi yok" description="Talepler incident ekranındaki 'Onay iste' ile oluşturulur." />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-muted">
-                <tr className="border-b border-line">
-                  <th className="px-4 py-2 font-medium">Aksiyon</th>
-                  <th className="px-4 py-2 font-medium">Gerekçe</th>
-                  <th className="px-4 py-2 font-medium">Durum</th>
-                  <th className="px-4 py-2 font-medium">Talep</th>
-                  <th className="px-4 py-2 font-medium">Karar</th>
-                  <th className="px-4 py-2" />
+          <div className="overflow-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Aksiyon</th>
+                  <th>Gerekçe</th>
+                  <th>Durum</th>
+                  <th>Talep</th>
+                  <th>Karar</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {data.items.map((a) => {
                   const own = a.requested_by === user?.id;
                   return (
-                    <tr key={a.id} className="border-b border-line align-top last:border-0">
-                      <td className="px-4 py-2">
+                    <tr key={a.id} className="[&>td]:align-top">
+                      <td>
                         <div className="font-mono text-xs text-ink">{a.action_type}</div>
                         <div className="text-xs text-ink-2">{a.target}</div>
                         {a.incident_id && (
-                          <Link to={`/incidents/${a.incident_id}`} className="text-[11px] text-muted hover:text-ink">
+                          <Link to={`/incidents/${a.incident_id}`} className="text-2xs text-muted hover:text-ink">
                             incident →
                           </Link>
                         )}
                       </td>
-                      <td className="max-w-md px-4 py-2 text-xs whitespace-pre-wrap text-ink-2">{a.justification}</td>
-                      <td className="px-4 py-2">
-                        <Badge className={ST_TR[a.status][1]}>{ST_TR[a.status][0]}</Badge>
+                      <td className="max-w-md text-xs whitespace-pre-wrap">{a.justification}</td>
+                      <td>
+                        <StatusLabel tone={ST[a.status].tone} icon={ST[a.status].icon}>
+                          {ST[a.status].label}
+                        </StatusLabel>
                       </td>
-                      <td className="px-4 py-2 text-xs text-muted">
+                      <td className="text-xs whitespace-nowrap text-muted">
                         {fmtTime(a.created_at)}
                         {own && <div>(sizin talebiniz)</div>}
                         {a.expires_at && a.status === "PENDING" && <div>son: {fmtRelative(a.expires_at).replace("önce", "sonra")}</div>}
                       </td>
-                      <td className="px-4 py-2 text-xs text-muted">
+                      <td className="text-xs text-muted">
                         {a.decided_at ? fmtTime(a.decided_at) : "—"}
                         {a.decision_comment && <div className="text-ink-2">{a.decision_comment}</div>}
                       </td>
-                      <td className="px-4 py-2">
+                      <td>
                         {a.status === "PENDING" && (
                           <div className="flex justify-end gap-1">
                             {can("admin") && !own && (
@@ -136,9 +145,9 @@ export default function ApprovalsPage() {
             </>
           }
         >
-          <Textarea rows={3} value={comment} maxLength={4000} onChange={(e) => setComment(e.target.value)} placeholder="Yorum (isteğe bağlı)" className={cn("w-full")} />
+          <Textarea aria-label="yorum" rows={3} value={comment} maxLength={4000} onChange={(e) => setComment(e.target.value)} placeholder="Yorum (isteğe bağlı)" className={cn("w-full")} />
         </Dialog>
       )}
-    </div>
+    </Page>
   );
 }

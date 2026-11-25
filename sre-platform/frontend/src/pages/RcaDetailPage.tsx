@@ -3,32 +3,55 @@ import type { ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { ConfidenceBadge } from "@/components/badges";
 import { Markdown } from "@/components/Markdown";
-import { Button, Card, CardBody, CardHeader, Skeleton } from "@/components/ui/primitives";
-import { ErrorState } from "@/components/ui/states";
+import { Button, Skeleton } from "@/components/ui/primitives";
+import { ErrorState, Page, PageHeader } from "@/components/ui/states";
 import { errorToast, useRca } from "@/hooks/queries";
 import { FeedbackBar } from "@/features/chat/FeedbackBar";
 import { downloadText } from "@/services/api";
 import { mechanismLabel } from "@/lib/steps";
-import { fmtTime } from "@/lib/utils";
+import { fmtTime, shortId } from "@/lib/utils";
 
-function Section({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+const SECTIONS = [
+  ["summary", "Executive Summary"],
+  ["problem", "Problem tanımı"],
+  ["timeline", "Incident Timeline"],
+  ["impact", "Etki analizi"],
+  ["evidence", "Supporting Evidence"],
+  ["root-cause", "Root Cause"],
+  ["factors", "Katkıda bulunan faktörler"],
+  ["actions", "Recommended Actions"],
+  ["confidence", "Confidence ve belirsizlik"],
+] as const;
+
+function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <Card>
-      <CardHeader title={`${n}. ${title}`} />
-      <CardBody className="text-sm text-ink-2">{children}</CardBody>
-    </Card>
+    <section id={`rca-${id}`} className="scroll-mt-4 border-t border-line px-5 py-4 first:border-t-0 print:break-inside-avoid print:px-0">
+      <h2 className="mb-2 text-[13px] font-semibold text-ink">{title}</h2>
+      <div className="text-[13px] text-ink-2">{children}</div>
+    </section>
   );
 }
 
-const List = ({ items, empty = "—" }: { items: string[]; empty?: string }) =>
+const List = ({ items, ordered }: { items: string[]; ordered?: boolean }) =>
   items.length ? (
-    <ul className="list-disc space-y-1 pl-5">
-      {items.map((x) => (
-        <li key={x}>{x}</li>
-      ))}
-    </ul>
+    ordered ? (
+      <ol className="space-y-1 text-ink">
+        {items.map((x, i) => (
+          <li key={x} className="flex gap-2">
+            <span className="w-4 shrink-0 text-right text-xs text-muted tabular-nums">{i + 1}.</span>
+            {x}
+          </li>
+        ))}
+      </ol>
+    ) : (
+      <ul className="list-disc space-y-1 pl-5">
+        {items.map((x) => (
+          <li key={x}>{x}</li>
+        ))}
+      </ul>
+    )
   ) : (
-    <p className="text-muted">{empty}</p>
+    <p className="text-muted">—</p>
   );
 
 export default function RcaDetailPage() {
@@ -37,121 +60,142 @@ export default function RcaDetailPage() {
   if (error) return <ErrorState className="mt-10" error={error} onRetry={() => refetch()} />;
   if (isLoading || !r)
     return (
-      <div className="space-y-4 p-6">
-        <Skeleton className="h-8 w-1/2" />
-        <Skeleton className="h-40" />
-      </div>
+      <Page>
+        <Skeleton className="mb-4 h-8 w-1/2" />
+        <Skeleton className="h-64" />
+      </Page>
     );
   return (
-    <div className="mx-auto max-w-5xl p-4 lg:p-6 print:max-w-none print:p-0">
-      <Link to="/rca" className="text-xs text-muted hover:text-ink print:hidden">
-        ← RCA raporları
-      </Link>
-      <div className="mt-1 mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-ink">{r.title}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
-            <ConfidenceBadge confidence={r.confidence} />
-            <span>· {fmtTime(r.generated_at)}</span>
-            <span>· üretim: {r.generated_by}</span>
-            <Link to={`/investigations/${r.investigation_id}`} className="hover:text-ink">
-              · araştırma
-            </Link>
-            {r.incident_id && (
-              <Link to={`/incidents/${r.incident_id}`} className="hover:text-ink">
-                · incident
+    <Page className="print:max-w-none print:p-0">
+      <div className="print:hidden">
+        <PageHeader
+          crumbs={[{ label: "RCA raporları", to: "/rca" }, { label: shortId(r.id) }]}
+          title={r.title}
+          meta={
+            <>
+              <ConfidenceBadge confidence={r.confidence} />
+              <span className="tabular-nums">{fmtTime(r.generated_at)}</span>
+              <span>üreten: {r.generated_by}</span>
+              <Link to={`/investigations/${r.investigation_id}`} className="hover:text-ink">
+                investigation →
               </Link>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-2 print:hidden">
-          <FeedbackBar investigationId={r.investigation_id} rcaId={r.id} />
-          <Button size="sm" variant="outline" onClick={() => downloadText(`/rca/${r.id}/markdown`, `rca-${r.id}.md`).catch((e) => errorToast(e, "Dışa aktarılamadı"))}>
-            <Download /> Markdown
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => window.print()}>
-            <Printer /> Yazdır
-          </Button>
-        </div>
+              {r.incident_id && (
+                <Link to={`/incidents/${r.incident_id}`} className="hover:text-ink">
+                  incident →
+                </Link>
+              )}
+            </>
+          }
+          actions={
+            <>
+              <FeedbackBar investigationId={r.investigation_id} rcaId={r.id} />
+              <Button size="sm" variant="outline" onClick={() => downloadText(`/rca/${r.id}/markdown`, `rca-${r.id}.md`).catch((e) => errorToast(e, "Dışa aktarılamadı"))}>
+                <Download /> Markdown
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => window.print()}>
+                <Printer /> Yazdır
+              </Button>
+            </>
+          }
+        />
       </div>
-      <div className="space-y-4">
-        <Section n={1} title="Yönetici özeti">
-          <Markdown>{r.summary}</Markdown>
-        </Section>
-        <Section n={2} title="Problem tanımı">
-          <p>{r.problem_description ?? "—"}</p>
-        </Section>
-        <Section n={3} title="Zaman çizelgesi">
-          {r.timeline.length ? (
-            <ol className="space-y-1.5">
-              {r.timeline.map((t, i) => (
-                <li key={i} className="grid grid-cols-[150px_1fr] gap-3">
-                  <span className="font-mono text-xs text-muted">{fmtTime(t.at)}</span>
-                  <span>{t.event}</span>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-muted">—</p>
-          )}
-        </Section>
-        <Section n={4} title="Etki analizi">
-          <Markdown>{r.impact_analysis ?? "—"}</Markdown>
-        </Section>
-        <Section n={5} title="Evidence">
-          {r.supporting_evidence.length ? (
-            <table className="w-full text-xs">
-              <thead className="text-left text-muted">
-                <tr className="border-b border-line">
-                  <th className="py-1.5 pr-3 font-medium">Anahtar</th>
-                  <th className="py-1.5 pr-3 font-medium">Tür</th>
-                  <th className="py-1.5 pr-3 font-medium">Mechanism</th>
-                  <th className="py-1.5 pr-3 font-medium">Özet</th>
-                  <th className="py-1.5 font-medium">Referans</th>
-                </tr>
-              </thead>
-              <tbody>
-                {r.supporting_evidence.map((e, i) => (
-                  <tr key={`${e.key}-${i}`} className="border-b border-line align-top last:border-0">
-                    <td className="py-1.5 pr-3 font-mono text-ink">{e.key}</td>
-                    <td className="py-1.5 pr-3">{e.type ?? "—"}</td>
-                    <td className="py-1.5 pr-3">{e.mechanism ? mechanismLabel(e.mechanism) : "—"}</td>
-                    <td className="py-1.5 pr-3">{e.summary ?? "—"}</td>
-                    <td className="py-1.5 font-mono text-[11px] text-muted">
-                      {e.trace_id && <div>trace:{e.trace_id}</div>}
-                      {e.dynatrace_query_id && <div>q:{e.dynatrace_query_id}</div>}
-                    </td>
-                  </tr>
+      <h1 className="mb-3 hidden text-lg font-semibold print:block">{r.title}</h1>
+      <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_13rem]">
+        <article className="rounded-lg border border-line bg-surface print:border-0">
+          <Section id="summary" title="Executive Summary">
+            <Markdown>{r.summary}</Markdown>
+          </Section>
+          <Section id="problem" title="Problem tanımı">
+            <p>{r.problem_description ?? "—"}</p>
+          </Section>
+          <Section id="timeline" title="Incident Timeline">
+            {r.timeline.length ? (
+              <ol className="space-y-1">
+                {r.timeline.map((t, i) => (
+                  <li key={i} className="grid grid-cols-[9rem_1fr] gap-3">
+                    <span className="text-xs text-muted tabular-nums">{fmtTime(t.at)}</span>
+                    <span className="text-ink">{t.event}</span>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="text-muted">Mechanism için destekleyen evidence yok.</p>
-          )}
-        </Section>
-        <Section n={6} title="Root Cause hipotezi">
-          <p className="text-ink">{r.suspected_root_cause ?? "Tanımlı mechanism'lerle açıklanamadı."}</p>
-        </Section>
-        <Section n={7} title="Katkıda bulunan faktörler">
-          <List items={r.contributing_factors} />
-        </Section>
-        <Section n={8} title="Önerilen aksiyonlar">
-          <List items={r.recommended_actions} />
-          <p className="mt-2 text-[11px] text-muted">Ajan hiçbir aksiyonu kendisi uygulamaz; kritik aksiyonlar Onaylar ekranından onaya sunulur.</p>
-        </Section>
-        <Section n={9} title="Güven / belirsizlik">
-          <div className="mb-2">
-            <ConfidenceBadge confidence={r.confidence} />
-          </div>
-          <p className="whitespace-pre-wrap">{r.uncertainty ?? "—"}</p>
-          {r.alternatives.length > 0 && (
-            <div className="mt-2">
-              <div className="text-xs font-medium text-ink">Alternatif açıklamalar</div>
-              <List items={r.alternatives} />
+              </ol>
+            ) : (
+              <p className="text-muted">—</p>
+            )}
+          </Section>
+          <Section id="impact" title="Etki analizi">
+            <Markdown>{r.impact_analysis ?? "—"}</Markdown>
+          </Section>
+          <Section id="evidence" title="Supporting Evidence">
+            {r.supporting_evidence.length ? (
+              <div className="-mx-5 overflow-x-auto print:mx-0">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Anahtar</th>
+                      <th>Tür</th>
+                      <th>Mechanism</th>
+                      <th>Özet</th>
+                      <th>Referans</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.supporting_evidence.map((e, i) => (
+                      <tr key={`${e.key}-${i}`}>
+                        <td className="font-mono text-xs text-ink">{e.key}</td>
+                        <td className="text-xs">{e.type ?? "—"}</td>
+                        <td className="text-xs">{e.mechanism ? mechanismLabel(e.mechanism) : "—"}</td>
+                        <td className="text-xs">{e.summary ?? "—"}</td>
+                        <td className="font-mono text-2xs text-muted">
+                          {e.trace_id && <div>trace:{e.trace_id}</div>}
+                          {e.dynatrace_query_id && <div>q:{e.dynatrace_query_id}</div>}
+                          {!e.trace_id && !e.dynatrace_query_id && "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-muted">Mechanism için destekleyen evidence yok.</p>
+            )}
+          </Section>
+          <Section id="root-cause" title="Root Cause">
+            <p className="text-ink">{r.suspected_root_cause ?? "Tanımlı mechanism'lerle açıklanamadı."}</p>
+            <p className="mt-1 text-2xs text-muted">Korelasyon temelli hipotezdir; değişiklik öncesi doğrulanmalıdır.</p>
+          </Section>
+          <Section id="factors" title="Katkıda bulunan faktörler">
+            <List items={r.contributing_factors} />
+          </Section>
+          <Section id="actions" title="Recommended Actions">
+            <List items={r.recommended_actions} ordered />
+            <p className="mt-2 text-2xs text-muted">Ajan hiçbir aksiyonu kendisi uygulamaz; kritik aksiyonlar Onaylar ekranından onaya sunulur.</p>
+          </Section>
+          <Section id="confidence" title="Confidence ve belirsizlik">
+            <div className="mb-2">
+              <ConfidenceBadge confidence={r.confidence} />
             </div>
-          )}
-        </Section>
+            <p className="whitespace-pre-wrap">{r.uncertainty ?? "—"}</p>
+            {r.alternatives.length > 0 && (
+              <div className="mt-2">
+                <div className="mb-1 text-xs font-medium text-ink">Alternative Hypotheses</div>
+                <List items={r.alternatives} />
+              </div>
+            )}
+          </Section>
+        </article>
+        <nav aria-label="bölümler" className="hidden lg:sticky lg:top-3 lg:block print:hidden">
+          <div className="mb-1 px-1.5 text-xs font-medium text-muted">Bölümler</div>
+          <ul className="space-y-px text-xs">
+            {SECTIONS.map(([sid, label]) => (
+              <li key={sid}>
+                <a href={`#rca-${sid}`} className="block rounded-sm px-1.5 py-0.5 text-ink-2 hover:bg-surface-2 hover:text-ink">
+                  {label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
       </div>
-    </div>
+    </Page>
   );
 }

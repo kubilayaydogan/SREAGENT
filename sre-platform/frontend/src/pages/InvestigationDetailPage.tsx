@@ -1,201 +1,132 @@
-import { AlertTriangle, BookOpen, ExternalLink, FileText, GitCompare, Siren } from "lucide-react";
-import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { ExternalLink, FileText, GitCompare, ListChecks, Siren } from "lucide-react";
+import { useEffect } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { AppTag, ConfidenceBadge, InvestigationStatusBadge, SeverityBadge } from "@/components/badges";
-import { Markdown } from "@/components/Markdown";
 import { EvidenceTable, ToolTable } from "@/components/RecordTables";
-import { Button, buttonVariants, Card, CardBody, CardHeader, Skeleton } from "@/components/ui/primitives";
+import { RiskBar, RiskValue } from "@/components/risk";
+import { Button, buttonVariants, Card, Field, Skeleton } from "@/components/ui/primitives";
 import { TabPanel, Tabs } from "@/components/ui/overlay";
-import { EmptyState, ErrorState } from "@/components/ui/states";
+import { EmptyState, ErrorState, Notice, Page, PageHeader } from "@/components/ui/states";
 import { FeedbackBar } from "@/features/chat/FeedbackBar";
-import { useEvidence, useGenerateRca, useIncidentMutations, useInvestigation, useRcas, useRecommendations, useSimilar, useTools, useTraceUrl } from "@/hooks/queries";
+import { Analysis, SECTIONS } from "@/features/investigation/Analysis";
+import { useEvidence, useGenerateRca, useIncidentMutations, useInvestigation, useRcas, useSimilar, useTools, useTraceUrl } from "@/hooks/queries";
 import { useAuth } from "@/services/auth";
+import { toNum } from "@/lib/risk";
 import { mechanismLabel } from "@/lib/steps";
-import { fmtDuration, fmtNum, fmtPct, fmtRelative, fmtTime, shortId } from "@/lib/utils";
-import type { InvestigationDetail } from "@/types/api";
+import { fmtDuration, fmtPct, fmtRelative, fmtTime, shortId } from "@/lib/utils";
+import type { InvestigationDetail, Trigger } from "@/types/api";
 
-function Summary({ inv }: { inv: InvestigationDetail }) {
-  const r = inv.report ?? {};
-  const mechs = r.mechanisms ?? [];
-  const impacted = Object.entries(r.impacted ?? {});
+const TRIGGER_LABEL: Record<Trigger, string> = { chat: "AI Investigation", manual: "Manuel", scheduled: "Health check", watch: "Watch", import: "İçe aktarım" };
+
+function Facts({ inv }: { inv: InvestigationDetail }) {
+  const score = toNum(inv.risk_score);
   return (
-    <div className="grid gap-4 xl:grid-cols-3">
-      <Card className="xl:col-span-2">
-        <CardHeader title="Açıklama" description={inv.explanation_source ? `kaynak: ${inv.explanation_source}` : undefined} />
-        <CardBody>{inv.explanation ? <Markdown>{inv.explanation}</Markdown> : <p className="text-sm text-muted">Açıklama üretilmedi.</p>}</CardBody>
-      </Card>
-      <div className="space-y-4">
-        <Card>
-          <CardHeader title="Root Cause hipotezi" />
-          <CardBody className="space-y-2 text-sm">
-            <p className="text-ink">{inv.root_cause_hypothesis ?? "Tanımlı mechanism'lerle açıklanamadı."}</p>
+    <div className="space-y-3">
+      <Card className="p-3">
+        <div className="text-xs text-muted">Risk score</div>
+        <div className="mt-0.5 flex items-baseline gap-1.5">
+          <RiskValue score={score} showBand className="text-2xl font-semibold" />
+          {score != null && <span className="text-xs text-muted">/ 100</span>}
+        </div>
+        <RiskBar score={score} className="mt-2" />
+        <dl className="mt-3 divide-y divide-line border-t border-line">
+          <Field label="Önem">
+            <SeverityBadge severity={inv.severity} />
+          </Field>
+          <Field label="Güven">
             <ConfidenceBadge confidence={inv.confidence} />
-            <p className="text-[11px] text-muted">Korelasyon temelli hipotezdir; doğrulama gerektirir.</p>
-          </CardBody>
-        </Card>
-        {!!r.data_gaps?.length && (
-          <Card>
-            <CardHeader title="Data gap'ler" />
-            <CardBody>
-              <ul className="space-y-1 text-xs text-ink-2">
-                {r.data_gaps.map((g) => (
-                  <li key={g} className="flex gap-1.5">
-                    <AlertTriangle className="mt-px size-3.5 shrink-0 text-st-warning" />
-                    {g}
-                  </li>
+          </Field>
+          <Field label="Data coverage">{fmtPct(toNum(inv.data_coverage), 0)}</Field>
+          <Field label="Mechanism">{mechanismLabel(inv.primary_mechanism)}</Field>
+          {!!inv.source_apps.length && (
+            <Field label="Source">
+              <span className="inline-flex flex-wrap justify-end gap-2">
+                {inv.source_apps.map((a) => (
+                  <AppTag key={a} id={a} />
                 ))}
-              </ul>
-            </CardBody>
-          </Card>
-        )}
-      </div>
-      <Card className="xl:col-span-2">
-        <CardHeader title="Mechanism'ler" description="Deterministik ilişkilendirme sonucu" />
-        {mechs.length ? (
-          <ul className="divide-y divide-line">
-            {mechs.map((m) => (
-              <li key={m.id} className="px-4 py-3 text-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-ink">{m.title}</span>
-                  {m.id === inv.primary_mechanism && <span className="rounded bg-accent/15 px-1.5 text-[11px] text-[#8ab8f0]">birincil</span>}
-                  {m.secondary_to && <span className="text-[11px] text-muted">secondary: {mechanismLabel(m.secondary_to)}</span>}
-                </div>
-                {m.mechanism && <p className="mt-1 text-xs text-ink-2">{m.mechanism}</p>}
-                <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
-                  {!!m.source_apps?.length && (
-                    <span className="inline-flex items-center gap-1.5">
-                      source: {m.source_apps.map((a) => <AppTag key={a} id={a} />)}
-                    </span>
-                  )}
-                  {!!m.affected_apps?.length && (
-                    <span className="inline-flex items-center gap-1.5">
-                      etkilenen: {m.affected_apps.map((a) => <AppTag key={a} id={a} />)}
-                    </span>
-                  )}
-                  {!!m.evidence_ids?.length && <span className="font-mono">kanıt: {m.evidence_ids.join(", ")}</span>}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyState title="Mechanism tespit edilmedi" description="Baseline'a göre anlamlı bir bozulma veya tanımlı bir mechanism bulunamadı." />
-        )}
-      </Card>
-      <Card>
-        <CardHeader title="Etkilenen uygulamalar" />
-        <CardBody className="space-y-2">
-          {impacted.length ? (
-            impacted.map(([a, v]) => (
-              <div key={a}>
-                <AppTag id={a} />
-                <ul className="mt-0.5 ml-3.5 list-disc pl-3 text-xs text-ink-2">
-                  {(v.reasons ?? []).map((x) => (
-                    <li key={x}>{x}</li>
-                  ))}
-                </ul>
-              </div>
-            ))
-          ) : (
-            <p className="text-xs text-muted">Etki tespit edilmedi.</p>
+              </span>
+            </Field>
           )}
-          {!!r.human_review?.length && (
-            <div className="border-t border-line pt-2">
-              <div className="mb-1 text-xs font-medium text-ink">İnsan incelemesi önerileri</div>
-              <ul className="list-disc pl-4 text-xs text-ink-2">
-                {r.human_review.map((x) => (
-                  <li key={x}>{x}</li>
-                ))}
-              </ul>
-            </div>
+          <Field label="Pencere">
+            <span className="tabular-nums">
+              {fmtTime(inv.window_start, false)}–{fmtTime(inv.window_end, false)}
+            </span>
+          </Field>
+          {inv.baseline_start && (
+            <Field label="Baseline">
+              <span className="tabular-nums">
+                {fmtTime(inv.baseline_start, false)}–{fmtTime(inv.baseline_end, false)}
+              </span>
+            </Field>
           )}
-        </CardBody>
+          <Field label="Süre">{fmtDuration(inv.duration_ms)}</Field>
+          <Field label="Tetikleyici">{TRIGGER_LABEL[inv.trigger] ?? inv.trigger}</Field>
+          <Field label="Run">
+            <span className="font-mono text-2xs" title={inv.run_id}>
+              {inv.run_id}
+            </span>
+          </Field>
+        </dl>
       </Card>
+      <nav aria-label="bölümler" className="hidden px-1 lg:block">
+        <div className="mb-1 text-xs font-medium text-muted">Bölümler</div>
+        <ul className="space-y-px text-xs">
+          {SECTIONS.map(([id, label]) => (
+            <li key={id}>
+              <a href={`#sec-${id}`} className="block rounded-sm px-1.5 py-0.5 text-ink-2 hover:bg-surface-2 hover:text-ink">
+                {label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
     </div>
   );
 }
 
-/** Geçmiş RCA karşılaştırma: aynı mekanizma / uygulamadaki benzer araştırmalar + bilgi bankası önerileri. */
-function Compare({ inv }: { inv: InvestigationDetail }) {
+/** Geçmişle karşılaştırma: aynı mechanism / servis kümesindeki önceki investigation'lar. */
+function Similar({ inv }: { inv: InvestigationDetail }) {
   const sim = useSimilar(inv.id);
-  const rec = useRecommendations(inv.id);
+  if (sim.isLoading) return <Skeleton className="m-3 h-32" />;
+  if (sim.error) return <ErrorState error={sim.error} />;
+  if (!sim.data?.length) return <EmptyState icon={<GitCompare />} title="Benzer geçmiş kayıt yok" description="Bu mechanism / servis kombinasyonu ilk kez görülüyor." />;
+  const rows = [{ ...inv, _self: true }, ...sim.data.map((s) => ({ ...s, _self: false }))];
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
-        <CardHeader title="Benzer geçmiş araştırmalar" description="Aynı mechanism ve uygulama kümesi, yakınlığa göre" />
-        {sim.isLoading ? (
-          <Skeleton className="m-4 h-32" />
-        ) : sim.error ? (
-          <ErrorState error={sim.error} />
-        ) : sim.data?.length ? (
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted">
-              <tr className="border-b border-line">
-                <th className="px-4 py-2 font-medium">Araştırma</th>
-                <th className="px-4 py-2 font-medium">Mechanism</th>
-                <th className="px-4 py-2 text-right font-medium">Risk</th>
-                <th className="px-4 py-2 font-medium">Önem</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-line bg-accent/5">
-                <td className="px-4 py-2 text-xs text-ink">bu araştırma</td>
-                <td className="px-4 py-2 text-xs">{mechanismLabel(inv.primary_mechanism)}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{inv.risk_score == null ? "—" : fmtNum(Number(inv.risk_score), 1)}</td>
-                <td className="px-4 py-2">
-                  <SeverityBadge severity={inv.severity} />
-                </td>
-              </tr>
-              {sim.data.map((s) => (
-                <tr key={s.id} className="border-b border-line last:border-0 hover:bg-surface-2">
-                  <td className="px-4 py-2">
-                    <Link to={`/investigations/${s.id}`} className="text-ink hover:underline">
-                      {s.title}
-                    </Link>
-                    <div className="text-[11px] text-muted">{fmtRelative(s.created_at)}</div>
-                  </td>
-                  <td className="px-4 py-2 text-xs">{mechanismLabel(s.primary_mechanism)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{s.risk_score == null ? "—" : fmtNum(Number(s.risk_score), 1)}</td>
-                  <td className="px-4 py-2">
-                    <SeverityBadge severity={s.severity} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <EmptyState icon={<GitCompare className="size-7" />} title="Benzer geçmiş kayıt yok" description="Bu mechanism/uygulama kombinasyonu ilk kez görülüyor." />
-        )}
-      </Card>
-      <Card>
-        <CardHeader title="Bilgi bankası önerileri" description="Bilinen sorunlar ve runbook'lar" />
-        {rec.isLoading ? (
-          <Skeleton className="m-4 h-32" />
-        ) : !rec.data || (!rec.data.known_issues.length && !rec.data.runbooks.length) ? (
-          <EmptyState icon={<BookOpen className="size-7" />} title="Eşleşen kayıt yok" />
-        ) : (
-          <ul className="divide-y divide-line text-sm">
-            {rec.data.known_issues.map((k) => (
-              <li key={k.id} className="px-4 py-2.5">
-                <Link to={`/knowledge?tab=issues&id=${k.id}`} className="text-ink hover:underline">
-                  {k.title}
-                </Link>
-                <div className="text-xs text-muted">Bilinen sorun{k.resolution ? ` · çözüm: ${k.resolution.slice(0, 120)}` : ""}</div>
-              </li>
-            ))}
-            {rec.data.runbooks.map((r) => (
-              <li key={r.id} className="px-4 py-2.5">
-                <Link to={`/knowledge?tab=runbooks&id=${r.id}`} className="text-ink hover:underline">
-                  {r.title}
-                </Link>
-                <div className="text-xs text-muted">
-                  Runbook · risk {r.risk_level}
-                  {r.requires_approval && " · onay gerekli"}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+    <div className="overflow-x-auto">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Investigation</th>
+            <th>Mechanism</th>
+            <th className="num">Risk</th>
+            <th>Önem</th>
+            <th className="num">Zaman</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((s) => (
+            <tr key={s.id} className={s._self ? "[&>td]:bg-accent/6" : undefined}>
+              <td className="primary">
+                {s._self ? (
+                  <span className="text-xs text-muted">bu investigation</span>
+                ) : (
+                  <Link to={`/investigations/${s.id}`} className="hover:underline">
+                    {s.title}
+                  </Link>
+                )}
+              </td>
+              <td className="text-xs">{mechanismLabel(s.primary_mechanism)}</td>
+              <td className="num">
+                <RiskValue score={toNum(s.risk_score)} />
+              </td>
+              <td>
+                <SeverityBadge severity={s.severity} />
+              </td>
+              <td className="num text-xs text-muted">{fmtRelative(s.created_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -204,7 +135,17 @@ export default function InvestigationDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
   const { can } = useAuth();
-  const [tab, setTab] = useState("summary");
+  const [sp, setSp] = useSearchParams();
+  const tab = sp.get("tab") ?? "analysis";
+  const evKey = sp.get("ev");
+  const setTab = (t: string, extra?: Record<string, string>) => {
+    const n = new URLSearchParams(sp);
+    if (t === "analysis") n.delete("tab");
+    else n.set("tab", t);
+    n.delete("ev");
+    for (const [k, v] of Object.entries(extra ?? {})) n.set(k, v);
+    setSp(n, { replace: true });
+  };
   const inv = useInvestigation(id);
   const ev = useEvidence(tab === "evidence" ? id : undefined);
   const tools = useTools(tab === "tools" ? id : undefined);
@@ -213,53 +154,44 @@ export default function InvestigationDetailPage() {
   const gen = useGenerateRca();
   const { create } = useIncidentMutations();
 
+  useEffect(() => {
+    if (tab === "evidence" && evKey && ev.data) document.getElementById(`evidence-${evKey}`)?.scrollIntoView?.({ block: "center" });
+  }, [tab, evKey, ev.data]);
+
   if (inv.error) return <ErrorState className="mt-10" error={inv.error} onRetry={() => inv.refetch()} />;
   const d = inv.data;
   const done = d && (d.status === "COMPLETED" || d.status === "PARTIAL");
+  const nEv = ev.data?.length ?? d?.report?.evidence?.length; // kayıtlı evidence (detay kayıtları dahil) yüklüyse onu say
 
   return (
-    <div className="mx-auto max-w-[1500px] p-4 lg:p-6">
-      <div className="mb-5">
-        <Link to="/investigations" className="text-xs text-muted hover:text-ink">
-          ← Araştırma geçmişi
-        </Link>
-        {!d ? (
-          <Skeleton className="mt-2 h-8 w-1/2" />
-        ) : (
-          <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-xl font-semibold text-ink">{d.title}</h1>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
-                <InvestigationStatusBadge status={d.status} />
-                <SeverityBadge severity={d.severity} />
-                <span>risk {d.risk_score == null ? "hesaplanamadı" : fmtNum(Number(d.risk_score), 1)}</span>
-                <span>· kapsam {fmtPct(d.data_coverage == null ? null : Number(d.data_coverage), 0)}</span>
-                <span>
-                  · {fmtTime(d.window_start)} → {fmtTime(d.window_end, false)}
-                </span>
-                <span>· {fmtDuration(d.duration_ms)}</span>
-                <span className="font-mono">· {d.run_id}</span>
-                {d.conversation_id && (
-                  <Link className="hover:text-ink" to={`/investigate/${d.conversation_id}`}>
-                    · konuşma {shortId(d.conversation_id)}
-                  </Link>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+    <Page>
+      <PageHeader
+        crumbs={[{ label: "Investigation geçmişi", to: "/investigations" }, { label: d ? shortId(d.id) : "…" }]}
+        title={d ? d.title : <Skeleton className="h-6 w-80" />}
+        meta={
+          d && (
+            <>
+              <InvestigationStatusBadge status={d.status} />
+              <span className="tabular-nums">{fmtTime(d.created_at)}</span>
+              {d.conversation_id && (
+                <Link className="hover:text-ink" to={`/investigate/${d.conversation_id}`}>
+                  konuşma {shortId(d.conversation_id)} →
+                </Link>
+              )}
+            </>
+          )
+        }
+        actions={
+          d && (
+            <>
               {done && <FeedbackBar investigationId={d.id} />}
               {trace.data?.url && (
-                <a
-                  href={trace.data.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
-                >
+                <a href={trace.data.url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
                   <ExternalLink /> LangSmith'te aç
                 </a>
               )}
               <Button size="sm" variant="outline" onClick={() => nav(`/activity/${d.id}`)}>
-                Adımlar
+                <ListChecks /> Adımlar
               </Button>
               {can("sre") && done && (
                 <Button size="sm" variant="outline" loading={gen.isPending} onClick={() => gen.mutate({ investigationId: d.id }, { onSuccess: (r) => nav(`/rca/${r.id}`) })}>
@@ -281,56 +213,83 @@ export default function InvestigationDetailPage() {
                   <Siren /> Incident aç
                 </Button>
               )}
-            </div>
-          </div>
-        )}
-      </div>
+            </>
+          )
+        }
+      />
       {d?.status === "PARTIAL" && (
-        <div role="status" className="mb-4 flex gap-2 rounded-md border border-st-warning/40 bg-st-warning/10 px-4 py-2.5 text-xs text-ink-2">
-          <AlertTriangle className="size-4 shrink-0 text-st-warning" /> Kısmi veri: bazı Dynatrace query'leri başarısız oldu veya veri dönmedi. Sonuçlar eksik evidence ile üretildi.
-        </div>
+        <Notice tone="warning" className="mb-3">
+          Kısmi veri: bazı Dynatrace query'leri başarısız oldu veya veri dönmedi. Sonuçlar eksik evidence ile üretildi — ayrıntı Data Quality bölümünde.
+        </Notice>
       )}
-      {d?.error && <div className="mb-4 rounded-md border border-st-critical/40 bg-st-critical/10 px-4 py-2.5 font-mono text-xs text-ink">{d.error}</div>}
+      {d?.error && (
+        <Notice tone="critical" className="mb-3">
+          <span className="font-mono">{d.error}</span>
+        </Notice>
+      )}
       <Tabs
         value={tab}
-        onValueChange={setTab}
+        onValueChange={(t) => setTab(t)}
         tabs={[
-          { value: "summary", label: "Özet" },
-          { value: "evidence", label: "Evidence" },
-          { value: "tools", label: "Araç çalıştırmaları" },
-          { value: "compare", label: "Geçmişle karşılaştır" },
+          { value: "analysis", label: "Analiz" },
+          { value: "evidence", label: `Evidence${nEv ? ` (${nEv})` : ""}` },
+          { value: "tools", label: "Tool executions" },
+          { value: "similar", label: "Benzer olaylar" },
           { value: "rca", label: `RCA raporları${rcas.data?.total ? ` (${rcas.data.total})` : ""}` },
         ]}
       >
-        <TabPanel value="summary">{d ? <Summary inv={d} /> : <Skeleton className="h-64" />}</TabPanel>
+        <TabPanel value="analysis">
+          {d ? (
+            <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_17rem]">
+              <Analysis inv={d} onEvidence={(k) => setTab("evidence", { ev: k })} />
+              <div className="lg:sticky lg:top-3">
+                <Facts inv={d} />
+              </div>
+            </div>
+          ) : (
+            <Skeleton className="h-96" />
+          )}
+        </TabPanel>
         <TabPanel value="evidence">
-          <Card>{ev.isLoading ? <Skeleton className="m-4 h-40" /> : ev.error ? <ErrorState error={ev.error} /> : <EvidenceTable rows={ev.data ?? []} />}</Card>
+          <Card>{ev.isLoading ? <Skeleton className="m-3 h-40" /> : ev.error ? <ErrorState error={ev.error} /> : <EvidenceTable rows={ev.data ?? []} highlight={evKey} />}</Card>
         </TabPanel>
         <TabPanel value="tools">
-          <Card>{tools.isLoading ? <Skeleton className="m-4 h-40" /> : tools.error ? <ErrorState error={tools.error} /> : <ToolTable rows={tools.data ?? []} />}</Card>
+          <Card>{tools.isLoading ? <Skeleton className="m-3 h-40" /> : tools.error ? <ErrorState error={tools.error} /> : <ToolTable rows={tools.data ?? []} />}</Card>
         </TabPanel>
-        <TabPanel value="compare">{d && <Compare inv={d} />}</TabPanel>
+        <TabPanel value="similar">
+          <Card>{d && <Similar inv={d} />}</Card>
+        </TabPanel>
         <TabPanel value="rca">
           <Card>
             {rcas.data?.items.length ? (
-              <ul className="divide-y divide-line">
-                {rcas.data.items.map((r) => (
-                  <li key={r.id}>
-                    <Link to={`/rca/${r.id}`} className="block px-4 py-3 hover:bg-surface-2">
-                      <div className="text-sm text-ink">{r.title}</div>
-                      <div className="text-xs text-muted">
-                        {fmtTime(r.generated_at)} · {r.generated_by}
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Rapor</th>
+                    <th>Üreten</th>
+                    <th className="num">Zaman</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rcas.data.items.map((r) => (
+                    <tr key={r.id}>
+                      <td className="primary">
+                        <Link to={`/rca/${r.id}`} className="hover:underline">
+                          {r.title}
+                        </Link>
+                      </td>
+                      <td className="text-xs">{r.generated_by}</td>
+                      <td className="num text-xs text-muted">{fmtTime(r.generated_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             ) : (
-              <EmptyState title="Bu araştırma için RCA raporu yok" description={done ? "Yukarıdan 'RCA üret' ile oluşturabilirsiniz." : "RCA yalnız tamamlanmış araştırmalar için üretilebilir."} />
+              <EmptyState title="Bu investigation için RCA raporu yok" description={done ? "Üstteki 'RCA üret' ile oluşturabilirsiniz." : "RCA yalnız tamamlanmış investigation'lar için üretilebilir."} />
             )}
           </Card>
         </TabPanel>
       </Tabs>
-    </div>
+    </Page>
   );
 }

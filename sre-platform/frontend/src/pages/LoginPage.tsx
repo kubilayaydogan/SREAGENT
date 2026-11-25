@@ -30,15 +30,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-full place-items-center p-6">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-lg border border-line bg-surface p-6" aria-label="giriş formu">
-        <div className="mb-6 flex items-center gap-2.5">
-          <div className="grid size-9 place-items-center rounded-md bg-accent text-white">
-            <Activity className="size-5" />
-          </div>
-          <div>
-            <h1 className="text-base font-semibold text-ink">airlab SRE Operations</h1>
-            <p className="text-xs text-muted">AI destekli SRE platformu</p>
+    <div className="grid min-h-full place-items-center bg-page p-6">
+      <form onSubmit={submit} className="w-full max-w-xs rounded-lg border border-line bg-surface p-5" aria-label="giriş formu">
+        <div className="mb-5 flex items-center gap-2">
+          <span className="grid size-7 place-items-center rounded-md bg-ink text-page">
+            <Activity className="size-4" />
+          </span>
+          <div className="leading-tight">
+            <h1 className="text-[13px] font-semibold text-ink">airlab SRE</h1>
+            <p className="text-xs text-muted">Operations Platform</p>
           </div>
         </div>
         <div className="space-y-3">
@@ -51,7 +51,7 @@ export default function LoginPage() {
             <Input id="p" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           {err && (
-            <p role="alert" className="rounded-md border border-st-critical/40 bg-st-critical/10 px-3 py-2 text-xs text-[#f08a8a]">
+            <p role="alert" className="rounded-md border border-l-2 border-st-critical/50 bg-surface px-2.5 py-1.5 text-xs text-st-critical-ink">
               {err}
             </p>
           )}

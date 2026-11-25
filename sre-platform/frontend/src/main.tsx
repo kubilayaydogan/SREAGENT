@@ -5,7 +5,10 @@ import { Toaster } from "sonner";
 import App from "./App";
 import { AuthProvider } from "./services/auth";
 import { ApiError } from "./services/api";
+import { applyInitialTheme, ThemeProvider, useTheme } from "./lib/theme";
 import "./index.css";
+
+applyInitialTheme();
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -18,13 +21,20 @@ const qc = new QueryClient({
   },
 });
 
+function ThemedToaster() {
+  const { theme } = useTheme();
+  return <Toaster theme={theme} position="bottom-right" closeButton toastOptions={{ className: "!rounded-md !text-[13px]" }} />;
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={qc}>
-      <AuthProvider>
-        <App />
-        <Toaster theme="dark" position="bottom-right" richColors closeButton />
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <App />
+          <ThemedToaster />
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   </StrictMode>,
 );

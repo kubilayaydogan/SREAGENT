@@ -1,33 +1,107 @@
 @import "tailwindcss";
 
-/* Koyu tema tasarım belirteçleri. Grafik renkleri dataviz referans paletinin KOYU adımlarıdır (doğrulandı);
-   durum renkleri ayrılmıştır ve hiçbir zaman seri rengi olarak kullanılmaz (daima ikon + etiketle). */
-@theme {
-  --color-page: #0d0d0d;
-  --color-surface: #1a1a19;
-  --color-surface-2: #222220;
-  --color-surface-3: #2c2c2a;
-  --color-line: #2c2c2a;
-  --color-line-strong: #383835;
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ------------------------------------------------------------------ design tokens
+   Tek kaynak. Tailwind utility'leri var(--color-*) okur; tema = aşağıdaki değişkenlerin [data-theme] altında
+   yeniden tanımlanması. Grafik ve uygulama renkleri dataviz referans paletinin doğrulanmış light/dark adımlarıdır.
+   Status renkleri ayrılmıştır: hiçbir zaman seri rengi olarak kullanılmaz ve daima ikon + etiketle gelir.
+   *-ink varyantları metin içindir (WCAG AA ≥ 4.5:1, ilgili yüzeyde). */
+@theme static {
+  /* surfaces (light varsayılan; dark aşağıda) */
+  --color-page: #f4f4f2;
+  --color-surface: #fcfcfb;
+  --color-surface-2: #f0f0ed;
+  --color-surface-3: #e6e5e0;
+  --color-line: #e1e0d9;
+  --color-line-strong: #cfcec6;
+  --color-ink: #0b0b0b;
+  --color-ink-2: #3f3e3b;
+  --color-muted: #64635e;
+  --color-accent: #2a78d6;
+  --color-accent-ink: #ffffff;
+  --color-accent-text: #1c5cab;
+
+  /* status: fill/ikon ve metin tonu */
+  --color-st-good: #0ca30c;
+  --color-st-warning: #e0a100;
+  --color-st-serious: #e0703f;
+  --color-st-critical: #d03b3b;
+  --color-st-unknown: #898781;
+  --color-st-good-ink: #006300;
+  --color-st-warning-ink: #7a5200;
+  --color-st-serious-ink: #a4461b;
+  --color-st-critical-ink: #b02a2a;
+
+  /* varlık renkleri (uygulama = kategorik slot 1–4, sabit sıra) */
+  --color-app-reservation: #2a78d6;
+  --color-app-checkin: #eb6834;
+  --color-app-flightops: #1baf7a;
+  --color-app-baggage: #eda100;
+  --color-app-other: #6250d6;
+
+  /* chart chrome */
+  --color-chart-grid: #e1e0d9;
+  --color-chart-axis: #c3c2b7;
+  --color-chart-single: #2a78d6;
+  --color-chart-baseline: #898781;
+
+  /* typography */
+  --font-sans: "Inter", "Inter Variable", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  /* shape & elevation: küçük radius, gölge yalnız üst katmanlarda (popover, dialog) */
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 6px;
+  --shadow-pop: 0 4px 16px -4px rgb(0 0 0 / 0.18), 0 0 0 1px rgb(0 0 0 / 0.04);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --color-page: #0e0e0d;
+  --color-surface: #161615;
+  --color-surface-2: #1e1e1c;
+  --color-surface-3: #2a2a28;
+  --color-line: #262624;
+  --color-line-strong: #363633;
   --color-ink: #f0efec;
   --color-ink-2: #c3c2b7;
-  --color-muted: #898781;
+  --color-muted: #94928b;
   --color-accent: #3987e5;
   --color-accent-ink: #ffffff;
+  --color-accent-text: #86b6ef;
 
   --color-st-good: #0ca30c;
   --color-st-warning: #fab219;
   --color-st-serious: #ec835a;
   --color-st-critical: #d03b3b;
   --color-st-unknown: #898781;
+  --color-st-good-ink: #3fbf3f;
+  --color-st-warning-ink: #fab219;
+  --color-st-serious-ink: #ec835a;
+  --color-st-critical-ink: #f08a8a;
 
   --color-app-reservation: #3987e5;
   --color-app-checkin: #d95926;
   --color-app-flightops: #199e70;
   --color-app-baggage: #c98500;
+  --color-app-other: #9085e9;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --color-chart-grid: #262624;
+  --color-chart-axis: #383835;
+  --color-chart-single: #3987e5;
+  --color-chart-baseline: #898781;
+
+  --shadow-pop: 0 6px 20px -6px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+[data-theme="light"] {
+  color-scheme: light;
 }
 
 html,
@@ -37,40 +111,119 @@ body,
 }
 body {
   @apply bg-page text-ink antialiased;
-  font-feature-settings: "tnum" 1;
+  font-size: 13px;
+  line-height: 1.45;
+  font-feature-settings: "cv11" 1, "ss01" 1;
+}
+.tabular-nums,
+td,
+.num {
+  font-variant-numeric: tabular-nums;
 }
 * {
-  scrollbar-color: #383835 transparent;
+  scrollbar-color: var(--color-line-strong) transparent;
   scrollbar-width: thin;
 }
 :focus-visible {
   outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
-/* Markdown (ajan yanıtları, RCA) */
+/* ------------------------------------------------------------------ data table
+   Tüm listelerde tek tablo dili: sticky header, sıkı satırlar, sağa hizalı sayılar (.num). */
+.data-table {
+  @apply w-full border-separate border-spacing-0 text-[13px];
+}
+.data-table thead th {
+  @apply sticky top-0 z-[1] border-b border-line bg-surface px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-muted;
+}
+.data-table tbody td {
+  @apply border-b border-line px-3 py-2 align-middle text-ink-2;
+}
+.data-table tbody tr:last-child td {
+  @apply border-b-0;
+}
+.data-table tbody tr:hover td {
+  @apply bg-surface-2;
+}
+.data-table .num {
+  @apply text-right whitespace-nowrap;
+}
+.data-table td.primary {
+  @apply text-ink;
+}
+
+/* ------------------------------------------------------------------ markdown (LLM metni, RCA) */
 .prose-sre {
-  @apply text-sm leading-relaxed text-ink-2;
+  @apply text-[13px] leading-relaxed text-ink-2;
 }
-.prose-sre h1 { @apply mt-4 mb-2 text-lg font-semibold text-ink; }
-.prose-sre h2 { @apply mt-4 mb-2 text-base font-semibold text-ink; }
-.prose-sre h3 { @apply mt-3 mb-1 text-sm font-semibold text-ink; }
-.prose-sre p { @apply my-2; }
-.prose-sre ul { @apply my-2 list-disc pl-5; }
-.prose-sre ol { @apply my-2 list-decimal pl-5; }
-.prose-sre li { @apply my-0.5; }
-.prose-sre strong { @apply text-ink; }
-.prose-sre a { @apply text-accent underline underline-offset-2; }
-.prose-sre code { @apply rounded bg-surface-3 px-1 py-0.5 font-mono text-[0.8em] text-ink; }
-.prose-sre pre { @apply my-2 overflow-x-auto rounded-md bg-page p-3; }
-.prose-sre pre code { @apply bg-transparent p-0; }
-.prose-sre blockquote { @apply my-2 border-l-2 border-st-warning bg-surface-2 px-3 py-1.5 text-ink; }
-.prose-sre table { @apply my-2 w-full border-collapse text-xs; }
-.prose-sre th { @apply border-b border-line-strong px-2 py-1 text-left font-medium text-ink; }
-.prose-sre td { @apply border-b border-line px-2 py-1; }
-.prose-sre hr { @apply my-3 border-line; }
+.prose-sre h1,
+.prose-sre h2 {
+  @apply mt-4 mb-1.5 text-[13px] font-semibold text-ink;
+}
+.prose-sre h3 {
+  @apply mt-3 mb-1 text-[13px] font-medium text-ink;
+}
+.prose-sre > :first-child {
+  @apply mt-0;
+}
+.prose-sre p {
+  @apply my-1.5;
+}
+.prose-sre ul {
+  @apply my-1.5 list-disc pl-5;
+}
+.prose-sre ol {
+  @apply my-1.5 list-decimal pl-5;
+}
+.prose-sre li {
+  @apply my-0.5;
+}
+.prose-sre strong {
+  @apply font-medium text-ink;
+}
+.prose-sre a {
+  @apply text-accent-text underline underline-offset-2;
+}
+.prose-sre code {
+  @apply rounded-sm bg-surface-3 px-1 py-px font-mono text-[0.85em] text-ink;
+}
+.prose-sre pre {
+  @apply my-2 overflow-x-auto rounded-md border border-line bg-surface-2 p-3;
+}
+.prose-sre pre code {
+  @apply bg-transparent p-0;
+}
+.prose-sre blockquote {
+  @apply my-2 border-l-2 border-st-warning pl-3 text-ink;
+}
+.prose-sre table {
+  @apply my-2 w-full border-collapse text-xs;
+}
+.prose-sre th {
+  @apply border-b border-line-strong px-2 py-1 text-left font-medium text-ink;
+}
+.prose-sre td {
+  @apply border-b border-line px-2 py-1;
+}
+.prose-sre hr {
+  @apply my-3 border-line;
+}
 
-@keyframes blink { 50% { opacity: 0; } }
+/* streaming imleci (işlevsel: yanıtın hâlâ aktığını gösterir) */
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
 .caret::after {
   content: "▍";
   margin-left: 1px;

@@ -17,8 +17,8 @@ export function ConversationSidebar({ onNew, activeId }: { onNew: () => void; ac
   return (
     <div className="flex h-full flex-col">
       <div className="space-y-2 border-b border-line p-3">
-        <Button variant="primary" className="w-full" onClick={onNew}>
-          <MessageSquarePlus /> Yeni konuşma
+        <Button variant="primary" size="sm" className="w-full" onClick={onNew}>
+          <MessageSquarePlus /> Yeni investigation
         </Button>
         <SearchInput value={q} onChange={setQ} placeholder="Konuşmalarda ara" className="w-full" />
       </div>
@@ -49,11 +49,11 @@ export function ConversationSidebar({ onNew, activeId }: { onNew: () => void; ac
                 <NavLink
                   to={`/investigate/${c.id}`}
                   className={({ isActive }) =>
-                    cn("block rounded-md px-2.5 py-2 pr-14 text-sm", isActive || activeId === c.id ? "bg-surface-3 text-ink" : "text-ink-2 hover:bg-surface-2")
+                    cn("block rounded-md px-2.5 py-1.5 pr-14 text-[13px]", isActive || activeId === c.id ? "bg-surface-3 text-ink" : "text-ink-2 hover:bg-surface-2")
                   }
                 >
                   <div className="truncate">{c.title}</div>
-                  <div className="text-[11px] text-muted">{fmtRelative(c.updated_at)}</div>
+                  <div className="text-2xs text-muted">{fmtRelative(c.updated_at)}</div>
                 </NavLink>
               )}
               {editing !== c.id && (

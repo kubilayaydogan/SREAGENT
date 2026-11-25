@@ -199,6 +199,13 @@ export interface Investigation {
   created_at: string;
 }
 
+export interface LockChainNode {
+  app: string;
+  level: number;
+  n: number;
+  waits_on: { app: string; n: number }[];
+}
+
 export interface Mechanism {
   id: string;
   title: string;
@@ -208,19 +215,62 @@ export interface Mechanism {
   evidence_ids?: string[];
   secondary_to?: string | null;
   confidence?: Confidence;
+  signals?: string[];
+  chain_path?: string;
+  chain_depth?: number;
+  lock_chain?: LockChainNode[];
+  edges_total?: number;
+  [k: string]: unknown;
+}
+
+/** Rapordaki risk bloğu (airlab_agent/scoring.py score_all çıktısı). */
+export interface ReportRiskApp {
+  score: number | null;
+  band: string | null;
+  coverage: number;
+  missing: string[];
+  components: Record<string, number | string | null>;
+}
+
+/** Rapordaki DQL kanıt özeti (ham kayıtlar evidence tablosundadır). */
+export interface ReportEvidence {
+  id: string;
+  signal: string;
+  status: string;
+  records: number | null;
+  dql?: string | null;
+  error?: string | null;
+  dynatrace_query_id?: string | null;
+}
+
+export type FeatureBlock = Record<string, number | null>;
+export interface FeatureWindow {
+  apps?: Record<string, FeatureBlock>;
+  db?: FeatureBlock;
+  hosts?: Record<string, FeatureBlock>;
 }
 
 export interface Report {
+  id?: string;
+  kind?: string;
   status?: "complete" | "partial";
-  risk?: { overall?: { score: number | null; band: string | null; coverage?: number } };
-  data_coverage?: { ratio?: number; signals_ok?: number; signals_total?: number };
-  causality?: { primary_mechanism?: string | null; confidence?: Confidence };
+  generated_at?: string;
+  risk?: { overall?: { score: number | null; band: string | null; coverage?: number; scored_apps?: number; total_apps?: number }; apps?: Record<string, ReportRiskApp> };
+  data_coverage?: { ratio?: number; signals_ok?: number; signals_total?: number; gaps?: Record<string, string> };
+  causality?: { primary_mechanism?: string | null; confidence?: Confidence | null; source_apps?: string[]; affected_apps?: string[] };
   mechanisms?: Mechanism[];
   data_gaps?: string[];
   human_review?: string[];
   alternatives?: string[];
-  impacted?: Record<string, { reasons?: string[] }>;
+  impacted?: Record<string, { reasons?: string[]; latency_ratio?: number; latency_source?: string }>;
+  unexplained_impacted?: string[];
   windows?: { name: string; start: string; end: string }[];
+  evidence?: ReportEvidence[];
+  true_zero_signals?: string[];
+  features_summary?: { window?: FeatureWindow; baseline?: FeatureWindow };
+  errors?: unknown[];
+  notes?: string[];
+  budget?: { elapsed_s?: number; llm_calls?: number; queries_used?: number; input_tokens?: number; output_tokens?: number };
   [k: string]: unknown;
 }
 

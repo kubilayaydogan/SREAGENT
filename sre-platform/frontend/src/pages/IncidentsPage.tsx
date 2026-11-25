@@ -1,11 +1,12 @@
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
-import { IncidentStatusBadge, INC_STATUS_LABEL, SeverityBadge, SEVERITY_LABEL } from "@/components/badges";
+import { Link, useNavigate } from "react-router";
+import { AppTag, IncidentStatusBadge, INC_STATUS_LABEL, SeverityBadge, SEVERITY_LABEL } from "@/components/badges";
+import { FilterBar, SortTh, TableWrap, useUrlFilters } from "@/components/table";
 import { AppSelect, SearchInput } from "@/components/filters";
 import { Button, Card, Input, Label, Select, Textarea } from "@/components/ui/primitives";
 import { Dialog } from "@/components/ui/overlay";
-import { EmptyState, ErrorState, PageHeader, Pagination, TableSkeleton } from "@/components/ui/states";
+import { EmptyState, ErrorState, Page, PageHeader, Pagination, TableSkeleton } from "@/components/ui/states";
 import { useDashboard, useIncidentMutations, useIncidents } from "@/hooks/queries";
 import { useAuth } from "@/services/auth";
 import { cn, fmtRelative, fmtTime } from "@/lib/utils";
@@ -57,8 +58,8 @@ function CreateIncident({ open, onOpenChange }: { open: boolean; onOpenChange: (
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>Önem</Label>
-            <Select value={f.severity} onChange={(e) => setF({ ...f, severity: e.target.value as Severity })}>
+            <Label htmlFor="isev">Önem</Label>
+            <Select id="isev" value={f.severity} onChange={(e) => setF({ ...f, severity: e.target.value as Severity })}>
               {(["critical", "high", "medium", "low", "unknown"] as Severity[]).map((s) => (
                 <option key={s} value={s}>
                   {SEVERITY_LABEL[s]}
@@ -67,7 +68,7 @@ function CreateIncident({ open, onOpenChange }: { open: boolean; onOpenChange: (
             </Select>
           </div>
           <div>
-            <Label>Uygulama</Label>
+            <Label>Servis</Label>
             <AppSelect value={f.application_id} onChange={(v) => setF({ ...f, application_id: v })} allLabel="—" className="w-full" />
           </div>
         </div>
@@ -81,70 +82,70 @@ function CreateIncident({ open, onOpenChange }: { open: boolean; onOpenChange: (
 }
 
 export default function IncidentsPage() {
-  const [sp, setSp] = useSearchParams();
   const { can } = useAuth();
-  const g = (k: string) => sp.get(k) ?? "";
-  const set = (k: string, v: string) => {
-    const n = new URLSearchParams(sp);
-    if (v) n.set(k, v);
-    else n.delete(k);
-    if (k !== "page") n.delete("page");
-    setSp(n, { replace: true });
-  };
+  const { get: g, set, clear } = useUrlFilters();
   const tab = g("tab") || "active";
+  const sort = g("sort") || "-detected_at";
   const statuses = TABS.find((t) => t.v === tab)?.s ?? [];
   const [creating, setCreating] = useState(false);
-  const { data, isLoading, error, refetch } = useIncidents({
+  const { data, isLoading, error, refetch, isFetching } = useIncidents({
     status: statuses,
     severity: g("severity"),
     application_id: g("app"),
     q: g("q"),
     page: Number(g("page") || 1),
-    size: 25,
+    size: 50,
+    sort,
   });
   const counts = useDashboard("15m").data?.incident_counts ?? {};
+  const active = ["q", "app", "severity"].filter((k) => g(k)).length;
 
   return (
-    <div className="mx-auto max-w-[1500px] p-4 lg:p-6">
+    <Page>
       <PageHeader
-        title="Incident Yönetimi"
-        description="Yaşam döngüsü: Açık → İnceleniyor → Hafifletildi → Çözüldü (her geçiş zaman çizelgesine yazılır)"
+        title="Incident'lar"
+        description="Açık → İnceleniyor → Hafifletildi → Çözüldü · her geçiş timeline'a yazılır"
         actions={
           can("sre") && (
-            <Button variant="primary" onClick={() => setCreating(true)}>
+            <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
               <Plus /> Yeni incident
             </Button>
           )
         }
       />
-      <div className="mb-3 flex flex-wrap gap-1 border-b border-line">
+      <div role="tablist" aria-label="durum" className="mb-3 flex flex-wrap gap-0.5 border-b border-line">
         {TABS.map((t) => {
           const n = t.s.length ? t.s.reduce((a, s) => a + (counts[s] ?? 0), 0) : undefined;
           return (
             <button
               key={t.v}
+              role="tab"
+              aria-selected={tab === t.v}
               onClick={() => set("tab", t.v === "active" ? "" : t.v)}
-              className={cn("-mb-px border-b-2 px-3 py-2 text-sm", tab === t.v ? "border-accent text-ink" : "border-transparent text-muted hover:text-ink")}
+              className={cn(
+                "-mb-px border-b-2 px-2.5 py-1.5 text-[13px] transition-colors duration-100",
+                tab === t.v ? "border-ink font-medium text-ink" : "border-transparent text-muted hover:text-ink",
+              )}
             >
               {t.l}
-              {n !== undefined && <span className="ml-1.5 rounded-full bg-surface-3 px-1.5 text-[11px] tabular-nums">{n}</span>}
+              {n !== undefined && <span className="ml-1.5 text-xs text-muted tabular-nums">{n}</span>}
             </button>
           );
         })}
       </div>
-      <div className="mb-3 flex flex-wrap gap-2">
-        <SearchInput value={g("q")} onChange={(v) => set("q", v)} placeholder="Başlık, açıklama, Root Cause…" />
-        <AppSelect value={g("app")} onChange={(v) => set("app", v)} />
-        <Select aria-label="önem" value={g("severity")} onChange={(e) => set("severity", e.target.value)} className="w-36">
-          <option value="">Tüm önemler</option>
-          {(Object.keys(SEVERITY_LABEL) as Severity[]).map((s) => (
-            <option key={s} value={s}>
-              {SEVERITY_LABEL[s]}
-            </option>
-          ))}
-        </Select>
-      </div>
       <Card>
+        <FilterBar active={active} onClear={() => clear(["q", "app", "severity"])} right={data && <span className="text-xs text-muted tabular-nums">{data.total} kayıt</span>}>
+          <SearchInput value={g("q")} onChange={(v) => set("q", v)} placeholder="Başlık, açıklama, Root Cause…" />
+          <AppSelect value={g("app")} onChange={(v) => set("app", v)} />
+          <Select aria-label="önem" value={g("severity")} onChange={(e) => set("severity", e.target.value)} className="w-36">
+            <option value="">Tüm önemler</option>
+            {(Object.keys(SEVERITY_LABEL) as Severity[]).map((s) => (
+              <option key={s} value={s}>
+                {SEVERITY_LABEL[s]}
+              </option>
+            ))}
+          </Select>
+        </FilterBar>
         {isLoading ? (
           <TableSkeleton />
         ) : error ? (
@@ -153,48 +154,58 @@ export default function IncidentsPage() {
           <EmptyState title="Incident yok" description={tab === "active" ? "Aktif incident bulunmuyor." : "Bu filtreyle eşleşen kayıt yok."} />
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs text-muted">
-                  <tr className="border-b border-line">
-                    <th className="px-4 py-2 font-medium">Incident</th>
-                    <th className="px-4 py-2 font-medium">Önem</th>
-                    <th className="px-4 py-2 font-medium">Durum</th>
-                    <th className="px-4 py-2 font-medium">Uygulama</th>
-                    <th className="px-4 py-2 font-medium">Kaynak</th>
-                    <th className="px-4 py-2 font-medium">Tespit</th>
-                    <th className="px-4 py-2 font-medium">Güncelleme</th>
+            <TableWrap fetching={isFetching}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <SortTh field="title" sort={sort} onSort={(v) => set("sort", v)}>
+                      Incident
+                    </SortTh>
+                    <SortTh field="severity" sort={sort} onSort={(v) => set("sort", v)}>
+                      Önem
+                    </SortTh>
+                    <SortTh field="status" sort={sort} onSort={(v) => set("sort", v)}>
+                      Durum
+                    </SortTh>
+                    <th>Servis</th>
+                    <th>Kaynak</th>
+                    <SortTh field="detected_at" sort={sort} onSort={(v) => set("sort", v)} num>
+                      Tespit
+                    </SortTh>
+                    <SortTh field="updated_at" sort={sort} onSort={(v) => set("sort", v)} num>
+                      Güncelleme
+                    </SortTh>
                   </tr>
                 </thead>
                 <tbody>
                   {data.items.map((i) => (
-                    <tr key={i.id} className="border-b border-line last:border-0 hover:bg-surface-2">
-                      <td className="max-w-md px-4 py-2">
-                        <Link to={`/incidents/${i.id}`} className="block truncate text-ink hover:underline">
+                    <tr key={i.id} className={cn(i.severity === "critical" && i.status !== "RESOLVED" && "[&>td:first-child]:shadow-[inset_2px_0_0_var(--color-st-critical)]")}>
+                      <td className="primary max-w-md">
+                        <Link to={`/incidents/${i.id}`} className="block truncate hover:underline">
                           {i.title}
                         </Link>
-                        {i.root_cause && <div className="truncate text-[11px] text-muted">kök neden: {i.root_cause}</div>}
+                        {i.root_cause && <div className="truncate text-2xs text-muted">Root Cause: {i.root_cause}</div>}
                       </td>
-                      <td className="px-4 py-2">
+                      <td>
                         <SeverityBadge severity={i.severity} />
                       </td>
-                      <td className="px-4 py-2">
+                      <td>
                         <IncidentStatusBadge status={i.status} />
                       </td>
-                      <td className="px-4 py-2 text-xs text-ink-2">{i.application_id ?? "—"}</td>
-                      <td className="px-4 py-2 text-xs text-ink-2">{i.source}</td>
-                      <td className="px-4 py-2 text-xs text-ink-2">{fmtTime(i.detected_at)}</td>
-                      <td className="px-4 py-2 text-xs text-muted">{fmtRelative(i.updated_at)}</td>
+                      <td>{i.application_id ? <AppTag id={i.application_id} /> : <span className="text-xs text-muted">—</span>}</td>
+                      <td className="text-xs">{i.source}</td>
+                      <td className="num text-xs">{fmtTime(i.detected_at)}</td>
+                      <td className="num text-xs text-muted">{fmtRelative(i.updated_at)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
             <Pagination page={data.page} pages={data.pages} total={data.total} onPage={(p) => set("page", String(p))} />
           </>
         )}
       </Card>
       <CreateIncident open={creating} onOpenChange={setCreating} />
-    </div>
+    </Page>
   );
 }

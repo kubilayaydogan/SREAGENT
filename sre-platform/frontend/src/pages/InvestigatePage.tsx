@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bot, Loader2, PanelLeft, RotateCcw, Sparkles, User as UserIcon, WifiOff } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, PanelLeft, RotateCcw, Search, WifiOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { Markdown } from "@/components/Markdown";
 import { Button, Skeleton } from "@/components/ui/primitives";
-import { EmptyState, ErrorState } from "@/components/ui/states";
+import { ErrorState } from "@/components/ui/states";
 import { Composer, type TimeChoice } from "@/features/chat/Composer";
 import { ConversationSidebar } from "@/features/chat/ConversationSidebar";
 import { InvestigationCard } from "@/features/chat/InvestigationCard";
@@ -24,34 +24,46 @@ const EXAMPLES = [
   "Son 24 saatin error rate'lerini analiz et.",
 ];
 
-function Suggestions({ items, onPick, disabled }: { items: string[]; onPick: (s: string) => void; disabled?: boolean }) {
+/** Takip soruları: sade metin bağlantıları (sohbet "pill"leri değil). */
+function Suggestions({ items, onPick, disabled, title = "Takip soruları" }: { items: string[]; onPick: (s: string) => void; disabled?: boolean; title?: string }) {
   if (!items.length) return null;
   return (
-    <div className="mt-3 flex flex-wrap gap-1.5">
-      {items.map((s) => (
-        <button
-          key={s}
-          disabled={disabled}
-          onClick={() => onPick(s)}
-          className="rounded-full border border-line-strong px-2.5 py-1 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-        >
-          {s}
-        </button>
-      ))}
+    <div className="mt-3 border-t border-line pt-2">
+      <div className="mb-1 text-xs font-medium text-muted">{title}</div>
+      <ul className="space-y-px">
+        {items.map((s) => (
+          <li key={s}>
+            <button
+              disabled={disabled}
+              onClick={() => onPick(s)}
+              className="inline-flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left text-[13px] text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-50"
+            >
+              <ArrowRight className="size-3 shrink-0 text-muted" />
+              {s}
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-function Bubble({ role, children, meta }: { role: "user" | "assistant"; children: React.ReactNode; meta?: React.ReactNode }) {
-  const isUser = role === "user";
-  return (
-    <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
-      <div className={cn("grid size-7 shrink-0 place-items-center rounded-full", isUser ? "bg-surface-3 text-ink-2" : "bg-accent/20 text-accent")}>
-        {isUser ? <UserIcon className="size-4" /> : <Bot className="size-4" />}
+/** Investigation log düzeni: soru başlık satırı, yanıt altında kenarlıklı blok. Avatar / baloncuk yok. */
+function Turn({ role, children, meta }: { role: "user" | "assistant"; children: React.ReactNode; meta?: React.ReactNode }) {
+  if (role === "user")
+    return (
+      <div className="flex items-baseline gap-3 pt-2">
+        <span className="w-14 shrink-0 text-xs font-medium text-muted">Soru</span>
+        <div className="min-w-0 flex-1 text-[14px] font-medium whitespace-pre-wrap text-ink">{children}</div>
+        {meta && <span className="shrink-0 text-2xs text-muted tabular-nums">{meta}</span>}
       </div>
-      <div className={cn("min-w-0", isUser ? "max-w-[80%]" : "flex-1")}>
-        <div className={cn("rounded-lg px-4 py-2.5", isUser ? "bg-surface-3 text-sm text-ink whitespace-pre-wrap" : "border border-line bg-surface")}>{children}</div>
-        {meta && <div className={cn("mt-1 text-[11px] text-muted", isUser && "text-right")}>{meta}</div>}
+    );
+  return (
+    <div className="flex gap-3">
+      <span className="w-14 shrink-0 pt-2.5 text-xs font-medium text-muted">Yanıt</span>
+      <div className="min-w-0 flex-1">
+        <div className="rounded-lg border border-line bg-surface px-4 py-3">{children}</div>
+        {meta && <div className="mt-1 text-2xs text-muted">{meta}</div>}
       </div>
     </div>
   );
@@ -60,10 +72,15 @@ function Bubble({ role, children, meta }: { role: "user" | "assistant"; children
 const SOURCE_LABEL: Record<string, string> = { llm: "Claude", deterministic: "deterministik (LLM yok)", memory: "kayıtlar" };
 
 function SavedMessage({ m, onPick, busy, last }: { m: Message; onPick: (s: string) => void; busy: boolean; last: boolean }) {
-  if (m.role === "user") return <Bubble role="user" meta={fmtTime(m.created_at)}>{m.content}</Bubble>;
+  if (m.role === "user")
+    return (
+      <Turn role="user" meta={fmtTime(m.created_at)}>
+        {m.content}
+      </Turn>
+    );
   const md = m.metadata ?? {};
   return (
-    <Bubble
+    <Turn
       role="assistant"
       meta={
         <>
@@ -76,7 +93,7 @@ function SavedMessage({ m, onPick, busy, last }: { m: Message; onPick: (s: strin
       <Markdown>{m.content || "_(boş yanıt)_"}</Markdown>
       {md.investigation && <InvestigationCard inv={md.investigation} />}
       {last && <Suggestions items={md.suggestions ?? []} onPick={onPick} disabled={busy} />}
-    </Bubble>
+    </Turn>
   );
 }
 
@@ -84,21 +101,21 @@ function LiveAnswer({ s }: { s: RunState }) {
   const lastThought = s.thinking[s.thinking.length - 1];
   const hasTools = s.tools.length > 0 || Object.keys(s.steps).length > 1;
   return (
-    <Bubble role="assistant">
+    <Turn role="assistant">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted" aria-live="polite">
         {s.phase === "streaming" && <Loader2 className="size-3.5 animate-spin text-accent" />}
         <span>{lastThought?.message ?? "Başlatılıyor…"}</span>
         {s.connection === "reconnecting" && (
-          <span className="inline-flex items-center gap-1 text-st-warning">
+          <span className="inline-flex items-center gap-1 text-st-warning-ink">
             <WifiOff className="size-3.5" /> bağlantı koptu, yeniden bağlanılıyor (çalıştırma sürüyor)
           </span>
         )}
-        {s.cancelRequested && s.phase === "streaming" && <span className="text-st-warning">iptal istendi…</span>}
+        {s.cancelRequested && s.phase === "streaming" && <span className="text-st-warning-ink">iptal istendi…</span>}
       </div>
       {hasTools && (
-        <details open={!s.text} className="mb-2 rounded-md border border-line bg-page/40 px-3 py-2">
+        <details open={!s.text} className="mb-2 rounded-md border border-line bg-surface-2 px-3 py-2">
           <summary className="cursor-pointer text-xs text-ink-2">
-            Ajan adımları · {s.tools.filter((t) => t.state !== "running").length}/{s.tools.length} sorgu
+            Agent adımları · {s.tools.filter((t) => t.state !== "running").length}/{s.tools.length} query
             {s.evidence.length > 0 && ` · ${s.evidence.length} evidence`}
           </summary>
           <div className="mt-2">
@@ -108,14 +125,14 @@ function LiveAnswer({ s }: { s: RunState }) {
       )}
       {s.text ? <Markdown streaming={s.phase === "streaming"}>{s.text}</Markdown> : s.phase === "streaming" ? <Skeleton className="h-4 w-2/3" /> : null}
       {s.error && (
-        <div role="alert" className="mt-2 flex items-start gap-2 rounded-md border border-st-critical/40 bg-st-critical/10 px-3 py-2 text-xs text-ink">
+        <div role="alert" className="mt-2 flex items-start gap-2 rounded-md border border-l-2 border-st-critical/50 px-3 py-2 text-xs text-ink">
           <AlertTriangle className="mt-px size-4 shrink-0 text-st-critical" />
           <span>
             {s.error.code === "cancelled" ? "Çalıştırma iptal edildi." : s.error.code === "timeout" ? "Timeout: analiz süre sınırını aştı." : s.error.message}
           </span>
         </div>
       )}
-    </Bubble>
+    </Turn>
   );
 }
 
@@ -215,21 +232,21 @@ export default function InvestigatePage() {
       <aside className={cn("w-72 shrink-0 border-r border-line bg-surface max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-30", showSide ? "max-md:block" : "max-md:hidden")}>
         <ConversationSidebar onNew={newConversation} activeId={conversationId} />
       </aside>
-      {showSide && <div className="fixed inset-0 z-20 bg-black/50 md:hidden" onClick={() => setShowSide(false)} />}
+      {showSide && <div className="fixed inset-0 z-20 bg-black/40 md:hidden" onClick={() => setShowSide(false)} />}
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-12 items-center gap-2 border-b border-line px-4">
+        <div className="flex h-10 items-center gap-2 border-b border-line px-4">
           <button className="text-ink-2 md:hidden" onClick={() => setShowSide(true)} aria-label="konuşmalar">
             <PanelLeft className="size-5" />
           </button>
-          <h1 className="truncate text-sm font-semibold text-ink">{conv.data?.title ?? (conversationId ? "…" : "Yeni konuşma")}</h1>
+          <h1 className="truncate text-[13px] font-semibold text-ink">{conv.data?.title ?? (conversationId ? "…" : "Yeni investigation")}</h1>
           {busy && (
-            <span className="ml-2 inline-flex items-center gap-1 text-xs text-accent">
+            <span className="ml-2 inline-flex items-center gap-1 text-xs text-accent-text">
               <Loader2 className="size-3.5 animate-spin" /> çalışıyor
             </span>
           )}
         </div>
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-4xl space-y-5 px-4 py-6">
+          <div className="mx-auto max-w-4xl space-y-4 px-4 py-5">
             {conversationId && (msgs.isLoading || conv.isLoading) && (
               <div className="space-y-4">
                 <Skeleton className="ml-auto h-10 w-1/2" />
@@ -238,20 +255,27 @@ export default function InvestigatePage() {
             )}
             {(conv.error || msgs.error) && <ErrorState error={conv.error ?? msgs.error} onRetry={() => (conv.refetch(), msgs.refetch())} />}
             {!conversationId && !pendingUser && (
-              <EmptyState
-                icon={<Sparkles className="size-9 text-accent" />}
-                title="airlab SRE Agent'a soru sorun"
-                description="Ajan Dynatrace MCP üzerinden uygulama, PostgreSQL, log ve trace verilerini toplar; evidence'ı ilişkilendirir ve geçmiş araştırmalarla karşılaştırır."
-                action={canRun ? <Suggestions items={EXAMPLES} onPick={(s) => send(s, null)} /> : undefined}
-              />
+              <div className="rounded-lg border border-line bg-surface p-4">
+                <div className="flex items-start gap-3">
+                  <Search className="mt-0.5 size-4 shrink-0 text-muted" />
+                  <div>
+                    <p className="text-[13px] font-medium text-ink">Yeni investigation</p>
+                    <p className="mt-0.5 max-w-2xl text-xs text-muted">
+                      Agent Dynatrace MCP üzerinden servis, PostgreSQL, log ve trace verilerini toplar; evidence'ı ilişkilendirir, deterministik risk score hesaplar ve
+                      geçmiş investigation'larla karşılaştırır. Sonuç, investigation kaydı olarak saklanır.
+                    </p>
+                  </div>
+                </div>
+                {canRun && <Suggestions title="Örnek sorular" items={EXAMPLES} onPick={(s) => send(s, null)} />}
+              </div>
             )}
             {items.map((m) => (
               <SavedMessage key={m.id} m={m} onPick={(s) => send(s, null)} busy={busy || !canRun} last={m.id === lastAssistant?.id && !busy && !pendingUser} />
             ))}
-            {pendingUser && items[items.length - 1]?.content !== pendingUser && <Bubble role="user">{pendingUser}</Bubble>}
+            {pendingUser && items[items.length - 1]?.content !== pendingUser && <Turn role="user">{pendingUser}</Turn>}
             {run.state.phase !== "idle" && <LiveAnswer s={run.state} />}
             {conv.data?.resumable && !busy && (
-              <div className="flex items-center gap-3 rounded-md border border-st-warning/40 bg-st-warning/10 px-4 py-3 text-sm">
+              <div className="flex items-center gap-3 rounded-md border border-l-2 border-st-warning/50 bg-surface px-3 py-2 text-[13px]">
                 <AlertTriangle className="size-4 shrink-0 text-st-warning" />
                 <span className="flex-1">Son tur yarıda kaldı (ör. servis yeniden başlatıldı). Kaldığı adımdan sürdürülebilir: {conv.data.pending_steps.join(", ")}</span>
                 {canRun && (
@@ -269,7 +293,7 @@ export default function InvestigatePage() {
           onCancel={run.cancel}
           busy={busy}
           disabled={!canRun}
-          disabledReason="İzleyici rolü ajan çalıştıramaz"
+          disabledReason="İzleyici rolü agent çalıştıramaz"
           app={app}
           onApp={setApp}
         />
