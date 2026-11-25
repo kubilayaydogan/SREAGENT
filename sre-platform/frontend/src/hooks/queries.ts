@@ -173,10 +173,18 @@ export const useLlmObservability = (range: LlmRange) =>
     refetchInterval: 60_000,
   });
 
+/** LangSmith trace bilgisi: link, platform run_id ↔ LangSmith run/trace eşlemeleri, MCP çağrı span şablonu. */
+export interface TraceInfo {
+  url: string | null;
+  platform_run_id: string | null;
+  links?: { attempt: number; kind: string; langsmith_run_id: string; langsmith_trace_id: string | null; project: string; trigger: string | null; resumed: boolean; created_at: string }[];
+  call_url_template?: string | null;
+}
+
 export const useTraceUrl = (id?: string) =>
   useQuery({
     queryKey: ["trace", id],
-    queryFn: () => api.get<{ url: string | null }>(`/investigations/${id}/trace`),
+    queryFn: () => api.get<TraceInfo>(`/investigations/${id}/trace`),
     enabled: !!id,
     staleTime: 5 * 60_000,
   });

@@ -879,3 +879,29 @@ class SecurityState(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[Any] = mapped_column(JSONB, nullable=False)
     updated_at: Mapped[datetime] = _created()
+
+
+class TraceLink(Base):
+    """Platform run_id ↔ LangSmith run/trace kimliği (çalıştırma girişimi başına bir satır; trace içeriği tutulmaz)."""
+    __tablename__ = "trace_links"
+    __table_args__ = (Index("ix_trace_links_platform_run", "platform_run_id", "attempt"),
+                      Index("ix_trace_links_investigation", "investigation_id"),
+                      Index("ix_trace_links_created", "created_at"),
+                      CheckConstraint("kind IN ('analysis', 'chat_turn')", name="ck_trace_links_kind"),
+                      CheckConstraint("attempt >= 1", name="ck_trace_links_attempt"),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    platform_run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    investigation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey(f"{SCHEMA}.investigations.id", ondelete="CASCADE"))
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    thread_id: Mapped[str | None] = mapped_column(String(128))
+    langsmith_run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    langsmith_trace_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    project: Mapped[str] = mapped_column(String(100), nullable=False)
+    trigger: Mapped[str | None] = mapped_column(String(16))
+    mode: Mapped[str | None] = mapped_column(String(32))
+    resumed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    created_at: Mapped[datetime] = _created_clock()

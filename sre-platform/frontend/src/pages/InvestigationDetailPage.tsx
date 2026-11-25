@@ -198,7 +198,13 @@ export default function InvestigationDetailPage() {
             <>
               {done && <FeedbackBar investigationId={d.id} />}
               {trace.data?.url && (
-                <a href={trace.data.url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                <a
+                  href={trace.data.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  title={`platform run_id ${trace.data.platform_run_id ?? "—"} · LangSmith trace_id ${trace.data.links?.at(-1)?.langsmith_trace_id ?? "—"}`}
+                >
                   <ExternalLink /> LangSmith'te aç
                 </a>
               )}
@@ -266,7 +272,7 @@ export default function InvestigationDetailPage() {
           <Card>{ev.isLoading ? <Skeleton className="m-3 h-40" /> : ev.error ? <ErrorState error={ev.error} /> : <EvidenceTable rows={ev.data ?? []} highlight={evKey} />}</Card>
         </TabPanel>
         <TabPanel value="tools">
-          <Card>{tools.isLoading ? <Skeleton className="m-3 h-40" /> : tools.error ? <ErrorState error={tools.error} /> : <ToolTable rows={tools.data ?? []} />}</Card>
+          <Card>{tools.isLoading ? <Skeleton className="m-3 h-40" /> : tools.error ? <ErrorState error={tools.error} /> : <ToolTable rows={tools.data ?? []} callUrlTemplate={trace.data?.call_url_template} />}</Card>
         </TabPanel>
         <TabPanel value="similar">
           <Card>{d && <Similar inv={d} />}</Card>

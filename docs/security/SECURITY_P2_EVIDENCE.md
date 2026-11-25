@@ -1,6 +1,6 @@
 # Güvenlik P2: Kanıt
 
-Durum: P2.8, P2.2, P2.3 ve P2.4 kodlandı, test edildi ve 2026-11-25'te APP_VM'ye deploy edildi (alembic 0010).
+Durum: P2.8, P2.2, P2.3, P2.4 ve P2.7 kodlandı, test edildi ve 2026-11-25'te APP_VM'ye deploy edildi (alembic 0010). P2.1, P2.5 ve P2.6 ertelendi.
 
 ## P2.8 Security & Governance UI
 
@@ -115,7 +115,7 @@ Vault yok; metadata `sre.secrets` tablosunda tutulur (migration 0010: `expires_a
 - R-P2.4c: Süresi dolan secret çözülmediğinde ayrı bir audit kaydı yazılmaz; günlük hijyen alarmı ve çağıran bileşenin hatası görünür.
 - R-P2.4d: Son kullanım zamanı tutulmaz (okuma yolunda yazma yükü olmaması için).
 
-## P2.7 Retention (kodlandı, test edildi, commit edildi; henüz deploy edilmedi)
+## P2.7 Retention
 
 Saatlik `retention` işi ile önizleme ucu aynı planı kullanır (`services/retention.py`). Önizleme ucu `GET /settings/retention/preview` hiçbir şey silmez. Migration yok.
 
@@ -141,6 +141,8 @@ Saatlik `retention` işi ile önizleme ucu aynı planı kullanır (`services/ret
 - Audit sayısı azalmaz ve `retention.purge` yazılır.
 - `checkpoints_days=3` → 422.
 - TTL açılınca: tamamlanmış investigation'ın thread'i silinir, RUNNING olan korunur; store yaş TTL'i uygulanır.
+
+**P2.7 canlı doğrulama (2026-11-25):** Rollback image'ları `:pre-p27`. `alembic_version` = 0010 (değişmedi), servisler healthy. Kimliksiz `GET /api/settings/retention/preview` → 401. Frontend bundle'ında önizleme kartı var. Canlı container'da varsayılan değerlerle salt okunur `plan()` sonucu her kategoride 0. İlk tur `retention` işinin bir sonraki koşusunda (saatlik) çalışır. CI `e00c503` başarılı.
 
 **Kalan riskler**
 - R-P2.7a: Audit kayıtları sınırsız büyür; P1.5 (DB rol ayrımı) ile owner fonksiyonu gelene kadar silinmez.
@@ -176,7 +178,7 @@ Saatlik `retention` işi ile önizleme ucu aynı planı kullanır (`services/ret
 | P2.2 Service account API anahtarları | Deploy edildi (alembic 0008) |
 | P2.3 SIEM outbox ve alarm kuralları (varsayılan kapalı) | Deploy edildi (alembic 0009) |
 | P2.4 Secret rotation/expiry metadata | Deploy edildi (alembic 0010) |
-| P2.7 Retention | Kodlandı, test edildi ve push edildi; deploy edilmedi (kullanıcı yalnız commit/push istedi) |
+| P2.7 Retention | Deploy edildi (2026-11-25, migration yok) |
 | P2.1 IdP/SSO | Ertelendi (kullanıcı kararı, 2026-11-25; IdP seçilmedi) |
 | P2.5 Yedekleme | Ertelendi (kullanıcı kararı, 2026-11-25; hedef konum ve şifreleme anahtarı belirsiz) |
 | P2.6 Host firewall | Ertelendi (kullanıcı kararı, 2026-11-25; VM ağ değişikliği) |

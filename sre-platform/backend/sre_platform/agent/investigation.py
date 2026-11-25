@@ -25,7 +25,9 @@ from ..repositories import investigations
 from .events import NODE_MESSAGE, SIGNAL_STEP
 
 log = logging.getLogger("sre.investigation")
-FAILED_STATUSES = {"ERROR", "PERMISSION", "UNAVAILABLE"}
+FAILED_STATUSES = {"ERROR", "PERMISSION", "UNAVAILABLE", "TIMEOUT"}
+# Analiz aralığının kaynağı (trace'te plan adımında görünür)
+WINDOW_SOURCE = {"chat": "user_question", "manual": "user", "scheduled": "scheduler", "watch": "watch"}
 
 
 class Cancelled(Exception):
@@ -42,7 +44,8 @@ class InvestigationRunner:
 
     async def run(self, inv_id: uuid.UUID, *, emit, cancel: threading.Event | None = None,
                   question: str | None = None, mode: str = "chat", core_llm=None,
-                  notes: list[str] | None = None, rc=None) -> tuple[Investigation, dict | None]:
+                  notes: list[str] | None = None, rc=None,
+                  window_source: str | None = None) -> tuple[Investigation, dict | None]:
         cancel = cancel or threading.Event()
         sm = self.rt.sm
         from ..settings import runtime as srt
@@ -62,10 +65,16 @@ class InvestigationRunner:
             await investigations.mark_running(s, inv)
             inv.config_snapshot = rc.snapshot
             run_id, start, end = inv.run_id, inv.window_start, inv.window_end
-            trace_meta = {"investigation_id": str(inv_id), "trigger": getattr(inv.trigger, "value", str(inv.trigger)),
+            trigger = getattr(inv.trigger, "value", str(inv.trigger))
+            from ..services.langsmith_trace import previous_attempts
+            trace_meta = {"investigation_id": str(inv_id), "trigger": trigger,
                           "conversation_id": str(inv.conversation_id) if inv.conversation_id else None,
-                          "application_id": inv.application_id}
-            trace_tags = [f"trigger:{trace_meta['trigger']}"]
+                          "application_id": inv.application_id,
+                          "environment": (rc.effective.get("observability") or {}).get("environment_tag"),
+                          "attempt": await previous_attempts(s, run_id) + 1}
+            window_source = window_source or WINDOW_SOURCE.get(trigger, "default")
+            conversation_id = inv.conversation_id
+            trace_tags = [f"trigger:{trace_meta['trigger']}"] +                 ([f"env:{trace_meta['environment']}"] if trace_meta.get("environment") else [])
             baseline = (inv.baseline_start, inv.baseline_end) if inv.baseline_start else None
         await emit("investigation_started", {"investigation_id": str(inv_id), "run_id": run_id,
                                              "window": [start.isoformat(), end.isoformat()],
@@ -94,7 +103,7 @@ class InvestigationRunner:
         kw = dict(llm=core_llm, question=question, mode=mode, notes=notes, run_id=run_id, use_llm=use_llm,
                   baseline=baseline, checkpointer=self.rt.saver, persist_files=False, on_node=on_node,
                   callbacks=callbacks, recursion_limit=rc.recursion_limit, trace_run_id=inv_id,
-                  trace_metadata=trace_meta, trace_tags=trace_tags)
+                  trace_metadata=trace_meta, trace_tags=trace_tags, window_source=window_source)
         args = (agent, lambda: gw_factory(on_event=on_tool), start, end)
         if rc.trace:
             fut = asyncio.ensure_future(asyncio.to_thread(run_analysis, *args, **kw))
@@ -141,6 +150,11 @@ class InvestigationRunner:
                     if t and t.execution_status == ToolStatus.STARTED:
                         await investigations.tool_finished(s, t, ok=False, error=error or "sonuç alınamadı")
         report = (state or {}).get("report")
+        if rc.trace:                                # platform run_id ↔ LangSmith run/trace eşlemesi (hata olsa da)
+            from ..services.langsmith_trace import record_link
+            await record_link(self.rt, platform_run_id=run_id, kind="analysis", run_id=inv_id, investigation_id=inv_id,
+                              conversation_id=conversation_id, thread_id=run_id, trigger=trace_meta["trigger"],
+                              mode=mode)
         async with transaction(sm) as s:
             inv = await investigations.get(s, inv_id)
             if report and not error:
@@ -193,12 +207,17 @@ class InvestigationRunner:
             ev = item[1]
             key = ev["key"]
             step = SIGNAL_STEP.get(key, "extra")
+            call_id = _uuid(ev.get("mcp_call_id"))
+            args = {"dqlQueryString": ev["dql"], **({"mcp_call_id": str(call_id)} if call_id else {}),
+                    **({"langsmith_span": True} if ev.get("traced") else {})}
             if ev["phase"] == "start":
                 async with transaction(self.rt.sm) as s:
+                    # Çağrı kaydının kimliği = gateway'in mcp_call_id'si = LangSmith tool span kimliği
                     t = await investigations.tool_started(s, inv_id, ev.get("tool", "execute-dql"), step=step,
-                                                          signal=key, arguments={"dqlQueryString": ev["dql"]})
+                                                          signal=key, arguments=args, id=call_id)
                     rows[key] = t.id
-                await emit("tool_started", {"id": str(t.id), "tool": t.tool_name, "signal": key, "step": step})
+                await emit("tool_started", {"id": str(t.id), "tool": t.tool_name, "signal": key, "step": step,
+                                            "mcp_call_id": str(t.id)})
                 return
             status = ev.get("status")
             ok = status not in FAILED_STATUSES
@@ -211,10 +230,11 @@ class InvestigationRunner:
                                                        error=ev.get("error"), skipped=status == "SKIPPED_BUDGET")
                 else:
                     t = await investigations.record_tool(s, inv_id, "execute-dql", ok=ok, step=step, signal=key,
-                                                         arguments={"dqlQueryString": ev["dql"]}, result_status=status,
+                                                         arguments=args, result_status=status,
                                                          error=ev.get("error"), skipped=status == "SKIPPED_BUDGET",
-                                                         duration_ms=ev.get("elapsed_ms"))
+                                                         duration_ms=ev.get("elapsed_ms"), id=call_id)
             data = {"id": str(t.id), "tool": t.tool_name, "signal": key, "step": step, "status": status,
+                    "outcome": ev.get("outcome"), "attempts": ev.get("attempts"), "mcp_call_id": str(t.id),
                     "records": ev.get("records"), "duration_ms": ev.get("elapsed_ms"),
                     "dynatrace_query_id": ev.get("query_id")}
             if ok:
@@ -239,6 +259,13 @@ class InvestigationRunner:
                 await emit("agent_thinking", {"step": {"analyze": "correlate", "extra_evidence": "extra",
                                                        "explain": "rca", "finalize": "rca"}.get(name, name),
                                               "node": name, "message": msg})
+
+
+def _uuid(v) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(v)) if v else None
+    except ValueError:
+        return None
 
 
 def now_utc() -> datetime:

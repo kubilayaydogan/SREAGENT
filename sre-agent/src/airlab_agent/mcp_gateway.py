@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import re
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -58,7 +59,25 @@ def tool_definition_hash(t: Any) -> str:
 
 
 class McpUnavailable(RuntimeError):
-    """MCP'ye ulaşılamıyor (ağ, auth, sunucu). Analiz kısmi raporla devam eder; başka kaynağa geçilmez."""
+    """MCP'ye ulaşılamıyor (ağ, auth, sunucu). Analiz kısmi raporla devam eder; başka kaynağa geçilmez.
+    `kind`: timeout | unavailable | integrity (trace ve raporda ayrı gösterilir)."""
+
+    def __init__(self, msg: str = "", kind: str = "unavailable"):
+        super().__init__(msg)
+        self.kind = kind
+
+
+# Mantıksal MCP çağrısının sonucu (trace, platform çağrı kaydı ve SSE'de aynı sınıflandırma)
+OUTCOME = {"OK": "success", "EMPTY": "empty", "PERMISSION": "permission_denied", "ERROR": "tool_error",
+           "UNAVAILABLE": "unavailable", "TIMEOUT": "timeout", "SKIPPED_BUDGET": "skipped_budget",
+           "REJECTED": "rejected"}
+_TIME_RANGE = re.compile(r'from:\s*"([^"]+)"\s*,\s*to:\s*"([^"]+)"')
+
+
+def time_range_of(dql: str) -> dict | None:
+    """DQL'deki from/to aralıklarının kapsadığı toplam aralık (yalnız zaman damgaları; query'nin kendisi değil)."""
+    found = _TIME_RANGE.findall(dql or "")
+    return {"start": min(a for a, _ in found), "end": max(b for _, b in found)} if found else None
 
 
 class BudgetExceeded(RuntimeError):
@@ -75,6 +94,9 @@ class QueryResult:
     error: str | None = None
     elapsed_ms: int = 0
     notifications: list[str] = field(default_factory=list)
+    call_id: str | None = None       # mantıksal MCP çağrısının kimliği (retry'lar aynı kimlikte)
+    attempts: list[dict] = field(default_factory=list)
+    outcome: str | None = None
 
     @property
     def evidence_id(self) -> str:
@@ -150,31 +172,58 @@ class McpGateway:
 
     # ---- sorgu
     async def _one(self, session, key: str, dql: str) -> QueryResult:
-        span = ToolSpan(self._trace_parent, f"dql:{key}", {"signal": key, "dql": dql}, {"tool": DQL_TOOL})
+        """Tek MANTIKSAL MCP çağrısı: retry denemeleri aynı `call_id` altında; trace'te tek tool span'i (kimliği
+        call_id, platformdaki çağrı kaydının kimliği de aynı)."""
+        call_id = str(uuid.uuid4())
+        tr = time_range_of(dql)
+        span = ToolSpan(self._trace_parent, f"mcp:{key}",
+                        {"connector": SERVER, "tool": DQL_TOOL, "query_key": key, "time_range": tr,
+                         "mcp_call_id": call_id},
+                        {"connector": SERVER, "tool": DQL_TOOL, "query_key": key, "mcp_call_id": call_id},
+                        run_id=uuid.UUID(call_id))
         try:
-            r = await self._one_inner(session, key, dql)
+            r = await self._one_inner(session, key, dql, call_id, traced=span.active)
         except McpUnavailable as e:
-            span.error(str(e))
+            att = getattr(e, "attempts", [])
+            span.error(f"outcome={e.kind} attempts={len(att)} "
+                       f"elapsed_ms={sum(a.get('elapsed_ms', 0) for a in att)} mcp_call_id={call_id}")
             raise
-        span.end({"status": r.status, "records": len(r.records), "elapsed_ms": r.elapsed_ms,
-                  "query_id": r.query_id, "error": r.error})
+        except asyncio.CancelledError:              # paralel bir çağrı MCP'yi erişilemez buldu: oturum kapandı
+            span.error(f"outcome=cancelled mcp_call_id={call_id}")
+            raise
+        out = {"outcome": r.outcome, "result_status": r.status, "records": len(r.records),
+               "elapsed_ms": r.elapsed_ms, "evidence_id": r.evidence_id, "dynatrace_query_id": r.query_id,
+               "attempts_count": len(r.attempts), "attempts": r.attempts, "mcp_call_id": call_id}
+        if r.status in ("OK", "EMPTY"):
+            span.end(out)
+        else:                                        # yetki / tool hatası / bütçe / reddedilen DQL: hatalı span
+            span.error(f"outcome={r.outcome} attempts={len(r.attempts)} elapsed_ms={r.elapsed_ms} "
+                       f"evidence_id={r.evidence_id} mcp_call_id={call_id}")
         return r
 
-    async def _one_inner(self, session, key: str, dql: str) -> QueryResult:
+    def _end(self, r: QueryResult, *, elapsed_ms: int, traced: bool, outcome: str | None = None) -> QueryResult:
+        r.outcome = outcome or OUTCOME.get(r.status, r.status.lower())
+        self._emit({"phase": "end", "key": r.key, "dql": r.dql, "status": r.status, "outcome": r.outcome,
+                    "records": len(r.records), "query_id": r.query_id, "elapsed_ms": elapsed_ms, "error": r.error,
+                    "attempts": len(r.attempts) or None, "evidence_id": r.evidence_id, "mcp_call_id": r.call_id,
+                    "traced": traced})
+        return r
+
+    async def _one_inner(self, session, key: str, dql: str, call_id: str | None = None,
+                         traced: bool = False) -> QueryResult:
+        call_id = call_id or str(uuid.uuid4())
         bad = validate_dql(dql)
         if bad:
-            r = QueryResult(key, str(dql)[:MAX_DQL_CHARS], "ERROR", error=f"DQL reddedildi: {bad}")
-            self._emit({"phase": "end", "key": key, "dql": r.dql, "status": r.status, "records": 0, "query_id": None,
-                        "elapsed_ms": 0, "error": r.error, "evidence_id": r.evidence_id})
-            return r
+            r = QueryResult(key, str(dql)[:MAX_DQL_CHARS], "ERROR", error=f"DQL reddedildi: {bad}", call_id=call_id)
+            return self._end(r, elapsed_ms=0, traced=traced, outcome="rejected")
         if self.queries_used >= self.max_queries:
-            r = QueryResult(key, dql, "SKIPPED_BUDGET", error="query budget doldu")
-            self._emit({"phase": "end", "key": key, "dql": dql, "status": r.status, "records": 0, "query_id": None,
-                        "elapsed_ms": 0, "error": r.error, "evidence_id": r.evidence_id})
-            return r
+            r = QueryResult(key, dql, "SKIPPED_BUDGET", error="query budget doldu", call_id=call_id)
+            return self._end(r, elapsed_ms=0, traced=traced)
         self.queries_used += 1
-        self._emit({"phase": "start", "key": key, "dql": dql, "tool": DQL_TOOL})
+        self._emit({"phase": "start", "key": key, "dql": dql, "tool": DQL_TOOL, "mcp_call_id": call_id,
+                    "traced": traced})
         last = None
+        attempts: list[dict] = []
         t_all = time.monotonic()
         for attempt in range(self.retries + 1):
             t0 = time.monotonic()
@@ -182,18 +231,28 @@ class McpGateway:
                 res = await asyncio.wait_for(
                     session.call_tool(DQL_TOOL, {"dqlQueryString": dql, "includeTypes": False}), self.timeout_s)
                 status, recs, qid, err, notes = _classify(res)
-                r = QueryResult(key, dql, status, recs, qid, err, int((time.monotonic() - t0) * 1000), notes)
-                self._emit({"phase": "end", "key": key, "dql": dql, "status": status, "records": len(recs),
-                            "query_id": qid, "elapsed_ms": int((time.monotonic() - t_all) * 1000), "error": err,
-                            "attempts": attempt + 1, "evidence_id": r.evidence_id})
-                return r
+                attempts.append({"attempt": attempt + 1, "outcome": OUTCOME.get(status, status.lower()),
+                                 "elapsed_ms": int((time.monotonic() - t0) * 1000)})
+                r = QueryResult(key, dql, status, recs, qid, err, int((time.monotonic() - t0) * 1000), notes,
+                                call_id=call_id, attempts=attempts)
+                return self._end(r, elapsed_ms=int((time.monotonic() - t_all) * 1000), traced=traced)
             except Exception as e:  # noqa: BLE001
                 last = e
-                await asyncio.sleep(min(2 ** attempt, 8))
+                attempts.append({"attempt": attempt + 1,
+                                 "outcome": "timeout" if isinstance(e, TimeoutError) else "unavailable",
+                                 "elapsed_ms": int((time.monotonic() - t0) * 1000),
+                                 "error_type": type(e).__name__})
+                if attempt < self.retries:               # son denemeden sonra beklemeden hata döner
+                    await asyncio.sleep(min(2 ** attempt, 8))
+        kind = "timeout" if isinstance(last, TimeoutError) else "unavailable"
         err = redact_text(f"{type(last).__name__}: {last}")
-        self._emit({"phase": "end", "key": key, "dql": dql, "status": "UNAVAILABLE", "records": 0, "query_id": None,
-                    "elapsed_ms": int((time.monotonic() - t_all) * 1000), "error": err, "attempts": self.retries + 1})
-        raise McpUnavailable(err)
+        self._emit({"phase": "end", "key": key, "dql": dql, "status": "TIMEOUT" if kind == "timeout" else "UNAVAILABLE",
+                    "outcome": kind, "records": 0, "query_id": None,
+                    "elapsed_ms": int((time.monotonic() - t_all) * 1000), "error": err, "attempts": len(attempts),
+                    "mcp_call_id": call_id, "traced": traced})
+        ex = McpUnavailable(err, kind=kind)
+        ex.attempts = attempts
+        raise ex
 
     async def _many(self, items: list[tuple[str, str]]) -> list[QueryResult]:
         async with self.client.session(SERVER) as session:
@@ -215,7 +274,7 @@ class McpGateway:
                    if got else f"sunucu '{DQL_TOOL}' tool'unu artık sunmuyor")
             self._emit({"phase": "integrity", "tool": DQL_TOOL, "expected": self.expected_tool_hash[:12],
                         "got": (got or "")[:12], "error": msg})
-            raise McpUnavailable(msg)
+            raise McpUnavailable(msg, kind="integrity")
 
     def run_many(self, items: list[tuple[str, str]]) -> dict[str, QueryResult]:
         """Sorguları tek MCP oturumunda (sınırlı eşzamanlılıkla) çalıştırır. MCP yoksa McpUnavailable."""
@@ -227,6 +286,7 @@ class McpGateway:
         except McpUnavailable:
             raise
         except Exception as e:  # noqa: BLE001
-            raise McpUnavailable(redact_text(f"{type(e).__name__}: {e}")) from None
+            raise McpUnavailable(redact_text(f"{type(e).__name__}: {e}"),
+                                 kind="timeout" if isinstance(e, TimeoutError) else "unavailable") from None
         self.log.extend(results)
         return {r.key: r for r in results}

@@ -273,7 +273,11 @@ def test_migration_0003_downgrade_and_upgrade(db_url):
         migrate.upgrade(db_url)
         assert {"settings_sections", "settings_revisions", "connectors", "llm_profiles", "secrets",
                 "audit_events", "agent_episodes"} <= tables()
-        assert migrate.current_revision(db_url) == "0010"
+        assert migrate.current_revision(db_url) == "0011"
+        migrate.downgrade(db_url, "0010")                       # trace eşlemesi geri alınabilir
+        assert "trace_links" not in tables()
+        migrate.upgrade(db_url)
+        assert "trace_links" in tables()
         migrate.downgrade(db_url, "0009")                       # secret metadata kolonları geri alınabilir
         migrate.upgrade(db_url)
         assert {"auth_sessions", "auth_login_failures", "llm_usage", "api_keys", "security_state"} <= tables()

@@ -59,12 +59,11 @@ async def get_investigation(inv_id: uuid.UUID, _: User = Depends(perm(P.RECORD_R
 @router.get("/investigations/{inv_id}/trace", tags=["investigations"])
 async def get_trace(inv_id: uuid.UUID, request: Request, _: User = Depends(perm(P.RECORD_READ)),
                     s: AsyncSession = Depends(db)):
-    """LangSmith trace linki. Tracing kapalıysa ya da bu investigation için trace yazılmadıysa url null."""
+    """LangSmith trace linki + platform run_id ↔ LangSmith run/trace eşlemeleri + MCP çağrısı span linki şablonu
+    (`call_url_template`, `{call_id}` = çağrı kaydının kimliği). Tracing kapalıysa ya da trace yazılmadıysa url null."""
     from ...services import langsmith_trace
     await investigations.get(s, inv_id)                                  # yoksa 404
-    if not await langsmith_trace.has_trace(s, inv_id):
-        return {"url": None}
-    return {"url": await langsmith_trace.run_url(request.app.state.rt, inv_id)}
+    return await langsmith_trace.trace_info(request.app.state.rt, s, inv_id)
 
 
 @router.get("/investigations/{inv_id}/evidence", tags=["investigations"])

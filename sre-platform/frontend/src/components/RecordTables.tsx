@@ -30,8 +30,14 @@ function ExpandButton({ open, onClick }: { open: boolean; onClick: () => void })
   );
 }
 
+/** MCP çağrısının LangSmith span linki: kaydın kimliği (mcp_call_id) span kimliğidir. Span yazılmadıysa null. */
+export function callTraceUrl(t: ToolExecution, template?: string | null): string | null {
+  if (!template || !(t.tool_arguments as { langsmith_span?: boolean }).langsmith_span) return null;
+  return template.replace("{call_id}", t.id);
+}
+
 /** Tool execution geçmişi: adım, sinyal, durum, kayıt, süre, evidence; satır açılınca DQL ve hata. */
-export function ToolTable({ rows }: { rows: ToolExecution[] }) {
+export function ToolTable({ rows, callUrlTemplate }: { rows: ToolExecution[]; callUrlTemplate?: string | null }) {
   const [open, setOpen] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "failed">("all");
   const failed = rows.filter((r) => r.execution_status === "FAILED").length;
@@ -62,6 +68,7 @@ export function ToolTable({ rows }: { rows: ToolExecution[] }) {
             {shown.map((t) => {
               const isOpen = open === t.id;
               const dql = (t.tool_arguments as { dqlQueryString?: string }).dqlQueryString;
+              const spanUrl = callTraceUrl(t, callUrlTemplate);
               return (
                 <Fragment key={t.id}>
                   <tr>
@@ -83,7 +90,12 @@ export function ToolTable({ rows }: { rows: ToolExecution[] }) {
                     <td className="font-mono text-2xs text-muted">
                       {t.evidence_key && <div>{t.evidence_key}</div>}
                       {t.dynatrace_query_id && <div title="Dynatrace queryId">q:{t.dynatrace_query_id}</div>}
-                      {!t.evidence_key && !t.dynatrace_query_id && "—"}
+                      {!t.evidence_key && !t.dynatrace_query_id && !spanUrl && "—"}
+                      {spanUrl && (
+                        <a href={spanUrl} target="_blank" rel="noreferrer" className="text-accent-text hover:underline" title={`mcp_call_id ${t.id}`}>
+                          LangSmith span
+                        </a>
+                      )}
                     </td>
                   </tr>
                   {isOpen && (

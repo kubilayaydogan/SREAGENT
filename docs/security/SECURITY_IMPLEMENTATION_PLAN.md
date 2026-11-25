@@ -232,7 +232,7 @@ Gereksinim: [`SECURITY_IMPLEMENTATION.md`](SECURITY_IMPLEMENTATION.md) · Tarih:
 
 ## 5. P2 — orta
 
-> Durum (2026-11-25): P2.8, P2.2, P2.3 ve P2.4 canlıda (alembic 0010). P2.7 kodlandı ve push edildi, deploy edilmedi.
+> Durum (2026-11-25): P2.8, P2.2, P2.3, P2.4 ve P2.7 canlıda (alembic 0010).
 > P2.1 (IdP), P2.5 (yedekleme) ve P2.6 (host firewall) kullanıcı kararıyla ertelendi. Kanıt: `SECURITY_P2_EVIDENCE.md`.
 
 | Adım | Gereksinim | Özet | Kabul |

@@ -310,7 +310,7 @@ export function ObservabilitySection() {
     <SectionForm
       section="observability"
       title="Observability"
-      description="LangSmith tracing. Girdi/çıktılar gönderilmeden önce her zaman redakte edilir. API key ortamda (LANGSMITH_API_KEY) tutulur."
+      description="LangSmith tracing. Yalnız izinli metadata ve adım özetleri gönderilir; soru, prompt, model çıktısı, ham DQL, MCP verisi ve hata ayrıntısı gönderilmez. Test ve production için ayrı project adı kullanın. API key ortamda (LANGSMITH_API_KEY) tutulur."
       aside={(v: SectionView) => {
         const st = v.status as { langsmith_key: boolean; tracer_active: boolean; restart_required: boolean; opentelemetry: { reason: string } };
         return (
@@ -497,6 +497,7 @@ export const RETENTION_LABEL: Record<string, string> = {
   checkpoint_threads_orphan: "Sahipsiz checkpoint thread'i",
   checkpoint_threads_ttl: "Süresi dolan checkpoint thread'i",
   store_items: "Store öğesi",
+  trace_links: "Sohbet turu trace eşlemesi",
 };
 
 function RetentionPreviewCard() {

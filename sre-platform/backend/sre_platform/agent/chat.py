@@ -224,8 +224,10 @@ class ChatOrchestrator:
                         conversation_id=ctx.conversation_id, application_id=app)
                     inv_id = inv.id
                 ctx.result["investigation_id"] = str(inv_id)
+                explicit = bool(r.get("minutes") or r.get("start_utc"))
                 inv, report = await self.runner.run(inv_id, emit=ctx.emit, cancel=ctx.cancel,
-                                                    question=state["question"], mode="chat", notes=notes, rc=rc)
+                                                    question=state["question"], mode="chat", notes=notes, rc=rc,
+                                                    window_source="user_question" if explicit else "default")
             summ = summary_of(inv, report)
             if report:
                 await rt.memory.remember_investigation(inv, user_id=ctx.user_id, conversation_id=ctx.conversation_id)
@@ -340,19 +342,34 @@ class ChatOrchestrator:
         g.add_edge("respond", END)
         return g.compile(checkpointer=rt.asaver, name="airlab-sre-chat")
 
-    def _config(self, ctx: TurnContext, run_id: uuid.UUID | None = None) -> dict:
+    def _config(self, ctx: TurnContext, run_id: uuid.UUID | None = None, *, attempt: int = 1,
+                resumed: bool = False) -> dict:
         # Tur = tek LangSmith trace (sınıflandırma, analiz grafı, DQL'ler, hatırlama, cevap, Slack altında).
         # conversation_id metadata'sı LangSmith Threads görünümünde aynı konuşmanın turlarını birleştirir.
+        # platform_run_id = turun kullanıcı mesajı kimliği; checkpoint'ten sürdürülen tur aynı kimliği taşır.
         llm = self.rt.llm
         traced = ctx.rc is None or ctx.rc.trace
+        env = ((ctx.rc.effective.get("observability") or {}).get("environment_tag") if ctx.rc else None)
+        meta = {"conversation_id": str(ctx.conversation_id), "user_id": str(ctx.user_id),
+                "thread_id": ctx.thread_id, "platform_run_id": ctx.result.get("user_message_id"),
+                "mode": "chat", "trigger": "chat", "environment": env, "attempt": attempt, "resumed": resumed,
+                "model": getattr(llm, "model_name", None),
+                **({"config_hash": ctx.rc.snapshot["hash"]} if ctx.rc else {})}
         cfg = {"configurable": {"thread_id": ctx.thread_id}, "recursion_limit": 12,
                "callbacks": self.rt.callbacks if traced else [], "run_name": "chat-turn", "tags": ["airlab", "chat"],
-               "metadata": {"conversation_id": str(ctx.conversation_id), "user_id": str(ctx.user_id),
-                            "model": getattr(llm, "model_name", None),
-                            **({"config_hash": ctx.rc.snapshot["hash"]} if ctx.rc else {})}}
+               "metadata": {k: v for k, v in meta.items() if v is not None}}
         if run_id is not None:
             cfg["run_id"] = run_id
         return cfg
+
+    async def _link(self, ctx: TurnContext, run_id: uuid.UUID, *, resumed: bool = False) -> None:
+        """Turun LangSmith eşlemesi (platform run_id = kullanıcı mesajı kimliği). Trace gönderilmediyse yazılmaz."""
+        if not ctx.result.get("user_message_id") or not (ctx.rc is None or ctx.rc.trace):
+            return
+        from ..services.langsmith_trace import record_link
+        await record_link(self.rt, platform_run_id=ctx.result["user_message_id"], kind="chat_turn", run_id=run_id,
+                          conversation_id=ctx.conversation_id, thread_id=ctx.thread_id, trigger="chat", mode="chat",
+                          resumed=resumed)
 
     # ------------------------------------------------------------ dış arayüz
     async def turn(self, ctx: TurnContext, question: str) -> dict:
@@ -364,8 +381,13 @@ class ChatOrchestrator:
             ctx.result["user_message_id"] = str(m.id)
         await self._prepare(ctx)
         graph = self._graph(ctx)
-        state = await self._invoke(ctx, graph, {"question": question, "messages": [{"role": "user", "content": question}]},
-                                   self._config(ctx, run_id=uuid.UUID(ctx.result["user_message_id"])))  # trace id = kullanıcı mesajının id'si
+        rid = uuid.UUID(ctx.result["user_message_id"])                 # trace id = kullanıcı mesajının id'si
+        try:
+            state = await self._invoke(ctx, graph, {"question": question,
+                                                    "messages": [{"role": "user", "content": question}]},
+                                       self._config(ctx, run_id=rid))
+        finally:
+            await self._link(ctx, rid)
         return await self._finish(ctx, state)
 
     async def _prepare(self, ctx: TurnContext) -> None:
@@ -392,7 +414,21 @@ class ChatOrchestrator:
         snap = await graph.aget_state(self._config(ctx))
         if not snap.next:
             return None
-        state = await self._invoke(ctx, graph, None, self._config(ctx))
+        # Sürdürülen tur yeni bir trace'tir; aynı platform run_id'ye (yarıda kalan turun kullanıcı mesajı) yeni
+        # girişim olarak bağlanır, önceki girişimin eşlemesi korunur.
+        from ..services.langsmith_trace import previous_attempts
+        async with transaction(self.rt.sm) as s:
+            last_user = next((m for m in reversed(await conversations.recent_messages(s, ctx.conversation_id, 20))
+                              if m.role == MessageRole.USER), None)
+            if last_user is not None:
+                ctx.result.setdefault("user_message_id", str(last_user.id))
+            attempt = await previous_attempts(s, ctx.result["user_message_id"]) + 1 \
+                if ctx.result.get("user_message_id") else 1
+        rid = uuid.uuid4()
+        try:
+            state = await self._invoke(ctx, graph, None, self._config(ctx, run_id=rid, attempt=attempt, resumed=True))
+        finally:
+            await self._link(ctx, rid, resumed=True)
         return await self._finish(ctx, state)
 
     async def pending(self, thread_id: str) -> list[str]:

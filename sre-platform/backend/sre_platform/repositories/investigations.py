@@ -81,8 +81,11 @@ async def mark_running(s: AsyncSession, inv: Investigation) -> None:
 
 
 async def tool_started(s: AsyncSession, inv_id: uuid.UUID, tool_name: str, *, step: str | None = None,
-                       signal: str | None = None, arguments: dict[str, Any] | None = None) -> ToolExecution:
-    t = ToolExecution(investigation_id=inv_id, tool_name=tool_name, step=step, signal=signal,
+                       signal: str | None = None, arguments: dict[str, Any] | None = None,
+                       id: uuid.UUID | None = None) -> ToolExecution:
+    """`id` verilirse kaydın kimliği odur (MCP çağrısında gateway'in mcp_call_id'si = LangSmith span kimliği)."""
+    t = ToolExecution(**({"id": id} if id else {}), investigation_id=inv_id, tool_name=tool_name, step=step,
+                      signal=signal,
                       tool_arguments=redact(arguments or {}), execution_status=ToolStatus.STARTED,
                       started_at=datetime.now(timezone.utc))
     s.add(t)
@@ -107,8 +110,9 @@ async def tool_finished(s: AsyncSession, t: ToolExecution, *, ok: bool, duration
 async def record_tool(s: AsyncSession, inv_id: uuid.UUID, tool_name: str, *, ok: bool, step: str | None = None,
                       signal: str | None = None, arguments: dict | None = None, duration_ms: int | None = None,
                       result_status: str | None = None, record_count: int | None = None, query_id: str | None = None,
-                      evidence_key: str | None = None, error: str | None = None, skipped: bool = False) -> ToolExecution:
-    t = await tool_started(s, inv_id, tool_name, step=step, signal=signal, arguments=arguments)
+                      evidence_key: str | None = None, error: str | None = None, skipped: bool = False,
+                      id: uuid.UUID | None = None) -> ToolExecution:
+    t = await tool_started(s, inv_id, tool_name, step=step, signal=signal, arguments=arguments, id=id)
     return await tool_finished(s, t, ok=ok, duration_ms=duration_ms, result_status=result_status,
                                record_count=record_count, query_id=query_id, evidence_key=evidence_key, error=error,
                                skipped=skipped)
