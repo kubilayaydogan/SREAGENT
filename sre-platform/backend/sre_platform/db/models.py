@@ -842,3 +842,27 @@ class AgentEpisode(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = _updated()
     tsv: Mapped[Any] = _tsv("summary", "hypothesis", "resolution", "feedback_note", "mechanism")
+
+
+class ApiKey(Base):
+    """Service account API anahtarı (P2.2). Anahtarın kendisi tutulmaz: yalnız HMAC-SHA256 özeti (sunucu pepper'ı ile).
+
+    Kimliği sahibinden (owner) gelir; etkin yetki = scope'lar ∩ sahibin o anki rol yetkileri. Süre sonu zorunlu.
+    Silinmez, iptal edilir (audit izi korunur).
+    """
+    __tablename__ = "api_keys"
+    __table_args__ = (Index("ix_api_keys_owner", "owner_id"), {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    prefix: Mapped[str] = mapped_column(String(16), nullable=False, unique=True)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.users.id", ondelete="CASCADE"),
+                                                nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = _created()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_used_ip: Mapped[str | None] = mapped_column(String(64))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_reason: Mapped[str | None] = mapped_column(String(32))

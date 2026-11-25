@@ -73,6 +73,7 @@ function useCrumbs(): string[] {
   for (const g of NAV)
     for (const n of g.items)
       if (n.to === seg || (n.to === "/" && seg === "/")) return [g.group, n.label].filter(Boolean) as string[];
+  if (seg === "/account") return ["Hesabım"];
   return [];
 }
 
@@ -278,10 +279,10 @@ export function AppLayout() {
             <span aria-hidden className="hidden h-4 w-px bg-line md:block" />
             <ThemeToggle />
             <div className="flex items-center gap-2">
-              <div className="hidden text-right leading-tight sm:block">
+              <Link to="/account" title="Hesabım: oturumlar, parola, yetkiler" className="hidden rounded-md px-1.5 py-0.5 text-right leading-tight hover:bg-surface-2 sm:block">
                 <div className="max-w-40 truncate text-xs text-ink">{user?.display_name}</div>
                 <div className="text-2xs text-muted">{user ? ROLE_LABEL[user.role] : ""}</div>
-              </div>
+              </Link>
               <button onClick={logout} className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-ink" aria-label="çıkış yap" title="Çıkış">
                 <LogOut className="size-4" />
               </button>

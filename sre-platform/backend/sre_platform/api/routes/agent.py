@@ -20,7 +20,7 @@ from ...services.runs import Run
 from ...settings import runtime as settings_runtime
 from ...settings import service as settings_service
 from ...security.permissions import P
-from ..deps import current_user, db
+from ..deps import current_user, db, keyed
 from ..deps import require_perm as perm
 from ..schemas import (ChatIn, ConversationIn, ConversationOut, ConversationPatch, InvestigateIn, MessageOut, PageOut,
                        RunOut, page_of)
@@ -226,7 +226,7 @@ def _own_run(request: Request, run_id: str, u: User) -> Run:
 
 @router.get("/agent/stream/{run_id}")
 async def stream(run_id: str, request: Request, after: int = Query(0, ge=0),
-                 last_event_id: str | None = Header(None, alias="Last-Event-ID"), u: User = Depends(current_user)):
+                 last_event_id: str | None = Header(None, alias="Last-Event-ID"), u: User = Depends(keyed(P.AGENT_RUN))):
     run = _own_run(request, run_id, u)
     start = int(last_event_id) if last_event_id and last_event_id.isdigit() else after
     registry = request.app.state.runs
@@ -251,17 +251,17 @@ async def stream(run_id: str, request: Request, after: int = Query(0, ge=0),
 
 
 @router.get("/agent/runs/{run_id}")
-async def run_status(run_id: str, request: Request, u: User = Depends(current_user)):
+async def run_status(run_id: str, request: Request, u: User = Depends(keyed(P.AGENT_RUN))):
     return _own_run(request, run_id, u).status()
 
 
 @router.get("/agent/runs")
-async def my_runs(request: Request, u: User = Depends(current_user)):
+async def my_runs(request: Request, u: User = Depends(keyed(P.AGENT_RUN))):
     return [r.status() for r in request.app.state.runs.runs.values() if r.user_id == u.id and not r.done]
 
 
 @router.post("/agent/runs/{run_id}/cancel")
-async def cancel(run_id: str, request: Request, u: User = Depends(current_user)):
+async def cancel(run_id: str, request: Request, u: User = Depends(keyed(P.AGENT_RUN))):
     run = _own_run(request, run_id, u)
     if run.done:
         raise HTTPException(status.HTTP_409_CONFLICT, "çalıştırma zaten bitti")

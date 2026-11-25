@@ -149,7 +149,7 @@ Gereksinim: [`SECURITY_IMPLEMENTATION.md`](SECURITY_IMPLEMENTATION.md) · Tarih:
 
 ## 4. P1 — yüksek
 
-> **Durum (2026-11-25):** P1.1, P1.2, P1.3, P1.6, P1.7, P1.8, P1.9 kod + test tamam, APP_VM'e deploy edildi; P1.4 ertelendi (karar 2); P1.5 uyumsuz değişiklik — kullanıcı onayı bekliyor. Kanıt, plandan sapmalar ve kalan riskler: `SECURITY_P1_EVIDENCE.md`.
+> **Durum (2026-11-25):** P1.1, P1.2, P1.3, P1.6, P1.7, P1.8, P1.9 kod + test tamam, APP_VM'e deploy edildi; P1.4 ertelendi (karar 2); P1.5 kullanıcı kararıyla ertelendi (2026-11-25, "şimdilik yapma"). Kanıt, plandan sapmalar ve kalan riskler: `SECURITY_P1_EVIDENCE.md`.
 
 ### P1.1 Merkezi policy katmanı (F8) — AGT-01
 
@@ -186,6 +186,8 @@ Gereksinim: [`SECURITY_IMPLEMENTATION.md`](SECURITY_IMPLEMENTATION.md) · Tarih:
 - **Kabul:** `localStorage`'da token yok; sekme yenilemede oturum sürer; CSRF negatif testi.
 
 ### P1.5 DB rol ayrımı (F6, X5) — INF-01, AUD-01
+
+> **Ertelendi (2026-11-25, kullanıcı kararı):** uygulama DB kullanıcısı owner kalır; audit append-only tetikleyicileri owner tarafından devre dışı bırakılabilir (kabul edilmiş kalan risk, P1 kanıtı R1).
 
 - Migration `0008_db_roles` (owner tarafından): `sre_app` (DML; `audit_events` için yalnız INSERT/SELECT),
   `sre_worker` (gerekli tablolar), `sre_readonly`. Migrate owner rolüyle, backend/worker yeni rollerle bağlanır.

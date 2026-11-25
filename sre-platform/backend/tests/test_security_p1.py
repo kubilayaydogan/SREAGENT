@@ -146,12 +146,12 @@ def _deps(dependant):
 def test_every_route_is_authenticated_except_public_allowlist(api_settings):
     """Deny-by-default envanteri: yeni bir rota kimlik doğrulamasız eklenirse bu test kırılır."""
     from sre_platform.api.app import create_app
-    from sre_platform.api.deps import current_user
+    from sre_platform.api.deps import authenticate
     app = create_app(api_settings)
     seen = set()
     for m, path, r in _routes(app):
         calls = set(_deps(r.dependant))
-        authed = current_user in calls
+        authed = authenticate in calls
         seen.add((m, path))
         if (m, path) in PUBLIC:
             assert not authed, (m, path)
@@ -165,6 +165,7 @@ def test_write_routes_require_a_permission(api_settings):
     from sre_platform.api.app import create_app
     OWNER_SCOPED = {  # kaynak sahibine bağlı; permission gerekmez (kendi konuşması / oturumu / feedback'i)
         ("POST", "/api/auth/logout"), ("POST", "/api/auth/password"), ("DELETE", "/api/auth/sessions/{sid}"),
+        ("POST", "/api/auth/sessions/revoke-others"),
         ("POST", "/api/conversations"), ("PATCH", "/api/conversations/{conv_id}"),
         ("DELETE", "/api/conversations/{conv_id}/memory/focus"), ("POST", "/api/agent/runs/{run_id}/cancel"),
         ("POST", "/api/feedback"),

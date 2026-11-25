@@ -1,4 +1,4 @@
-import { KeyRound, Trash2 } from "lucide-react";
+import { Check, KeyRound, Minus, ShieldAlert, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Badge, Button, Card, CardBody, CardHeader, Disclosure, Input, Label, Select } from "@/components/ui/primitives";
 import { Dialog } from "@/components/ui/overlay";
@@ -6,7 +6,8 @@ import { ErrorState, Notice, Pagination, TableSkeleton } from "@/components/ui/s
 import { api, type ApiError } from "@/services/api";
 import { useAuth } from "@/services/auth";
 import { fmtRelative, fmtTime } from "@/lib/utils";
-import { useAudit, useSecrets, useSecurity, useSettingsAction } from "./api";
+import { PERM_LABEL, ROLE_LABEL } from "@/features/account/permissions";
+import { useAudit, useAuditSummary, useSecrets, useSecurity, useSettingsAction, type SecurityInfo } from "./api";
 import { ConfirmDialog, show } from "./common";
 
 const NAME_RE = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
@@ -168,7 +169,37 @@ const ACTION_LABEL: Record<string, string> = {
   notification_test: "Bildirim testi",
   job_run_now: "Run now",
   checkpoint_delete: "Checkpoint silme",
+  "auth.login": "Giriş",
+  "auth.logout": "Çıkış",
+  "auth.password.change": "Parola değişikliği",
+  "auth.session.rejected": "Oturum reddi",
+  "auth.session.revoke": "Oturum kapatma",
+  "auth.session.revoke_others": "Diğer oturumları kapatma",
+  "auth.session.revoke_all": "Kullanıcı oturumlarını kapatma",
+  "authz.denied": "Yetki reddi",
+  "auth.apikey.rejected": "API anahtarı reddi",
+  "apikey.create": "API anahtarı oluşturma",
+  "apikey.revoke": "API anahtarı iptali",
+  "user.create": "Kullanıcı oluşturma",
+  "user.update": "Kullanıcı güncelleme",
+  "user.role_change": "Rol değişikliği",
+  "user.disable": "Kullanıcı devre dışı",
+  "run.start": "Koşu başlatma",
+  "run.denied": "Koşu reddi (policy)",
+  "run.cancel": "Koşu iptali",
+  "tool.denied": "Tool reddi (policy)",
+  "egress.denied": "Dış bağlantı engeli (SSRF)",
+  "llm.budget_exceeded": "LLM koşu bütçesi aşıldı",
+  "llm.model_denied": "Model allowlist reddi",
+  "connector.tool_changed": "Tool tanımı değişti",
+  "approval.request": "Onay isteği",
+  "approval.decide": "Onay kararı",
+  "approval.cancel": "Onay iptali",
+  "export.rca_markdown": "RCA dışa aktarma",
+  "memory.focus.clear": "Odak temizleme",
 };
+
+const label = (a: string) => ACTION_LABEL[a] ?? a;
 
 function Diff({ before, after }: { before: Record<string, unknown> | null; after: Record<string, unknown> | null }) {
   const keys = Array.from(new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})])).filter((k) => show(before?.[k]) !== show(after?.[k]));
@@ -184,16 +215,38 @@ function Diff({ before, after }: { before: Record<string, unknown> | null; after
   );
 }
 
-function AuditCard() {
+type AuditFilter = { action: string; result: string };
+
+function AuditCard({ filter, setFilter }: { filter: AuditFilter; setFilter: (f: AuditFilter) => void }) {
   const [page, setPage] = useState(1);
   const [section, setSection] = useState("");
-  const q = useAudit({ page, section: section || undefined });
+  const q = useAudit({ page, section: section || undefined, action: filter.action || undefined, result: filter.result || undefined });
   return (
     <Card>
       <CardHeader
         title="Audit log"
         description="Her ayar değişikliği, test, keşif, run-now ve silme kaydedilir; secret değerleri redakte edilir. Reddedilen değişiklikler de yazılır."
         actions={
+          <div className="flex flex-wrap items-center gap-2">
+          {filter.action && (
+            <Button size="sm" variant="ghost" onClick={() => setFilter({ ...filter, action: "" })} title="eylem filtresini kaldır">
+              {label(filter.action)} ✕
+            </Button>
+          )}
+          <Select
+            aria-label="sonuç filtresi"
+            className="w-40"
+            value={filter.result}
+            onChange={(e) => {
+              setFilter({ ...filter, result: e.target.value });
+              setPage(1);
+            }}
+          >
+            <option value="">Tüm sonuçlar</option>
+            <option value="denied">Yalnız reddedilen</option>
+            <option value="rejected">Yalnız geçersiz</option>
+            <option value="ok">Yalnız başarılı</option>
+          </Select>
           <Select
             aria-label="bölüm filtresi"
             className="w-44"
@@ -204,12 +257,13 @@ function AuditCard() {
             }}
           >
             <option value="">Tüm bölümler</option>
-            {["general", "agent", "scheduling", "risk", "connectors", "llm", "observability", "notifications", "retention", "memory", "security"].map((s) => (
+            {["auth", "users", "agent", "connectors", "llm", "approvals", "export", "general", "scheduling", "risk", "observability", "notifications", "retention", "memory", "security"].map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
           </Select>
+          </div>
         }
       />
       {q.isLoading ? (
@@ -234,8 +288,15 @@ function AuditCard() {
                 {q.data.items.map((a) => (
                   <tr key={a.id}>
                     <td className="text-xs whitespace-nowrap">{fmtTime(a.ts)}</td>
-                    <td className="text-xs">{a.actor}</td>
-                    <td className="text-xs">{ACTION_LABEL[a.action] ?? a.action}</td>
+                    <td className="text-xs">
+                      {a.actor}
+                      {a.source_ip && <div className="font-mono text-2xs text-muted">{a.source_ip}</div>}
+                    </td>
+                    <td className="text-xs">
+                      <button type="button" className="text-left hover:underline" onClick={() => setFilter({ ...filter, action: a.action })} title="bu eyleme göre filtrele">
+                        {label(a.action)}
+                      </button>
+                    </td>
                     <td className="text-xs">
                       {a.section}
                       {a.target ? ` · ${a.target}` : ""}
@@ -243,6 +304,7 @@ function AuditCard() {
                     </td>
                     <td className="text-xs">
                       <Badge className={a.result === "ok" ? "text-2xs" : "border-st-critical/60 text-2xs"}>{a.result}</Badge>
+                      {a.reason_code && <div className="font-mono text-2xs text-st-critical-ink">{a.reason_code}</div>}
                       {a.detail && <div className="max-w-56 truncate text-2xs text-muted" title={a.detail}>{a.detail}</div>}
                     </td>
                     <td>
@@ -261,31 +323,162 @@ function AuditCard() {
   );
 }
 
+function PermissionMatrix({ d }: { d: SecurityInfo }) {
+  const roles = ["viewer", "sre", "admin"];
+  return (
+    <Card>
+      <CardHeader title="Permission matrisi" description="Rotalar rol yerine permission ister; reddedilen her istek audit'e 'Yetki reddi' olarak yazılır. Salt okunur (kodda tanımlı)." />
+      <div className="overflow-x-auto">
+        <table className="data-table w-full">
+          <thead>
+            <tr>
+              <th>Permission</th>
+              {roles.map((r) => (
+                <th key={r} className="text-center">
+                  {ROLE_LABEL[r]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {d.permissions.map((p) => (
+              <tr key={p.permission}>
+                <td className="text-xs">
+                  {PERM_LABEL[p.permission] ?? p.permission}
+                  <div className="font-mono text-2xs text-muted">{p.permission}</div>
+                </td>
+                {roles.map((r) => (
+                  <td key={r} className="text-center">
+                    {p.roles.includes(r) ? <Check aria-label="var" className="inline size-4 text-st-good" /> : <Minus aria-label="yok" className="inline size-4 text-muted" />}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+const SINK_LABEL: Record<string, string> = {
+  llm: "LLM'e giden prompt",
+  trace: "LangSmith trace",
+  log: "Uygulama logu",
+  notify: "Slack bildirimi",
+  export: "RCA dışa aktarma",
+  storage: "Veritabanı kayıtları",
+  audit: "Audit kaydı",
+};
+
+function DataProtectionCard({ d }: { d: SecurityInfo }) {
+  return (
+    <Card>
+      <CardHeader
+        title="Veri koruma (DLP) ve LLM politikası"
+        description="Secret kalıpları (token, JWT, bearer, webhook, private key) her yerde maskelenir. PII (e-posta, IBAN, kart, TC kimlik no) checksum ile doğrulanarak maskelenir. Değişiklik deployment ortamından yapılır (SRE_DLP_PII_KEEP_SINKS, SRE_LLM_MODEL_ALLOWLIST)."
+      />
+      <CardBody className="grid gap-4 lg:grid-cols-2">
+        <table className="data-table w-full">
+          <thead>
+            <tr>
+              <th>Hedef</th>
+              <th className="text-center">Secret</th>
+              <th className="text-center">PII</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(d.dlp).map(([sink, p]) => (
+              <tr key={sink}>
+                <td className="text-xs">
+                  {SINK_LABEL[sink] ?? sink} <code className="font-mono text-2xs text-muted">{sink}</code>
+                </td>
+                <td className="text-center text-xs">{p.secrets ? "maskeli" : "açık"}</td>
+                <td className="text-center text-xs">{p.pii ? "maskeli" : <span className="text-st-warning-ink">korunur (muaf)</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="space-y-2 text-xs text-ink-2">
+          <div>
+            <div className="mb-1 font-medium text-ink">İzinli LLM modelleri</div>
+            <div className="flex flex-wrap gap-1">
+              {d.llm_model_allowlist.map((m) => (
+                <Badge key={m} className="font-mono text-2xs">
+                  {m}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          <p>Listede olmayan model LLM profilinde kaydedilemez; çalışma anında da kullanılmaz ("Model allowlist reddi").</p>
+          <p>Koşu başına LLM çağrı ve token sınırları Settings → Agent bölümündedir; sınır dolunca cevap deterministik üretilir ve "LLM koşu bütçesi aşıldı" olayı yazılır.</p>
+          <p>MCP tool tanımı onaydan sonra değişirse tool kullanılmaz ("Tool tanımı değişti"); MCP Servers bölümünden yeniden onaylanır.</p>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function SecurityEventsCard({ onPick }: { onPick: (action: string) => void }) {
+  const q = useAuditSummary(24);
+  return (
+    <Card>
+      <CardHeader title="Güvenlik olayları (son 24 saat)" description="Reddedilen ve başarısız işlemler. Bir olaya tıklayınca aşağıdaki audit log o olaya göre filtrelenir." />
+      {q.isLoading ? (
+        <TableSkeleton rows={3} cols={3} />
+      ) : q.isError || !q.data ? (
+        <ErrorState error={q.error} onRetry={() => q.refetch()} />
+      ) : q.data.items.length === 0 ? (
+        <p className="flex items-center gap-2 p-3 text-xs text-muted">
+          <Check className="size-4 text-st-good" aria-hidden /> Son 24 saatte reddedilen ya da başarısız işlem yok.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="data-table w-full">
+            <thead>
+              <tr>
+                <th>Olay</th>
+                <th>Neden</th>
+                <th className="text-right">Adet</th>
+                <th>Son</th>
+              </tr>
+            </thead>
+            <tbody>
+              {q.data.items.map((i) => (
+                <tr key={`${i.action}:${i.reason_code}`}>
+                  <td className="text-xs">
+                    <button type="button" className="inline-flex items-center gap-1.5 text-left hover:underline" onClick={() => onPick(i.action)}>
+                      <ShieldAlert className="size-3.5 text-st-critical" aria-hidden /> {label(i.action)}
+                    </button>
+                  </td>
+                  <td className="font-mono text-2xs">{i.reason_code ?? "—"}</td>
+                  <td className="text-right text-xs tabular-nums">{i.count}</td>
+                  <td className="text-xs" title={fmtTime(i.last_ts)}>
+                    {fmtRelative(i.last_ts)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function SecuritySection() {
   const q = useSecurity();
+  const [filter, setFilter] = useState<AuditFilter>({ action: "", result: "" });
   return (
     <div className="space-y-3">
+      <SecurityEventsCard onPick={(action) => setFilter({ action, result: "" })} />
+      {q.data && <PermissionMatrix d={q.data} />}
+      {q.data && <DataProtectionCard d={q.data} />}
       <SecretsCard />
       {q.data && (
         <Card>
-          <CardHeader title="Erişim ve deployment politikaları" />
+          <CardHeader title="Deployment politikaları" />
           <CardBody className="space-y-2">
-            <table className="data-table w-full">
-              <thead>
-                <tr>
-                  <th>Rol</th>
-                  <th>Yetkiler</th>
-                </tr>
-              </thead>
-              <tbody>
-                {q.data.roles.map((r) => (
-                  <tr key={r.role}>
-                    <td className="font-mono text-xs">{r.role}</td>
-                    <td className="text-xs">{r.can.join(" · ")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
             <Notice tone="info">{q.data.remediation}</Notice>
             <Disclosure title="Deployment lock'ları ve allowlist'ler" meta={`${Object.keys(q.data.locks).length} bölümde lock`}>
               <ul className="space-y-1 text-xs text-ink-2">
@@ -298,7 +491,7 @@ export function SecuritySection() {
           </CardBody>
         </Card>
       )}
-      <AuditCard />
+      <AuditCard filter={filter} setFilter={setFilter} />
     </div>
   );
 }

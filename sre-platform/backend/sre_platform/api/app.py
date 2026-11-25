@@ -96,6 +96,7 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
         sec_ctx.client_ip.set(sec_ctx.resolve_client_ip(request.client.host if request.client else None,
                                                         request.headers.get("x-forwarded-for"), trusted))
         sec_ctx.session_id.set(None)
+        sec_ctx.api_key.set(None)
         t0 = time.monotonic()
         try:
             response = await call_next(request)

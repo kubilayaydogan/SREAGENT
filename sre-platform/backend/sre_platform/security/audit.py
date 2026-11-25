@@ -33,9 +33,12 @@ def _event(*, actor: str, action: str, section: str, target: str | None = None, 
         after=redact(after, "audit") if after is not None else None, result=result[:16],
         detail=(redact_text(detail, "audit")[:2000] if detail else None),
         actor_type=actor_type or ("system" if actor.startswith("system") else
-                                  "anonymous" if actor.startswith("anonymous") else "user"),
+                                  "anonymous" if actor.startswith("anonymous") else
+                                  "service" if context.api_key.get() or actor.startswith("apikey:") else "user"),
         source_ip=source_ip or context.client_ip.get(), correlation_id=None if cid == "-" else cid,
-        session_id=session_id or context.session_id.get(), run_id=run_id, reason_code=reason_code)
+        session_id=session_id or context.session_id.get() or (f"apikey:{context.api_key.get()}" if context.api_key.get()
+                                                              else None),
+        run_id=run_id, reason_code=reason_code)
 
 
 async def record(s: AsyncSession, **kw) -> None:

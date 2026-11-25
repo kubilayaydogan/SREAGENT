@@ -5,6 +5,7 @@ import { useSettingsOverview, type SectionId } from "@/features/settings/api";
 import { ConnectorsSection } from "@/features/settings/Connectors";
 import { LlmProvidersSection } from "@/features/settings/LlmProviders";
 import { SecuritySection } from "@/features/settings/Security";
+import { UsersSection } from "@/features/settings/Users";
 import {
   AgentSection,
   GeneralSection,
@@ -18,7 +19,7 @@ import { useAuth } from "@/services/auth";
 import { cn } from "@/lib/utils";
 
 /** İkincil gezinme. `section`: backend ayar bölümü (revizyon/restart rozeti için); connector ve audit gibi sayfaların yok. */
-export const SETTINGS_NAV: { id: string; label: string; section?: SectionId; el: ComponentType }[] = [
+export const SETTINGS_NAV: { id: string; label: string; section?: SectionId; el: ComponentType; admin?: boolean }[] = [
   { id: "general", label: "General & Appearance", section: "general", el: GeneralSection },
   { id: "agent", label: "Agent", section: "agent", el: AgentSection },
   { id: "scheduling", label: "Scheduling", section: "scheduling", el: SchedulingSection },
@@ -28,14 +29,16 @@ export const SETTINGS_NAV: { id: string; label: string; section?: SectionId; el:
   { id: "observability", label: "Observability", section: "observability", el: ObservabilitySection },
   { id: "notifications", label: "Notifications", section: "notifications", el: NotificationsSection },
   { id: "retention", label: "Retention & Memory", section: "retention", el: RetentionSection },
-  { id: "security", label: "Security & Audit", el: SecuritySection },
+  { id: "security", label: "Security & Governance", el: SecuritySection },
+  { id: "users", label: "Users & API Keys", el: UsersSection, admin: true },
 ];
 
 export default function SettingsPage() {
   const { section = "general" } = useParams();
   const { can } = useAuth();
   const ov = useSettingsOverview();
-  const cur = SETTINGS_NAV.find((n) => n.id === section);
+  const nav = SETTINGS_NAV.filter((n) => !n.admin || can("admin"));
+  const cur = nav.find((n) => n.id === section);
   if (!cur) return <Navigate to="/settings/general" replace />;
   const info = (id?: SectionId) => ov.data?.sections.find((s) => s.section === id);
   const El = cur.el;
@@ -49,7 +52,7 @@ export default function SettingsPage() {
       <div className="grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]">
         <nav aria-label="Settings bölümleri" className="lg:sticky lg:top-4 lg:self-start">
           <ul className="flex gap-0.5 overflow-x-auto lg:flex-col">
-            {SETTINGS_NAV.map((n) => {
+            {nav.map((n) => {
               const i = info(n.section);
               return (
                 <li key={n.id}>

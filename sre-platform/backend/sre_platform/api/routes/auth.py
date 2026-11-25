@@ -9,16 +9,18 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.security import create_token, verify_password
-from ...db.models import AuthSession, User
+from ...db.models import ApiKey, AuthSession, User
 from ...repositories import users
-from ...security import audit, context, sessions, throttle
+from ...security import api_keys, audit, context, sessions, throttle
 from ...security.permissions import P
-from ..deps import current_user, db
+from ..deps import current_user, db, is_api_key
 from ..deps import require_perm as perm
-from ..schemas import (LoginIn, PageOut, PasswordChangeIn, SessionOut, TokenOut, UserCreateIn, UserOut, UserUpdateIn,
+from ..schemas import (In, LoginIn, PageOut, PasswordChangeIn, SessionOut, TokenOut, UserCreateIn, UserOut, UserUpdateIn,
                        page_of)
 
 router = APIRouter(tags=["auth"])
@@ -65,6 +67,22 @@ async def logout(request: Request, u: User = Depends(current_user), s: AsyncSess
 @router.get("/auth/me", response_model=UserOut)
 async def me(u: User = Depends(current_user)):
     return u
+
+
+@router.get("/auth/permissions")
+async def my_permissions(u: User = Depends(current_user)):
+    """Oturumdaki kullanıcının permission'ları (arayüz düğmeleri için; yetki kararı her zaman sunucudadır)."""
+    from ...security.permissions import ROLE_PERMISSIONS
+    return {"role": u.role.value, "permissions": sorted(p.value for p in ROLE_PERMISSIONS.get(u.role, ()))}
+
+
+@router.post("/auth/sessions/revoke-others")
+async def revoke_other_sessions(request: Request, u: User = Depends(current_user), s: AsyncSession = Depends(db)):
+    """Bu oturum dışındaki tüm oturumlarımı kapat (ör. başka bir cihazda açık kalan oturum)."""
+    n = await sessions.revoke_user(s, u.id, "user_revoke_others", keep=request.state.session_id)
+    await audit.record(s, actor=u.username, action="auth.session.revoke_others", section="auth",
+                       detail=f"{n} oturum kapatıldı")
+    return {"revoked": n}
 
 
 @router.post("/auth/password", status_code=204)
@@ -131,6 +149,18 @@ async def user_sessions(user_id: uuid.UUID, _: User = Depends(perm(P.USER_MANAGE
     return [_session_out(r, None) for r in await sessions.list_active(s, user_id)]
 
 
+@router.post("/users/{user_id}/sessions/revoke")
+async def revoke_user_sessions(user_id: uuid.UUID, request: Request, me_: User = Depends(perm(P.USER_MANAGE)),
+                               s: AsyncSession = Depends(db)):
+    """Kullanıcının tüm oturumlarını kapat (kendi hesabınızda bu oturum korunur)."""
+    target = await users.get(s, user_id)
+    keep = request.state.session_id if user_id == me_.id else None
+    n = await sessions.revoke_user(s, user_id, "admin_revoke", keep=keep)
+    await audit.record(s, actor=me_.username, action="auth.session.revoke_all", section="users", target=target.username,
+                       detail=f"{n} oturum kapatıldı")
+    return {"revoked": n}
+
+
 @router.patch("/users/{user_id}", response_model=UserOut)
 async def update_user(user_id: uuid.UUID, body: UserUpdateIn, me_: User = Depends(perm(P.USER_MANAGE)),
                       s: AsyncSession = Depends(db)):
@@ -145,6 +175,8 @@ async def update_user(user_id: uuid.UUID, body: UserUpdateIn, me_: User = Depend
     if "role" in changed or (body.is_active is False and "is_active" in changed):
         # Yetki değişikliği / devre dışı: mevcut oturumlar eski yetki bağlamında açılmıştır → iptal
         revoked = await sessions.revoke_user(s, user_id, "role_change" if "role" in changed else "disabled")
+    keys_revoked = await api_keys.revoke_owner(s, user_id, "owner_disabled") if (
+        body.is_active is False and "is_active" in changed) else 0
     if body.password:
         await users.set_password(s, user_id, body.password)
         revoked += await sessions.revoke_user(s, user_id, "password_reset")
@@ -152,5 +184,44 @@ async def update_user(user_id: uuid.UUID, body: UserUpdateIn, me_: User = Depend
               else "user.update")
     await audit.record(s, actor=me_.username, action=action, section="users", target=u.username,
                        before={k: before[k] for k in changed} or None, after={k: after[k] for k in changed} or None,
-                       detail=("parola sıfırlandı; " if body.password else "") + f"{revoked} oturum iptal edildi")
+                       detail=("parola sıfırlandı; " if body.password else "") + f"{revoked} oturum iptal edildi" + (f"; {keys_revoked} API anahtarı iptal edildi" if keys_revoked else ""))
     return u
+
+
+# ------------------------------------------------------------------------------------------- service account API anahtarları
+class ApiKeyCreateIn(In):
+    name: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9._ -]+$")
+    scopes: list[str] = Field(min_length=1, max_length=16)
+    days: int = Field(90, ge=1, le=api_keys.MAX_DAYS)
+
+
+@router.get("/api-keys")
+async def list_api_keys(include_inactive: bool = False, _: User = Depends(perm(P.USER_MANAGE)),
+                        s: AsyncSession = Depends(db)):
+    q = select(ApiKey, User.username).join(User, User.id == ApiKey.owner_id).order_by(ApiKey.created_at.desc())
+    rows = [api_keys.out(k, owner) for k, owner in (await s.execute(q)).all()]
+    if not include_inactive:
+        rows = [r for r in rows if r["status"] == "active"]
+    return {"items": rows, "allowed_scopes": [p.value for p in api_keys.ALLOWED_SCOPES], "max_days": api_keys.MAX_DAYS}
+
+
+@router.post("/api-keys", status_code=201)
+async def create_api_key(body: ApiKeyCreateIn, request: Request, me_: User = Depends(perm(P.USER_MANAGE)),
+                         s: AsyncSession = Depends(db)):
+    """Anahtar oluşturan admin'e bağlanır. Düz anahtar YALNIZ bu cevapta döner; sonra geri alınamaz."""
+    if is_api_key(request):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "API anahtarı yeni anahtar oluşturamaz")
+    k, token = await api_keys.create(s, pepper=_ps(request).jwt_secret, owner=me_, name=body.name.strip(),
+                                     scopes=body.scopes, days=body.days, actor=me_.username)
+    await audit.record(s, actor=me_.username, action="apikey.create", section="users", target=f"{k.name} ({k.prefix})",
+                       after={"scopes": k.scopes, "expires_at": k.expires_at.isoformat()})
+    return {**api_keys.out(k, me_.username), "token": token}
+
+
+@router.delete("/api-keys/{key_id}")
+async def revoke_api_key(key_id: uuid.UUID, me_: User = Depends(perm(P.USER_MANAGE)), s: AsyncSession = Depends(db)):
+    k = await api_keys.revoke(s, key_id, "admin_revoke")
+    if k is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "anahtar bulunamadı")
+    await audit.record(s, actor=me_.username, action="apikey.revoke", section="users", target=f"{k.name} ({k.prefix})")
+    return api_keys.out(k)

@@ -273,8 +273,10 @@ def test_migration_0003_downgrade_and_upgrade(db_url):
         migrate.upgrade(db_url)
         assert {"settings_sections", "settings_revisions", "connectors", "llm_profiles", "secrets",
                 "audit_events", "agent_episodes"} <= tables()
-        assert migrate.current_revision(db_url) == "0007"
-        assert {"auth_sessions", "auth_login_failures", "llm_usage"} <= tables()
+        assert migrate.current_revision(db_url) == "0008"
+        assert {"auth_sessions", "auth_login_failures", "llm_usage", "api_keys"} <= tables()
+        migrate.downgrade(db_url, "0007")                       # API anahtarları geri alınabilir
+        assert "api_keys" not in tables() and "llm_usage" in tables()
         migrate.downgrade(db_url, "0006")                       # LLM kullanım kaydı geri alınabilir
         assert "llm_usage" not in tables()
         migrate.downgrade(db_url, "0005")                       # audit tetikleyicileri/kolonları geri alınabilir

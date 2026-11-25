@@ -172,6 +172,16 @@ export interface AuditItem {
   after: Record<string, unknown> | null;
   result: string;
   detail: string | null;
+  actor_type?: string | null;
+  source_ip?: string | null;
+  reason_code?: string | null;
+  run_id?: string | null;
+}
+
+export interface AuditSummary {
+  hours: number;
+  total: number;
+  items: { action: string; reason_code: string | null; count: number; last_ts: string }[];
 }
 
 export interface Revision {
@@ -223,6 +233,9 @@ export interface MemoryStatus {
 
 export interface SecurityInfo {
   roles: { role: string; can: string[] }[];
+  permissions: { permission: string; roles: string[] }[];
+  dlp: Record<string, { secrets: boolean; pii: boolean }>;
+  llm_model_allowlist: string[];
   secret_store: { available: boolean; reason: string | null; env_allowlist: string[] };
   outbound_allowlist: string[];
   locks: Record<string, Record<string, unknown>>;
@@ -268,15 +281,20 @@ export const useJobs = () =>
   useQuery({ queryKey: skeys.jobs, queryFn: () => api.get<{ items: JobStatus[] }>("/settings/scheduling/jobs"), refetchInterval: 15_000 });
 export const useMemoryStatus = () => useQuery({ queryKey: skeys.memory, queryFn: () => api.get<MemoryStatus>("/settings/memory") });
 export const useSecurity = () => useQuery({ queryKey: skeys.security, queryFn: () => api.get<SecurityInfo>("/settings/security") });
-export const useAudit = (p: { section?: string; page: number }) =>
+export const useAudit = (p: { section?: string; action?: string; result?: string; page: number; size?: number }) =>
   useQuery({
     queryKey: skeys.audit(p),
-    queryFn: () =>
-      api.get<{ items: AuditItem[]; total: number; page: number; pages: number }>(
-        `/settings/audit?page=${p.page}&size=50${p.section ? `&section=${p.section}` : ""}`,
-      ),
+    queryFn: () => {
+      const q = new URLSearchParams({ page: String(p.page), size: String(p.size ?? 50) });
+      if (p.section) q.set("section", p.section);
+      if (p.action) q.set("action", p.action);
+      if (p.result) q.set("result", p.result);
+      return api.get<{ items: AuditItem[]; total: number; page: number; pages: number }>(`/settings/audit?${q}`);
+    },
     placeholderData: keepPreviousData,
   });
+export const useAuditSummary = (hours = 24) =>
+  useQuery({ queryKey: skeys.audit({ summary: hours }), queryFn: () => api.get<AuditSummary>(`/settings/audit/summary?hours=${hours}`) });
 
 function useInvalidate() {
   const qc = useQueryClient();

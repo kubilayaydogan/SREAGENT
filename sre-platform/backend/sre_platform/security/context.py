@@ -11,6 +11,7 @@ import ipaddress
 
 client_ip: contextvars.ContextVar[str | None] = contextvars.ContextVar("client_ip", default=None)
 session_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("session_id", default=None)
+api_key: contextvars.ContextVar[str | None] = contextvars.ContextVar("api_key", default=None)   # prefix
 
 
 def parse_networks(items) -> tuple:

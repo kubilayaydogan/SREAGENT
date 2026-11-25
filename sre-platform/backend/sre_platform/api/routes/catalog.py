@@ -23,7 +23,7 @@ async def _open_keys(s: AsyncSession) -> set[str]:
 
 
 @router.get("/applications", response_model=list[ApplicationOut])
-async def list_apps(kind: str | None = Query(None, pattern="^(business|tooling)$"), _: User = Depends(current_user),
+async def list_apps(kind: str | None = Query(None, pattern="^(business|tooling)$"), _: User = Depends(perm(P.RECORD_READ)),
                     s: AsyncSession = Depends(db)):
     return await applications.list_(s, kind)
 
@@ -44,7 +44,7 @@ def _app_view(snap: dict, app_id: str, with_series: bool) -> dict:
 
 
 @router.get("/applications/{app_id}/health")
-async def app_health(app_id: str, request: Request, range: RangeKey = "15m", _: User = Depends(current_user),
+async def app_health(app_id: str, request: Request, range: RangeKey = "15m", _: User = Depends(perm(P.RECORD_READ)),
                      s: AsyncSession = Depends(db)):
     await applications.get(s, app_id)
     snap = await request.app.state.telemetry.snapshot(range, open_keys=await _open_keys(s))
@@ -52,7 +52,7 @@ async def app_health(app_id: str, request: Request, range: RangeKey = "15m", _: 
 
 
 @router.get("/applications/{app_id}/metrics")
-async def app_metrics(app_id: str, request: Request, range: RangeKey = "1h", _: User = Depends(current_user),
+async def app_metrics(app_id: str, request: Request, range: RangeKey = "1h", _: User = Depends(perm(P.RECORD_READ)),
                       s: AsyncSession = Depends(db)):
     await applications.get(s, app_id)
     snap = await request.app.state.telemetry.snapshot(range, open_keys=await _open_keys(s))
@@ -72,7 +72,7 @@ def _single_overall(a: dict | None, snap: dict) -> dict:
 
 @router.get("/dashboard/summary")
 async def dashboard(request: Request, range: RangeKey = "1h", application_id: str | None = None,
-                    _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+                    _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     if application_id:
         await applications.get(s, application_id)
     snap = await request.app.state.telemetry.snapshot(range, open_keys=await _open_keys(s))
@@ -130,7 +130,7 @@ async def ready(request: Request):
 
 
 @system.get("/system/info")
-async def info(request: Request, _: User = Depends(current_user)):
+async def info(request: Request, _: User = Depends(perm(P.RECORD_READ))):
     rt = request.app.state.rt
     from ...services import model_switch
     await model_switch.refresh(rt)                     # başka süreçte (ör. worker) yapılan seçim de görünsün
@@ -147,7 +147,7 @@ async def info(request: Request, _: User = Depends(current_user)):
 
 
 @system.get("/system/llm-model")
-async def get_llm_model(request: Request, _: User = Depends(current_user)):
+async def get_llm_model(request: Request, _: User = Depends(perm(P.RECORD_READ))):
     from ...services import model_switch
     return await model_switch.state(request.app.state.rt)
 

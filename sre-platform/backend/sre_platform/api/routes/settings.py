@@ -197,6 +197,21 @@ async def audit_log(section: str | None = None, action: str | None = Query(None,
     return {"items": items, "total": total or 0, "page": page, "size": size, "pages": -(-(total or 0) // size)}
 
 
+@router.get("/audit/summary")
+async def audit_summary(hours: int = Query(24, ge=1, le=720), _: User = Depends(perm(P.AUDIT_READ)),
+                        s: AsyncSession = Depends(db)):
+    """Son N saatteki reddedilen / başarısız güvenlik olayları (eylem + neden kodu bazında). Governance ekranı için."""
+    from datetime import datetime, timedelta, timezone
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    rows = (await s.execute(
+        select(AuditEvent.action, AuditEvent.reason_code, func.count(), func.max(AuditEvent.ts))
+        .where(AuditEvent.ts >= since, AuditEvent.result != "ok")
+        .group_by(AuditEvent.action, AuditEvent.reason_code)
+        .order_by(func.count().desc()).limit(50))).all()
+    items = [{"action": a, "reason_code": rc, "count": n, "last_ts": ts.isoformat()} for a, rc, n, ts in rows]
+    return {"hours": hours, "total": sum(i["count"] for i in items), "items": items}
+
+
 @router.get("/security")
 async def security(request: Request, _: User = Depends(perm(P.SETTINGS_READ))):
     return {
@@ -208,6 +223,7 @@ async def security(request: Request, _: User = Depends(perm(P.SETTINGS_READ))):
                                                "Bağlantı testi, tool keşfi, run-now", "Checkpoint silme"]}],
         "permissions": permissions.matrix(),
         "dlp": __import__("airlab_agent.redact", fromlist=["dlp_policy"]).dlp_policy(),
+        "llm_model_allowlist": sorted(llm_svc.allowed_models(_rt(request))),
         "secret_store": {"available": secrets.store_available(),
                          "reason": None if secrets.store_available() else "SRE_SETTINGS_KEY tanımlı değil (≥32 karakter)",
                          "env_allowlist": sorted(secrets.env_allowlist()) + ["SRE_SECRET_*"]},

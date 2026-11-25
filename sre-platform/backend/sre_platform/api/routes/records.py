@@ -43,7 +43,7 @@ async def list_investigations(application_id: str | None = None, status_: str | 
                               q: str | None = Query(None, max_length=200), since: datetime | None = None,
                               until: datetime | None = None, trigger: Trigger | None = None, mine: bool = False,
                               page: int = 1, size: int = 25, sort: str | None = None,
-                              u: User = Depends(current_user), s: AsyncSession = Depends(db)):
+                              u: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     p = await investigations.list_(s, application_id=application_id, status=_csv_enum(status_, InvestigationStatus),
                                    severity=_csv_enum(severity, Severity), mechanism=mechanism, q=q, since=since,
                                    until=until, trigger=trigger, user_id=u.id if mine else None, page=page, size=size,
@@ -52,12 +52,12 @@ async def list_investigations(application_id: str | None = None, status_: str | 
 
 
 @router.get("/investigations/{inv_id}", response_model=InvestigationDetailOut, tags=["investigations"])
-async def get_investigation(inv_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def get_investigation(inv_id: uuid.UUID, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return await investigations.get(s, inv_id)
 
 
 @router.get("/investigations/{inv_id}/trace", tags=["investigations"])
-async def get_trace(inv_id: uuid.UUID, request: Request, _: User = Depends(current_user),
+async def get_trace(inv_id: uuid.UUID, request: Request, _: User = Depends(perm(P.RECORD_READ)),
                     s: AsyncSession = Depends(db)):
     """LangSmith trace linki. Tracing kapalıysa ya da bu investigation için trace yazılmadıysa url null."""
     from ...services import langsmith_trace
@@ -68,26 +68,26 @@ async def get_trace(inv_id: uuid.UUID, request: Request, _: User = Depends(curre
 
 
 @router.get("/investigations/{inv_id}/evidence", tags=["investigations"])
-async def get_evidence(inv_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def get_evidence(inv_id: uuid.UUID, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     inv = await investigations.get(s, inv_id, with_children=True)
     return [EvidenceOut.model_validate(e).model_dump(mode="json", by_alias=True)
             for e in sorted(inv.evidence, key=lambda e: (e.evidence_type.value, e.signal or ""))]
 
 
 @router.get("/investigations/{inv_id}/tools", response_model=list[ToolOut], tags=["investigations"])
-async def get_tools(inv_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def get_tools(inv_id: uuid.UUID, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return (await investigations.get(s, inv_id, with_children=True)).tools
 
 
 @router.get("/investigations/{inv_id}/similar", response_model=list[InvestigationOut], tags=["investigations"])
-async def similar(inv_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def similar(inv_id: uuid.UUID, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     inv = await investigations.get(s, inv_id)
     return await investigations.similar(s, mechanism=inv.primary_mechanism,
                                         apps=list(set(inv.source_apps) | set(inv.affected_apps)), exclude_id=inv.id)
 
 
 @router.get("/investigations/{inv_id}/recommendations", tags=["investigations"])
-async def recommendations(inv_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def recommendations(inv_id: uuid.UUID, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     inv = await investigations.get(s, inv_id)
     mechs = [m["id"] for m in ((inv.report or {}).get("mechanisms") or [])]
     rec = await knowledge.recommend(s, mechanisms=mechs, apps=list(set(inv.source_apps) | set(inv.affected_apps)))
@@ -96,7 +96,7 @@ async def recommendations(inv_id: uuid.UUID, _: User = Depends(current_user), s:
 
 
 @router.get("/investigations/{inv_id}/feedback", response_model=list[FeedbackOut], tags=["feedback"])
-async def inv_feedback(inv_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def inv_feedback(inv_id: uuid.UUID, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return await rca.feedback_for(s, inv_id)
 
 
@@ -117,7 +117,7 @@ async def _incident_full(s, inc_id):
 async def list_incidents(status_: str | None = Query(None, alias="status"), severity: str | None = None,
                          application_id: str | None = None, q: str | None = Query(None, max_length=200),
                          since: datetime | None = None, until: datetime | None = None, page: int = 1, size: int = 25,
-                         sort: str | None = None, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+                         sort: str | None = None, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     p = await incidents.list_(s, status=_csv_enum(status_, IncidentStatus), severity=_csv_enum(severity, Severity),
                               application_id=application_id, q=q, since=since, until=until, page=page, size=size,
                               sort=sort)
@@ -135,7 +135,7 @@ async def create_incident(body: IncidentIn, u: User = Depends(perm(P.INCIDENT_WR
 
 
 @router.get("/incidents/{inc_id}", tags=["incidents"])
-async def get_incident(inc_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def get_incident(inc_id: uuid.UUID, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return await _incident_full(s, inc_id)
 
 
@@ -172,19 +172,19 @@ async def note(inc_id: uuid.UUID, body: NoteIn, u: User = Depends(perm(P.INCIDEN
 async def list_rca(application_id: str | None = None, incident_id: uuid.UUID | None = None,
                    investigation_id: uuid.UUID | None = None, q: str | None = Query(None, max_length=200),
                    since: datetime | None = None, page: int = 1, size: int = 25, sort: str | None = None,
-                   _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+                   _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return page_of(await rca.list_(s, application_id=application_id, incident_id=incident_id,
                                    investigation_id=investigation_id, q=q, since=since, page=page, size=size,
                                    sort=sort), RcaOut)
 
 
 @router.get("/rca/{rca_id}", response_model=RcaDetailOut, tags=["rca"])
-async def get_rca(rca_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def get_rca(rca_id: uuid.UUID, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return await rca.get(s, rca_id)
 
 
 @router.get("/rca/{rca_id}/markdown", response_class=PlainTextResponse, tags=["rca"])
-async def rca_markdown(rca_id: uuid.UUID, u: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def rca_markdown(rca_id: uuid.UUID, u: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     await audit.record(s, actor=u.username, action="export.rca_markdown", section="export", target=str(rca_id))
     r = await rca.get(s, rca_id)
     return PlainTextResponse(redact_text(r.markdown or "", "export"), media_type="text/markdown; charset=utf-8",
@@ -217,7 +217,7 @@ async def feedback(body: FeedbackIn, u: User = Depends(current_user), s: AsyncSe
 
 
 @router.get("/feedback/summary", tags=["feedback"])
-async def feedback_summary(_: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def feedback_summary(_: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return await rca.feedback_summary(s)
 
 
@@ -225,13 +225,13 @@ async def feedback_summary(_: User = Depends(current_user), s: AsyncSession = De
 @router.get("/known-issues", response_model=PageOut[KnownIssueOut], tags=["knowledge"])
 async def list_ki(application_id: str | None = None, mechanism: str | None = None,
                   q: str | None = Query(None, max_length=200), page: int = 1, size: int = 25, sort: str | None = None,
-                  _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+                  _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return page_of(await knowledge.list_known_issues(s, application_id=application_id, mechanism=mechanism, q=q,
                                                      page=page, size=size, sort=sort), KnownIssueOut)
 
 
 @router.get("/known-issues/{kid}", tags=["knowledge"])
-async def get_ki(kid: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def get_ki(kid: uuid.UUID, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     k = await knowledge.get_known_issue(s, kid)
     related = await incidents.list_(s, application_id=k.application_id, q=k.mechanism or k.title.split(" ")[0], size=10)
     inv = await investigations.list_(s, mechanism=k.mechanism, size=10) if k.mechanism else None
@@ -249,13 +249,13 @@ async def create_ki(body: KnownIssueIn, u: User = Depends(perm(P.INCIDENT_WRITE)
 @router.get("/runbooks", response_model=PageOut[RunbookOut], tags=["knowledge"])
 async def list_rb(application_id: str | None = None, mechanism: str | None = None,
                   q: str | None = Query(None, max_length=200), page: int = 1, size: int = 25, sort: str | None = None,
-                  _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+                  _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return page_of(await knowledge.list_runbooks(s, application_id=application_id, mechanism=mechanism, q=q,
                                                  page=page, size=size, sort=sort), RunbookOut)
 
 
 @router.get("/runbooks/{rid}", response_model=RunbookOut, tags=["knowledge"])
-async def get_rb(rid: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def get_rb(rid: uuid.UUID, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return await knowledge.get_runbook(s, rid)
 
 
@@ -267,7 +267,7 @@ async def create_rb(body: RunbookIn, _: User = Depends(perm(P.KNOWLEDGE_MANAGE))
 # ---------------------------------------------------------------- onaylar (human-in-the-loop)
 @router.get("/approvals", response_model=PageOut[ApprovalOut], tags=["approvals"])
 async def list_approvals(status_: str | None = Query(None, alias="status"), page: int = 1, size: int = 25,
-                         sort: str | None = None, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
+                         sort: str | None = None, _: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     await approvals.expire_due(s)
     return page_of(await approvals.list_(s, status=_csv_enum(status_, ApprovalStatus), page=page, size=size,
                                          sort=sort), ApprovalOut)
@@ -310,12 +310,12 @@ async def cancel_approval(aid: uuid.UUID, u: User = Depends(perm(P.APPROVAL_REQU
 
 # ---------------------------------------------------------------- zamanlanmış işler
 @router.get("/jobs", response_model=list[JobOut], tags=["jobs"])
-async def list_jobs(_: User = Depends(current_user), s: AsyncSession = Depends(db)):
+async def list_jobs(_: User = Depends(perm(P.RECORD_READ)), s: AsyncSession = Depends(db)):
     return await jobs.list_jobs(s)
 
 
 @router.get("/jobs/runs", response_model=list[JobRunOut], tags=["jobs"])
-async def job_runs(limit: int = Query(30, ge=1, le=200), _: User = Depends(current_user),
+async def job_runs(limit: int = Query(30, ge=1, le=200), _: User = Depends(perm(P.RECORD_READ)),
                    s: AsyncSession = Depends(db)):
     return await jobs.recent_runs(s, limit=limit)
 

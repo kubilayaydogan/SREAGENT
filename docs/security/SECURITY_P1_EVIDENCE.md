@@ -12,7 +12,7 @@ bekliyor**; P1.4 karar 2 (TLS yok) nedeniyle ertelendi.
 | P1.2 | Permission modeli (IAM-03) | ✅ | `security/permissions.py`, `api/deps.py` (`require_perm`), tüm `api/routes/*.py` |
 | P1.3 | F5 kararı (ekip geneli görünürlük) | ✅ (karar a) | `features/chat/Composer.tsx` bilgilendirme; migration yok |
 | P1.4 | HttpOnly cookie | ⏸ ertelendi | karar 2 (TLS yok → `Secure` cookie yapılamaz) |
-| P1.5 | DB rol ayrımı | ⛔ onay bekliyor | uyumsuz değişiklik (env'de DB kullanıcıları değişir) |
+| P1.5 | DB rol ayrımı | ⏸ ertelendi | kullanıcı kararı (2026-11-25); kalan risk R1 |
 | P1.6 | LLM sertleştirme (LLM-01, AGT-03) | ✅ | `airlab_agent/llm.py` (`RunBudget`), `agent/llm_port.py`, `security/llm_usage.py`, migration `0007_llm_usage`, `settings/llm_profiles.py` (allowlist) |
 | P1.7 | MCP sertleştirme (MCP-01/03) | ✅ (kısmi, §4) | `airlab_agent/mcp_gateway.py`, `settings/connectors.py`, `security/policy.py`, `Connectors.tsx` |
 | P1.8 | DLP (DLP-01) | ✅ | `airlab_agent/redact.py` + sink çağrı noktaları |

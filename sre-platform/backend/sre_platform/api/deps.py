@@ -37,12 +37,31 @@ async def _audit_denied(request: Request, *, actor: str, action: str, reason: st
                                 reason_code=reason, detail=detail)
 
 
-async def current_user(request: Request, cred: HTTPAuthorizationCredentials | None = Depends(bearer),
+async def authenticate(request: Request, cred: HTTPAuthorizationCredentials | None = Depends(bearer),
                        s: AsyncSession = Depends(db)) -> User:
-    """Deny-by-default: geçerli imza + zorunlu claim'ler + aktif sunucu oturumu + aktif kullanıcı. Rol DB'den okunur."""
-    from ..security import context, sessions
+    """Kimlik doğrulayıcı (oturum VEYA API anahtarı). Doğrudan rotada kullanılmaz: `current_user` (yalnız oturum),
+    `require_perm` (oturum + scope'lu API anahtarı) ya da `keyed` üzerinden gelir.
+
+    Oturum: geçerli imza + zorunlu claim'ler + aktif sunucu oturumu + aktif kullanıcı. Rol DB'den okunur.
+    API anahtarı (`srek_…`): bkz. security/api_keys.py. `request.state.api_scopes` yalnız anahtarla dolar."""
+    from ..security import api_keys, context, sessions
+    request.state.api_scopes = None
     if cred is None or cred.scheme.lower() != "bearer":
         raise _unauth()
+    if api_keys.looks_like_key(cred.credentials):
+        k, owner, why = await api_keys.authenticate(s, cred.credentials, pepper=request.app.state.rt.ps.jwt_secret,
+                                                    ip=context.client_ip.get())
+        if owner is None:
+            await _audit_denied(request, actor=f"apikey:{k.prefix}" if k else "anonymous:apikey",
+                                action="auth.apikey.rejected", reason=why)
+            raise _unauth("geçersiz, süresi dolmuş veya iptal edilmiş API anahtarı")
+        request.state.user_id = str(owner.id)
+        request.state.username = owner.username
+        request.state.session_id = None
+        request.state.api_key_id = str(k.id)
+        request.state.api_scopes = api_keys.effective_scopes(k, owner)
+        context.api_key.set(k.prefix)
+        return owner
     try:
         claims = decode_token(cred.credentials, request.app.state.rt.ps.jwt_secret)
         uid = uuid.UUID(claims["sub"])
@@ -63,6 +82,32 @@ async def current_user(request: Request, cred: HTTPAuthorizationCredentials | No
     return u
 
 
+def is_api_key(request: Request) -> bool:
+    return getattr(request.state, "api_scopes", None) is not None
+
+
+async def current_user(request: Request, u: User = Depends(authenticate)) -> User:
+    """Yalnız etkileşimli oturum (deny-by-default): API anahtarı kimlik, oturum, parola, sohbet gibi uçlara giremez."""
+    if is_api_key(request):
+        await _audit_denied(request, actor=u.username, action="authz.denied", reason="apikey_not_allowed")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "bu uç API anahtarıyla kullanılamaz; oturum gerekli")
+    return u
+
+
+async def _check_scope(request: Request, u: User, perm) -> None:
+    if is_api_key(request) and perm.value not in request.state.api_scopes:
+        await _audit_denied(request, actor=u.username, action="authz.denied", reason=f"scope_missing_{perm.value}"[:48])
+        raise HTTPException(status.HTTP_403_FORBIDDEN, f"API anahtarında '{perm.value}' scope'u yok")
+
+
+def keyed(perm):
+    """Oturumdaki her kullanıcıya açık (sahiplik kontrolü rotada) uç; API anahtarı ise `perm` scope'u ister."""
+    async def dep(request: Request, u: User = Depends(authenticate)) -> User:
+        await _check_scope(request, u, perm)
+        return u
+    return dep
+
+
 def require(role: Role):
     async def dep(request: Request, u: User = Depends(current_user)) -> User:
         if RANK[u.role] < RANK[role]:
@@ -73,14 +118,16 @@ def require(role: Role):
 
 
 def require_perm(perm):
-    """Permission kontrolü (security/permissions.py). Ret 403 + audit `authz.denied` (reason: missing_<perm>)."""
+    """Permission kontrolü (security/permissions.py). Ret 403 + audit `authz.denied` (reason: missing_<perm>).
+    API anahtarıyla gelen istekte ayrıca anahtarın etkin scope'u gerekir (reason: scope_missing_<perm>)."""
     from ..security.permissions import has
 
-    async def dep(request: Request, u: User = Depends(current_user)) -> User:
+    async def dep(request: Request, u: User = Depends(authenticate)) -> User:
         if not has(u.role, perm):
             await _audit_denied(request, actor=u.username, action="authz.denied",
                                 reason=f"missing_{perm.value}"[:48])
             raise HTTPException(status.HTTP_403_FORBIDDEN, f"bu işlem için '{perm.value}' yetkisi gerekli")
+        await _check_scope(request, u, perm)
         return u
     dep.permission = perm          # rota envanteri testi için
     return dep
