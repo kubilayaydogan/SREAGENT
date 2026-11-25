@@ -170,7 +170,7 @@ def test_health_check_and_retention(settings, tmp_path, lg_ready):
 def test_seed_is_idempotent_and_recommends(adb):
     from sre_platform.seed import load_seed, seed_knowledge
     items = load_seed()
-    assert len(items["known_issues"]) == 6 and len(items["runbooks"]) >= 4
+    assert len(items["known_issues"]) == 8 and len(items["runbooks"]) >= 4
 
     async def fn(s):
         a = await seed_knowledge(s)
@@ -178,7 +178,7 @@ def test_seed_is_idempotent_and_recommends(adb):
         rec = await knowledge.recommend(s, mechanisms=["row_lock"], apps=["checkin-service"])
         return a, b, rec
     a, b, rec = run(adb(fn))
-    assert a == {"known_issues": 6, "runbooks": len(items["runbooks"])} and b == {"known_issues": 0, "runbooks": 0}
+    assert a == {"known_issues": len(items["known_issues"]), "runbooks": len(items["runbooks"])} and b == {"known_issues": 0, "runbooks": 0}
     assert rec["known_issues"][0].mechanism == "row_lock"
     titles = {r.title: r for r in rec["runbooks"]}
     assert titles["Bloklayan oturumu sonlandırma"].requires_approval is True    # yüksek risk → onay zorunlu

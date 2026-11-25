@@ -2,7 +2,8 @@
 yeniden kullanılır; burada yalnız iki yetenek eklenir:
 
 * `route()`   — sohbet sorusunu yapılandırılmış niyete çevirir (json_schema; Sonnet 5.5'te zorunlu yöntem).
-* `astream()` — yanıt metnini token token üretir (SSE `token` olayları).
+* `astream()` — yanıt metnini token token üretir (SSE `token` olayları). `rca=True` → RCA modeli (CLAUDE_RCA_MODEL,
+  varsayılan Opus 5.5); diğer yanıtlar CLAUDE_MODEL ile.
 
 Claude'a hiçbir araç bağlanmaz. Telemetri ve hafıza kayıtları istemde <...data> blokları içinde VERİ olarak verilir.
 """
@@ -60,7 +61,7 @@ class LlmPort(Protocol):
 
     async def route(self, question: str, history: list[dict], *, apps: list[str], app: str | None) -> ChatRoute: ...
 
-    def astream(self, system: str, human: str) -> AsyncIterator[str]: ...
+    def astream(self, system: str, human: str, *, rca: bool = False) -> AsyncIterator[str]: ...
 
 
 class ClaudePort:
@@ -69,6 +70,7 @@ class ClaudePort:
     def __init__(self, llm):
         self.llm = llm
         self.model_name = llm.settings.claude_model
+        self.rca_model_name = getattr(llm.settings, "claude_rca_model", self.model_name)
 
     async def route(self, question, history, *, apps, app=None) -> ChatRoute:
         sys = ROUTE_SYSTEM.format(now=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -87,12 +89,13 @@ class ClaudePort:
         except Exception as e:  # noqa: BLE001
             raise LlmUnavailable(f"{type(e).__name__}: {str(e)[:300]}") from None
 
-    async def astream(self, system: str, human: str) -> AsyncIterator[str]:
+    async def astream(self, system: str, human: str, *, rca: bool = False) -> AsyncIterator[str]:
         # Merkezi garanti: kullanıcıya akan her yanıtın system prompt'unda terminology policy bulunur (idempotent).
         system = with_policy(system)
+        chat = getattr(self.llm, "rca_chat", self.llm.chat) if rca else self.llm.chat
         try:
             last = None
-            async for chunk in self.llm.chat.astream([("system", system), ("human", human)],
+            async for chunk in chat.astream([("system", system), ("human", human)],
                                                      config={"callbacks": self.llm.callbacks, "run_name": "answer"}):
                 last = chunk if last is None else last + chunk
                 c = chunk.content
@@ -104,6 +107,8 @@ class ClaudePort:
                         if isinstance(part, dict) and part.get("type") == "text" and part.get("text"):
                             yield part["text"]
             if last is not None:
+                if (getattr(last, "response_metadata", None) or {}).get("stop_reason") == "refusal":
+                    raise LlmUnavailable("model yanıtı reddetti (refusal)")
                 self.llm._track(last)
                 _log_terminology(last.text if isinstance(getattr(last, "text", None), str) else str(last.content),
                                  "answer_stream")

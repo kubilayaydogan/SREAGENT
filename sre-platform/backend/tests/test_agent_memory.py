@@ -64,18 +64,21 @@ def gw_factory(scenario="row_lock", down=False):
 
 class FakePort:
     model_name = "fake-claude"
+    rca_model_name = "fake-claude-rca"
 
     def __init__(self, route_fail=False, stream_fail=False, text="## Özet\nSahte yanıt.", crash_once=False):
         self.route_fail, self.stream_fail, self.text, self.crash_once = route_fail, stream_fail, text, crash_once
         self.humans: list[str] = []
+        self.rca_flags: list[bool] = []
 
     async def route(self, question, history, *, apps, app=None):
         if self.route_fail:
             raise LlmUnavailable("simulated")
         return heuristic_route(question, apps, app)
 
-    async def astream(self, system, human):
+    async def astream(self, system, human, *, rca=False):
         self.humans.append(human)
+        self.rca_flags.append(rca)
         if self.crash_once:
             self.crash_once = False
             raise RuntimeError("süreç kesildi (simülasyon)")
@@ -192,6 +195,8 @@ def test_history_question_uses_memory_and_survives_restart(settings, lg_ready, t
     inv_id, res, em2, port, snap, last = run(go)
     assert res["intent"] == "history" and res["investigation"] is None
     assert "tool_started" not in em2.types()                       # geçmiş sorusu Dynatrace'e gitmez
+    assert port.rca_flags and not any(port.rca_flags)              # geçmiş/takip cevapları RCA modelini kullanmaz
+    assert res["answer_source"] == "Claude (fake-claude)"
     human = port.humans[0]
     assert f"inv:{inv_id}" in human and "reservation uzun transaction" in human and "<memory_data>" in human
     assert [m["role"] for m in snap.values["messages"]] == ["user", "assistant", "user", "assistant"]
@@ -207,11 +212,13 @@ def test_analysis_with_llm_streams_tokens_and_includes_history(settings, lg_read
             await o.turn(ctx, "Checkin neden yavaşladı?")
             ctx2, em = _ctx(uid, cid, tid)
             res = await o.turn(ctx2, "Checkin neden yavaşladı? Önceki araştırmalarla karşılaştır.")
-            return res, em, rt.llm.humans
+            return res, em, rt.llm.humans, rt.llm.rca_flags
         finally:
             await rt.close()
-    res, em, humans = run(go)
+    res, em, humans, rca_flags = run(go)
     assert res["intent"] == "compare"
+    # Analiz/karşılaştırma cevabı (RCA) RCA modeliyle üretilir
+    assert rca_flags and all(rca_flags) and res["answer_source"] == "Claude (fake-claude-rca)"
     assert em.types().count("token") >= 3 and res["answer"].startswith("## Özet")
     assert "<history_data>" in humans[-1] and "row_lock" in humans[-1].split("<history_data>")[1]
 

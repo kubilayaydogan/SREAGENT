@@ -255,12 +255,13 @@ class ChatOrchestrator:
             if system and rt.llm is not None:
                 await ctx.emit("agent_thinking", {"step": "rca", "message": "Yanıt hazırlanıyor."})
                 try:
-                    async for tok in rt.llm.astream(system, human):
+                    rca = intent in ("analyze", "compare")   # RCA cevabı → RCA modeli (Opus 5.5)
+                    async for tok in rt.llm.astream(system, human, rca=rca):
                         if ctx.cancel.is_set():
                             break
                         answer += tok
                         await ctx.emit("token", {"text": tok})
-                    source = f"Claude ({rt.llm.model_name})"
+                    source = f"Claude ({getattr(rt.llm, 'rca_model_name', rt.llm.model_name) if rca else rt.llm.model_name})"
                 except LlmUnavailable as e:
                     await ctx.emit("agent_thinking", {"step": "rca", "message":
                                                       f"Claude erişilemedi; deterministik özet kullanıldı ({e})."})
@@ -337,7 +338,8 @@ class ChatOrchestrator:
         if inv:
             await ctx.emit("investigation_completed", inv)
         ctx.result.update(message_id=mid, answer=state.get("answer"), intent=state["route"]["intent"],
-                          investigation=inv, suggestions=state.get("suggestions", []))
+                          investigation=inv, suggestions=state.get("suggestions", []),
+                          answer_source=state.get("answer_source"))
         return ctx.result
 
 
