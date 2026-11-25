@@ -50,6 +50,17 @@ async def get_investigation(inv_id: uuid.UUID, _: User = Depends(current_user), 
     return await investigations.get(s, inv_id)
 
 
+@router.get("/investigations/{inv_id}/trace", tags=["investigations"])
+async def get_trace(inv_id: uuid.UUID, request: Request, _: User = Depends(current_user),
+                    s: AsyncSession = Depends(db)):
+    """LangSmith trace linki. Tracing kapalıysa ya da bu investigation için trace yazılmadıysa url null."""
+    from ...services import langsmith_trace
+    await investigations.get(s, inv_id)                                  # yoksa 404
+    if not await langsmith_trace.has_trace(s, inv_id):
+        return {"url": None}
+    return {"url": await langsmith_trace.run_url(request.app.state.rt, inv_id)}
+
+
 @router.get("/investigations/{inv_id}/evidence", tags=["investigations"])
 async def get_evidence(inv_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSession = Depends(db)):
     inv = await investigations.get(s, inv_id, with_children=True)

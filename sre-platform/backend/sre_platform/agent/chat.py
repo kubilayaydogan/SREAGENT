@@ -295,9 +295,17 @@ class ChatOrchestrator:
         g.add_edge("respond", END)
         return g.compile(checkpointer=rt.asaver, name="airlab-sre-chat")
 
-    def _config(self, ctx: TurnContext) -> dict:
-        return {"configurable": {"thread_id": ctx.thread_id}, "recursion_limit": 12,
-                "metadata": {"conversation_id": str(ctx.conversation_id), "user_id": str(ctx.user_id)}}
+    def _config(self, ctx: TurnContext, run_id: uuid.UUID | None = None) -> dict:
+        # Tur = tek LangSmith trace (sınıflandırma, analiz grafı, DQL'ler, hatırlama, cevap, Slack altında).
+        # conversation_id metadata'sı LangSmith Threads görünümünde aynı konuşmanın turlarını birleştirir.
+        llm = self.rt.llm
+        cfg = {"configurable": {"thread_id": ctx.thread_id}, "recursion_limit": 12,
+               "callbacks": self.rt.callbacks, "run_name": "chat-turn", "tags": ["airlab", "chat"],
+               "metadata": {"conversation_id": str(ctx.conversation_id), "user_id": str(ctx.user_id),
+                            "model": getattr(llm, "model_name", None)}}
+        if run_id is not None:
+            cfg["run_id"] = run_id
+        return cfg
 
     # ------------------------------------------------------------ dış arayüz
     async def turn(self, ctx: TurnContext, question: str) -> dict:
@@ -311,7 +319,7 @@ class ChatOrchestrator:
         await model_switch.refresh(self.rt)             # arayüzde seçilen model (Opus/Sonnet)
         graph = self._graph(ctx)
         state = await graph.ainvoke({"question": question, "messages": [{"role": "user", "content": question}]},
-                                    self._config(ctx))
+                                    self._config(ctx, run_id=uuid.UUID(ctx.result["user_message_id"])))     # trace id = kullanıcı mesajının id'si
         return await self._finish(ctx, state)
 
     async def resume(self, ctx: TurnContext) -> dict | None:

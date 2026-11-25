@@ -12,6 +12,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from .tracing import child_config
 from . import report as rpt
 from .attribution import alternatives, detect
 from .features import assess_quality, extract, window_list
@@ -232,14 +233,22 @@ def run_analysis(settings, gateway_factory, start: datetime, end: datetime, *, l
                  mode: str = "analyze", notes: list[str] | None = None, callbacks: list | None = None,
                  run_id: str | None = None, use_llm: bool = True, fixture: bool = False,
                  baseline: tuple[datetime, datetime] | None = None, checkpointer=None, persist_files: bool = True,
-                 on_node=None, recursion_limit: int = 25) -> dict[str, Any]:
+                 on_node=None, recursion_limit: int = 25, trace_run_id=None,
+                 trace_metadata: dict | None = None, trace_tags: list[str] | None = None) -> dict[str, Any]:
     """Analizi çalıştırır. `checkpointer` verilmezse SQLite (CLI); platform PostgresSaver verir.
-    `on_node(name, update)` her düğüm bittiğinde çağrılır (ilerleme olayları için)."""
+    `on_node(name, update)` her düğüm bittiğinde çağrılır (ilerleme olayları için).
+    Tracing: üstte çalışan bir adım (ör. sohbet turu) varsa analiz onun trace'inin altına yerleşir; yoksa kök trace
+    açılır. `trace_run_id` verilirse bu run'ın LangSmith kimliği olur (platformda investigation id → trace linki)."""
     run_id = run_id or new_run_id("inc" if mode == "watch-incident" else "rep")
     init = initial_state(start, end, run_id=run_id, mode=mode, question=question, notes=notes, use_llm=use_llm,
                          fixture=fixture, baseline=baseline)
-    cfg = {"configurable": {"thread_id": run_id}, "callbacks": callbacks or [], "run_name": f"airlab-{mode}",
-           "metadata": {"run_id": run_id, "mode": mode}, "recursion_limit": recursion_limit}
+    meta = {"run_id": run_id, "mode": mode, "model": getattr(llm, "rca_model_name", None) if use_llm and llm else None,
+            "window_start": iso(start), "window_end": iso(end), **(trace_metadata or {})}
+    meta = {k: v for k, v in meta.items() if v is not None}
+    cfg = child_config(callbacks, f"airlab-{mode}", configurable={"thread_id": run_id}, metadata=meta,
+                       tags=["airlab", f"mode:{mode}", *(trace_tags or [])], recursion_limit=recursion_limit)
+    if trace_run_id is not None:
+        cfg["run_id"] = trace_run_id
 
     def _go(saver):
         graph = build_graph(settings, gateway_factory, llm, saver, persist_files=persist_files)

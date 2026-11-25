@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActivityTimeline, toolsFromRecords } from "@/components/ActivityTimeline";
 import { AppLayout } from "@/layouts/AppLayout";
 import DashboardPage from "@/pages/DashboardPage";
+import InvestigationDetailPage from "@/pages/InvestigationDetailPage";
 import LoginPage from "@/pages/LoginPage";
 import { AuthProvider } from "@/services/auth";
 import { tokenStore } from "@/services/api";
@@ -157,5 +158,53 @@ describe("LLM model seçici", () => {
     wrap(<AppLayout />);
     expect((await screen.findAllByText("LLM Claude Sonnet 5.5")).length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("Claude modeli")).toBeNull();
+  });
+});
+
+describe("InvestigationDetailPage", () => {
+  const inv = {
+    id: "i1", run_id: "rep-1", trigger: "SCHEDULED", title: "Periyodik analiz", description: null, status: "COMPLETED",
+    severity: "high", risk_score: "72.5", data_coverage: "0.8", confidence: "medium", primary_mechanism: "row_lock",
+    source_apps: [], affected_apps: [], application_id: null, conversation_id: null, user_id: null,
+    window_start: "2026-11-25T10:00:00Z", window_end: "2026-11-25T10:15:00Z", baseline_start: null, baseline_end: null,
+    started_at: null, completed_at: null, duration_ms: 1000, root_cause_hypothesis: null, error: null,
+    created_at: "2026-11-25T10:16:00Z", explanation: null, explanation_source: null, report: null,
+  };
+  function renderAt(trace: { url: string | null }) {
+    tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
+    mockFetch({
+      "/api/auth/me": USER,
+      "/api/investigations/i1/trace": trace,
+      "/api/investigations/i1/similar": [],
+      "/api/investigations/i1/feedback": [],
+      "/api/investigations/i1/recommendations": { known_issues: [], runbooks: [] },
+      "/api/rca": { items: [], total: 0, page: 1, size: 20, pages: 0 },
+      "/api/investigations/i1": inv,
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <MemoryRouter initialEntries={["/investigations/i1"]}>
+            <Routes>
+              <Route path="/investigations/:id" element={<InvestigationDetailPage />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("trace varsa LangSmith bağlantısını yeni sekmede açar", async () => {
+    renderAt({ url: "https://smith.test/o/t/projects/p/p1/r/i1?poll=true" });
+    const a = await screen.findByRole("link", { name: /LangSmith'te aç/ });
+    expect(a).toHaveAttribute("href", "https://smith.test/o/t/projects/p/p1/r/i1?poll=true");
+    expect(a).toHaveAttribute("target", "_blank");
+  });
+
+  it("trace yoksa bağlantı gösterilmez", async () => {
+    renderAt({ url: null });
+    expect(await screen.findByText("Periyodik analiz")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /LangSmith'te aç/ })).not.toBeInTheDocument();
   });
 });

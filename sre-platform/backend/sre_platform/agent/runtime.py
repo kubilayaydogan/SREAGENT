@@ -33,6 +33,7 @@ class AgentRuntime:
     store: object = None                              # AsyncPostgresStore (uzun vadeli kapsamlı notlar)
     memory: MemoryService | None = None
     sem: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(2))
+    callbacks: list = field(default_factory=list)      # LangSmith tracer (redakte eder); tracing kapalıysa boş
     _closers: list = field(default_factory=list)
 
     @property
@@ -86,6 +87,11 @@ async def create_runtime(ps: PlatformSettings, *, agent: Settings | None = None,
     rt = AgentRuntime(ps=ps, agent=agent, gateway_factory=gateway_factory or default_gateway_factory(agent),
                       llm=default_llm(agent) if llm is True else (llm or None),
                       sem=asyncio.Semaphore(ps.max_concurrent_investigations))
+    core = getattr(rt.llm, "llm", None)
+    rt.callbacks = list(getattr(core, "callbacks", None) or [])
+    if not rt.callbacks and agent.langsmith_tracing:
+        from airlab_agent.tracing import setup_tracing
+        rt.callbacks = setup_tracing(agent)             # LLM yokken de deterministik analizler izlenir
     rt.engine = make_engine(ps, application_name)
     rt.sm = make_sessionmaker(rt.engine)
     rt._closers.append(rt.engine.dispose)

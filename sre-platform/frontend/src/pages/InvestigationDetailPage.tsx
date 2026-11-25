@@ -1,14 +1,14 @@
-import { AlertTriangle, BookOpen, FileText, GitCompare, Siren } from "lucide-react";
+import { AlertTriangle, BookOpen, ExternalLink, FileText, GitCompare, Siren } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { AppTag, ConfidenceBadge, InvestigationStatusBadge, SeverityBadge } from "@/components/badges";
 import { Markdown } from "@/components/Markdown";
 import { EvidenceTable, ToolTable } from "@/components/RecordTables";
-import { Button, Card, CardBody, CardHeader, Skeleton } from "@/components/ui/primitives";
+import { Button, buttonVariants, Card, CardBody, CardHeader, Skeleton } from "@/components/ui/primitives";
 import { TabPanel, Tabs } from "@/components/ui/overlay";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { FeedbackBar } from "@/features/chat/FeedbackBar";
-import { useEvidence, useGenerateRca, useIncidentMutations, useInvestigation, useRcas, useRecommendations, useSimilar, useTools } from "@/hooks/queries";
+import { useEvidence, useGenerateRca, useIncidentMutations, useInvestigation, useRcas, useRecommendations, useSimilar, useTools, useTraceUrl } from "@/hooks/queries";
 import { useAuth } from "@/services/auth";
 import { mechanismLabel } from "@/lib/steps";
 import { fmtDuration, fmtNum, fmtPct, fmtRelative, fmtTime, shortId } from "@/lib/utils";
@@ -208,6 +208,7 @@ export default function InvestigationDetailPage() {
   const inv = useInvestigation(id);
   const ev = useEvidence(tab === "evidence" ? id : undefined);
   const tools = useTools(tab === "tools" ? id : undefined);
+  const trace = useTraceUrl(inv.data && ["COMPLETED", "PARTIAL", "FAILED"].includes(inv.data.status) ? id : undefined);
   const rcas = useRcas({ investigation_id: id, size: 20 });
   const gen = useGenerateRca();
   const { create } = useIncidentMutations();
@@ -247,6 +248,16 @@ export default function InvestigationDetailPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {done && <FeedbackBar investigationId={d.id} />}
+              {trace.data?.url && (
+                <a
+                  href={trace.data.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  <ExternalLink /> LangSmith'te aç
+                </a>
+              )}
               <Button size="sm" variant="outline" onClick={() => nav(`/activity/${d.id}`)}>
                 Adımlar
               </Button>

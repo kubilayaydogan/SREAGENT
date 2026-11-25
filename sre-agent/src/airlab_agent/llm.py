@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from .redact import redact
 from .terminology import find_violations, with_policy
+from .tracing import child_config
 
 
 class LlmUnavailable(RuntimeError):
@@ -143,7 +144,7 @@ class Llm:
         msgs.append(("human", question))
         try:
             runnable = self.chat.with_structured_output(AnalysisRequest, include_raw=True, method="json_schema")
-            out = runnable.invoke(msgs, config={"callbacks": self.callbacks, "run_name": "interpret_question"})
+            out = runnable.invoke(msgs, config=child_config(self.callbacks, "interpret_question", metadata={"model": self.model_name}))
             self._track(out["raw"])
             if out.get("parsed") is None:
                 raise LlmUnavailable(f"yapılandırılmış çıktı ayrıştırılamadı: {out.get('parsing_error')}")
@@ -159,7 +160,8 @@ class Llm:
             f"<analysis_data>\n{payload}\n</analysis_data>\n\nBu bulguları açıkla."
         try:
             msg = self.rca_chat.invoke([("system", SYSTEM_EXPLAIN), ("human", human)],
-                                   config={"callbacks": self.callbacks, "run_name": "explain_findings"})
+                                   config=child_config(self.callbacks, "explain_findings",
+                                                            metadata={"model": self.rca_model_name}))
             self._track(msg)
             if (msg.response_metadata or {}).get("stop_reason") == "refusal":
                 raise LlmUnavailable("model yanıtı reddetti (refusal)")

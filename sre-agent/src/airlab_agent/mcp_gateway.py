@@ -16,6 +16,7 @@ from typing import Any
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from .redact import redact_text
+from .tracing import ToolSpan, parent_config
 
 SERVER = "dynatrace"
 DQL_TOOL = "execute-dql"
@@ -78,6 +79,7 @@ class McpGateway:
         self.client = MultiServerMCPClient(self._conn)
         self.timeout_s, self.retries, self.max_queries, self.concurrency = timeout_s, retries, max_queries, concurrency
         self.queries_used = 0
+        self._trace_parent = None
         self.log: list[QueryResult] = []
         # İsteğe bağlı gözlemci: {"phase": "start"|"end", "key", "dql", ...}. Hata atarsa sorgu etkilenmez.
         self.on_event = on_event
@@ -106,6 +108,17 @@ class McpGateway:
 
     # ---- sorgu
     async def _one(self, session, key: str, dql: str) -> QueryResult:
+        span = ToolSpan(self._trace_parent, f"dql:{key}", {"signal": key, "dql": dql}, {"tool": DQL_TOOL})
+        try:
+            r = await self._one_inner(session, key, dql)
+        except McpUnavailable as e:
+            span.error(str(e))
+            raise
+        span.end({"status": r.status, "records": len(r.records), "elapsed_ms": r.elapsed_ms,
+                  "query_id": r.query_id, "error": r.error})
+        return r
+
+    async def _one_inner(self, session, key: str, dql: str) -> QueryResult:
         if self.queries_used >= self.max_queries:
             r = QueryResult(key, dql, "SKIPPED_BUDGET", error="query budget doldu")
             self._emit({"phase": "end", "key": key, "dql": dql, "status": r.status, "records": 0, "query_id": None,
@@ -147,6 +160,7 @@ class McpGateway:
         """Sorguları tek MCP oturumunda (sınırlı eşzamanlılıkla) çalıştırır. MCP yoksa McpUnavailable."""
         if not items:
             return {}
+        self._trace_parent = parent_config()          # çağıran graf adımı; DQL'ler onun altında tool run olur
         try:
             results = asyncio.run(asyncio.wait_for(self._many(items), self.timeout_s * (2 + len(items) / 2)))
         except McpUnavailable:

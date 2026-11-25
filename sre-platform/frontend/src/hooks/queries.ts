@@ -132,6 +132,14 @@ export const useInvestigation = (id?: string, live = false) =>
     refetchInterval: (q) => (live || ["PENDING", "RUNNING"].includes(q.state.data?.status ?? "") ? 3000 : false),
   });
 
+export const useTraceUrl = (id?: string) =>
+  useQuery({
+    queryKey: ["trace", id],
+    queryFn: () => api.get<{ url: string | null }>(`/investigations/${id}/trace`),
+    enabled: !!id,
+    staleTime: 5 * 60_000,
+  });
+
 export const useEvidence = (id?: string) =>
   useQuery({ queryKey: ["evidence", id], queryFn: () => api.get<Evidence[]>(`/investigations/${id}/evidence`), enabled: !!id });
 

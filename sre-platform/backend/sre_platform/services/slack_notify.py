@@ -18,6 +18,7 @@ import httpx
 from sqlalchemy import select
 
 from airlab_agent.redact import redact_text
+from airlab_agent.tracing import ToolSpan, parent_config
 
 from ..db.models import Investigation, InvestigationStatus, ToolExecution, ToolStatus
 from ..db.session import transaction
@@ -116,10 +117,16 @@ async def notify_rca(rt, inv_id: uuid.UUID) -> bool:
             score = float(inv.risk_score)
         t0 = time.monotonic()
         error = None
+        span = ToolSpan(parent_config(), TOOL, {"investigation_id": str(inv_id), "risk_score": score,
+                                                "threshold": ps.slack_risk_threshold})
         try:
             await _post(ps.slack_webhook_url, payload)
         except Exception as e:  # noqa: BLE001
             error = redact_text(str(e)).replace(ps.slack_webhook_url, "<webhook>")
+        if error:
+            span.error(error)
+        else:
+            span.end({"status": "SENT", "elapsed_ms": int((time.monotonic() - t0) * 1000)})
         async with transaction(rt.sm) as s:
             await investigations.record_tool(s, inv_id, TOOL, ok=error is None, step="notify",
                                              arguments={"risk_score": score, "threshold": ps.slack_risk_threshold},

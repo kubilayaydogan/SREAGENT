@@ -50,6 +50,10 @@ class InvestigationRunner:
             inv = await investigations.get(s, inv_id)
             await investigations.mark_running(s, inv)
             run_id, start, end = inv.run_id, inv.window_start, inv.window_end
+            trace_meta = {"investigation_id": str(inv_id), "trigger": getattr(inv.trigger, "value", str(inv.trigger)),
+                          "conversation_id": str(inv.conversation_id) if inv.conversation_id else None,
+                          "application_id": inv.application_id}
+            trace_tags = [f"trigger:{trace_meta['trigger']}"]
             baseline = (inv.baseline_start, inv.baseline_end) if inv.baseline_start else None
         await emit("investigation_started", {"investigation_id": str(inv_id), "run_id": run_id,
                                              "window": [start.isoformat(), end.isoformat()],
@@ -76,7 +80,8 @@ class InvestigationRunner:
             run_analysis, agent, lambda: self.rt.gateway_factory(on_event=on_tool), start, end, llm=core_llm,
             question=question, mode=mode, notes=notes, run_id=run_id, use_llm=use_llm, baseline=baseline,
             checkpointer=self.rt.saver, persist_files=False, on_node=on_node,
-            callbacks=getattr(core_llm, "callbacks", None)))
+            callbacks=self.rt.callbacks or getattr(core_llm, "callbacks", None),
+            trace_run_id=inv_id, trace_metadata=trace_meta, trace_tags=trace_tags))
         rows: dict[str, uuid.UUID] = {}
         node_t = [time.monotonic()]
         deadline = loop.time() + self.rt.ps.investigation_timeout_s
@@ -128,6 +133,9 @@ class InvestigationRunner:
                 await self._correlate(inv_id, start, end, emit)
             except Exception:  # noqa: BLE001 — ek kanıt toplanamazsa analiz sonucu geçerli kalır
                 log.exception("evidence correlation başarısız")
+        if report and not error:
+            from ..services.langsmith_trace import record_outcome
+            await record_outcome(self.rt, inv_id)
         # Sohbette RCA metni bu adımdan sonra yazılır; bildirim orada (chat.respond) gönderilir.
         if report and not error and mode != "chat":
             from ..services.slack_notify import notify_rca

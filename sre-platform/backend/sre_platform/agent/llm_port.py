@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from airlab_agent.llm import LlmUnavailable, _log_terminology
 from airlab_agent.terminology import with_policy
+from airlab_agent.tracing import child_config
 
 MECHANISMS = ("row_lock", "pool_saturation", "global_connection_pressure", "db_cpu", "app_vm_cpu", "app_container_cpu",
               "network_path_latency", "independent_load")
@@ -85,7 +86,8 @@ class ClaudePort:
                                     for h in history[-6:]] + [("human", question)]
         try:
             r = self.llm.chat.with_structured_output(ChatRoute, include_raw=True, method="json_schema")
-            out = await r.ainvoke(msgs, config={"callbacks": self.llm.callbacks, "run_name": "route_question"})
+            out = await r.ainvoke(msgs, config=child_config(self.llm.callbacks, "route_question",
+                                                            metadata={"model": self.model_name}))
             self.llm._track(out["raw"])
             if out.get("parsed") is None:
                 raise LlmUnavailable("yönlendirme çıktısı ayrıştırılamadı")
@@ -102,7 +104,8 @@ class ClaudePort:
         try:
             last = None
             async for chunk in chat.astream([("system", system), ("human", human)],
-                                                     config={"callbacks": self.llm.callbacks, "run_name": "answer"}):
+                                                     config=child_config(self.llm.callbacks, "answer",
+                                                                    metadata={"model": self.rca_model_name if rca else self.model_name, "rca": rca})):
                 last = chunk if last is None else last + chunk
                 c = chunk.content
                 if isinstance(c, str):

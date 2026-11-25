@@ -42,3 +42,55 @@ def langsmith_ping(settings) -> tuple[bool, str]:
         return r.status_code == 200, f"HTTP {r.status_code}"
     except Exception as e:  # noqa: BLE001
         return False, type(e).__name__
+
+
+# ------------------------------------------------------------------ trace hiyerarşisi
+def parent_config() -> dict | None:
+    """Şu an çalışan LangChain/LangGraph adımının (varsa) çocuk config'i. Thread'e/asyncio.run'a contextvar ile taşınır."""
+    try:
+        from langchain_core.runnables.config import var_child_runnable_config
+        return var_child_runnable_config.get()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def child_config(callbacks: list | None, run_name: str, **extra) -> dict:
+    """Bir LLM/graf çağrısı için config. Üstte çalışan bir adım varsa callbacks VERİLMEZ: LangChain üst adımın
+    callback yöneticisini devralır ve çağrı aynı trace'in altına yerleşir. Üst adım yoksa (CLI, tek başına çağrı)
+    verilen tracer'larla yeni kök trace açılır."""
+    cfg: dict = {"run_name": run_name, **extra}
+    p = parent_config()
+    if not (p and p.get("callbacks")):
+        cfg["callbacks"] = callbacks or []
+    return cfg
+
+
+class ToolSpan:
+    """LangChain dışı bir aracı (Dynatrace MCP DQL) üstteki trace'e tool run olarak ekler. Tracing yoksa no-op."""
+
+    def __init__(self, parent: dict | None, name: str, inputs: dict, metadata: dict | None = None):
+        self.rm = None
+        if not (parent and parent.get("callbacks")):
+            return
+        try:
+            from langchain_core.runnables.config import get_callback_manager_for_config
+            cm = get_callback_manager_for_config(parent)
+            if metadata:
+                cm.add_metadata(metadata, inherit=False)       # on_tool_start metadata kwarg'ını kabul etmiyor
+            self.rm = cm.on_tool_start({"name": name}, str(inputs.get("dql", "")), run_name=name, inputs=inputs)
+        except Exception:  # noqa: BLE001 — izleme hatası sorguyu etkilemez
+            self.rm = None
+
+    def end(self, outputs: dict) -> None:
+        if self.rm is not None:
+            try:
+                self.rm.on_tool_end(outputs)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def error(self, message: str) -> None:
+        if self.rm is not None:
+            try:
+                self.rm.on_tool_error(RuntimeError(message))
+            except Exception:  # noqa: BLE001
+                pass
