@@ -62,11 +62,15 @@ def test_notify_sends_once_and_isolates_errors(settings, monkeypatch):
             raise RuntimeError(f"HTTP 404: no_service {HOOK}")
         sent.append(payload)
     monkeypatch.setattr(sn, "_post", fake_post)
+    monkeypatch.setenv("SRE_SLACK_WEBHOOK_URL", HOOK)          # Settings: env:SRE_SLACK_WEBHOOK_URL referansı
+    from airlab_agent.config import load_settings
 
     async def go():
         eng = make_engine(settings, "pytest")
         sm = make_sessionmaker(eng)
-        rt = SimpleNamespace(ps=dataclasses.replace(settings, slack_webhook_url=HOOK, slack_risk_threshold=75.0), sm=sm)
+        agent = load_settings()
+        rt = SimpleNamespace(ps=dataclasses.replace(settings, slack_webhook_url=HOOK, slack_risk_threshold=75.0), sm=sm,
+                             agent=agent)
         try:
             async with sm() as s, s.begin():
                 hi = await investigations.create(s, run_id="hi", trigger=Trigger.SCHEDULED, title="yüksek",
@@ -84,7 +88,7 @@ def test_notify_sends_once_and_isolates_errors(settings, monkeypatch):
             r1 = await sn.notify_rca(rt, hi_id)                          # başarısız denemeden sonra tekrar denenir
             r2 = await sn.notify_rca(rt, hi_id)                          # başarılı gönderimden sonra tekrar yok
             r_lo = await sn.notify_rca(rt, lo_id)                        # eşik altı
-            off = await sn.notify_rca(SimpleNamespace(ps=settings, sm=sm), hi_id)   # webhook tanımsız → kapalı
+            off = await sn.notify_rca(SimpleNamespace(ps=settings, sm=sm, agent=agent), hi_id)   # webhook tanımsız → kapalı
             async with sm() as s:
                 tools = (await s.scalars(select(ToolExecution).where(ToolExecution.tool_name == sn.TOOL))).all()
             return r_fail, r1, r2, r_lo, off, tools

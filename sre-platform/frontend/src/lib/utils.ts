@@ -32,18 +32,30 @@ export function fmtDuration(ms: number | null | undefined): string {
   return `${Math.floor(s / 60)} dk ${Math.round(s % 60)} sn`;
 }
 
-const TZ = "Europe/Istanbul";
+/** Görüntü tercihleri (Settings > General). Kayıtlar UTC'dir; yalnız gösterim değişir. */
+export type DateFormat = "dd.MM.yyyy HH:mm" | "yyyy-MM-dd HH:mm";
+const display: { tz: string | undefined; fmt: DateFormat } = { tz: "Europe/Istanbul", fmt: "dd.MM.yyyy HH:mm" };
+
+export function setDisplayPrefs(p: { timezone?: string; date_format?: DateFormat }) {
+  if (p.timezone) display.tz = p.timezone === "browser" ? undefined : p.timezone;
+  if (p.date_format) display.fmt = p.date_format;
+}
 
 export function fmtTime(iso: string | null | undefined, withDate = true): string {
   if (!iso) return NA;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return NA;
-  return d.toLocaleString("tr-TR", {
-    timeZone: TZ,
+  const opts: Intl.DateTimeFormatOptions = {
+    timeZone: display.tz,
     ...(withDate ? { day: "2-digit", month: "2-digit", year: "numeric" } : {}),
     hour: "2-digit",
     minute: "2-digit",
-  });
+  };
+  if (withDate && display.fmt === "yyyy-MM-dd HH:mm") {
+    const p = Object.fromEntries(new Intl.DateTimeFormat("tr-TR", opts).formatToParts(d).map((x) => [x.type, x.value]));
+    return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+  }
+  return d.toLocaleString("tr-TR", opts);
 }
 
 export function fmtRelative(iso: string | null | undefined, now: number = Date.now()): string {

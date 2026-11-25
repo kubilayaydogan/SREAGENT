@@ -201,6 +201,7 @@ class InvestigationDetailOut(InvestigationOut):
     explanation: str | None
     explanation_source: str | None
     report: dict[str, Any] | None
+    config_snapshot: dict[str, Any] | None = None      # koşu başında dondurulan Settings (secret içermez)
 
 
 class EvidenceOut(Out):

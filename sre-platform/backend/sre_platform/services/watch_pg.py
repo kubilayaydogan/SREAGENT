@@ -28,6 +28,7 @@ from ..db.session import transaction
 from ..repositories import incidents, investigations
 from ..repositories.base import Conflict
 
+from ..settings.runtime import RunNotAllowed
 log = logging.getLogger("sre.watch")
 WATCH_DEDUP = "watch"
 KIND_TR = {"latency": "latency artışı", "errors": "error rate artışı", "pool": "Connection Pool saturation",
@@ -130,6 +131,11 @@ class PlatformWatcher(Watcher):
     # ------------------------------------------------------------ async (ana döngüde)
     async def _investigate(self, inc_id: uuid.UUID, start: datetime, end: datetime, *, relation: str, mode: str,
                            title: str, notes: list[str], use_llm: bool, app: str | None):
+        from ..settings import runtime as srt
+        eff = await srt.effective(self.rt)
+        srt.check_allowed(eff, "incident")        # kapalıysa RunNotAllowed: incident kaydı kalır, analiz yapılmaz
+        if mode == "watch-incident":
+            use_llm = bool(eff["agent"]["incident_llm"])
         async with transaction(self.rt.sm) as s:
             inv = await investigations.create(s, run_id=new_run_id("inc" if relation == "trigger" else "rec"),
                                               trigger=Trigger.WATCH, title=title, window_start=start, window_end=end,
@@ -174,9 +180,14 @@ class PlatformWatcher(Watcher):
             else:
                 reopened, inc_id = False, inc.id
         start = w.end - timedelta(minutes=self.cfg["watch"]["analysis_minutes"])
-        done, report = await self._investigate(
-            inc_id, start, w.end, relation="related" if reopened else "trigger", mode="watch-incident", app=app,
-            title=f"Watch olayı: {describe(key)}", notes=[msg], use_llm=self.cfg["watch"].get("llm_on_incident", True))
+        try:
+            done, report = await self._investigate(
+                inc_id, start, w.end, relation="related" if reopened else "trigger", mode="watch-incident", app=app,
+                title=f"Watch olayı: {describe(key)}", notes=[msg], use_llm=True)
+        except RunNotAllowed as e:                     # incident kaydı açık kalır; analiz ayarlardan kapalı
+            async with transaction(self.rt.sm) as s:
+                await incidents.add_note(s, inc_id, f"Otomatik investigation başlatılmadı: {e}", kind="watch")
+            return {"incident_id": str(inc_id), "deduped": reopened, "reopened": reopened, "skipped": str(e)}
         async with transaction(self.rt.sm) as s:
             inc = await incidents.get(s, inc_id)
             await incidents.update_fields(
@@ -199,16 +210,20 @@ class PlatformWatcher(Watcher):
                 return {"event": "key_recovered", "incident_id": str(inc.id)}
             inc_id, opened = inc.id, inc.detected_at
         start = opened - timedelta(minutes=self.cfg["watch"]["analysis_minutes"])
-        done, _ = await self._investigate(inc_id, start, w.end, relation="recovery", mode="watch-recovery", app=None,
-                                          title="Watch recovery analizi", use_llm=True,
-                                          notes=[f"tüm watch koşulları normale döndü ({iso(w.end)})"])
+        try:
+            done, _ = await self._investigate(inc_id, start, w.end, relation="recovery", mode="watch-recovery",
+                                              app=None, title="Watch recovery analizi", use_llm=True,
+                                              notes=[f"tüm watch koşulları normale döndü ({iso(w.end)})"])
+        except RunNotAllowed:
+            done = None
         async with transaction(self.rt.sm) as s:
             inc = await incidents.get(s, inc_id)
             if inc.status in (IncidentStatus.OPEN, IncidentStatus.INVESTIGATING):
                 await incidents.transition(s, inc, IncidentStatus.MITIGATED, at=w.end,
                                            note="Watch: tüm koşullar art arda temiz pencerelerle normale döndü "
                                                 "(otomatik). 'Çözüldü' olarak kapatmak insan kararıdır.")
-        return {"event": "incident_recovered", "incident_id": str(inc_id), "investigation_id": str(done.id)}
+        return {"event": "incident_recovered", "incident_id": str(inc_id),
+                **({"investigation_id": str(done.id)} if done else {})}
 
     def status(self) -> dict[str, Any]:
         return {"last_end": self.store.get("last_end"), "mcp_down": self.store.get("mcp_down", False),

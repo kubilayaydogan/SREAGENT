@@ -67,6 +67,7 @@ tarayıcı ──:8090──► sre-frontend (nginx: SPA + /api ters vekil, SSE 
 | Bilgi bankası | `GET/POST known-issues`, `GET known-issues/{id}`, `GET/POST runbooks`, `GET runbooks/{id}` |
 | Onay | `GET/POST approvals`, `POST approvals/{id}/decision`, `POST approvals/{id}/cancel` |
 | İşler | `GET jobs`, `GET jobs/runs`, `POST jobs/{name}/enabled` |
+| Settings | `GET settings`, `GET/PATCH settings/{section}` (+ `/revisions`, `/rollback`), `settings/connectors` (+ `/test`, `/discover`), `settings/llm-providers` (+ `/test`, `/models`), `settings/secrets`, `settings/scheduling/jobs` (+ `/{name}/run`), `settings/risk/preview`, `settings/memory`, `settings/audit`, `settings/security` — ayrıntı: [docs/settings.md](docs/settings.md) |
 
 SSE olayları: `investigation_started`, `agent_thinking`, `tool_started`, `tool_completed`, `tool_failed`,
 `evidence_found`, `message_delta`, `investigation_completed`, `rca_ready`, `error`, `done` (+ keepalive).

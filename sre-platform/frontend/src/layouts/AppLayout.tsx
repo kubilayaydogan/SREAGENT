@@ -14,6 +14,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings,
   Siren,
   Sun,
   X,
@@ -25,7 +26,8 @@ import { Select } from "@/components/ui/primitives";
 import { useLlmModel, useSetLlmModel, useSystemInfo } from "@/hooks/queries";
 import { useAuth } from "@/services/auth";
 import { useTheme, type ThemePref } from "@/lib/theme";
-import { cn } from "@/lib/utils";
+import { cn, setDisplayPrefs } from "@/lib/utils";
+import { usePublicPrefs } from "@/features/settings/api";
 import type { Role } from "@/types/api";
 
 interface NavItem {
@@ -55,7 +57,13 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
     ],
   },
   { group: "Bilgi", items: [{ to: "/knowledge", label: "Bilgi bankası", icon: BookOpen }] },
-  { group: "Platform", items: [{ to: "/llm", label: "LLM Monitoring", icon: Gauge, role: "sre" }] },
+  {
+    group: "Platform",
+    items: [
+      { to: "/llm", label: "LLM Monitoring", icon: Gauge, role: "sre" },
+      { to: "/settings", label: "Settings", icon: Settings, role: "sre" },
+    ],
+  },
 ];
 
 /** Breadcrumb: route'un ilk parçası → grup › sayfa; detay sayfalarında kayıt kimliği sayfanın kendi başlığındadır. */
@@ -154,6 +162,12 @@ function readCollapsed() {
 export function AppLayout() {
   const { user, logout, can } = useAuth();
   const [open, setOpen] = useState(false);
+  const prefs = usePublicPrefs(!!user);
+  if (prefs.data) setDisplayPrefs(prefs.data);          // render öncesi: alt sayfalar zamanı tercih edilen timezone'da gösterir
+  const brand = prefs.data?.display_name ?? "airlab SRE";
+  useEffect(() => {
+    document.title = `${brand} Operations`;
+  }, [brand]);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const crumbs = useCrumbs();
   const loc = useLocation();
@@ -184,11 +198,11 @@ export function AppLayout() {
         aria-label="ana menü"
       >
         <div className={cn("flex h-11 shrink-0 items-center gap-2 border-b border-line", mini ? "justify-center px-0" : "px-3")}>
-          <Link to="/" className="flex min-w-0 items-center gap-2" aria-label="airlab SRE — Overview">
+          <Link to="/" className="flex min-w-0 items-center gap-2" aria-label={`${brand} — Overview`}>
             <span className="grid size-6 shrink-0 place-items-center rounded-md bg-ink text-page">
               <Activity className="size-3.5" />
             </span>
-            {!mini && <span className="truncate text-[13px] font-semibold text-ink">airlab SRE</span>}
+            {!mini && <span className="truncate text-[13px] font-semibold text-ink">{brand}</span>}
           </Link>
           <button className="ml-auto text-muted lg:hidden" onClick={() => setOpen(false)} aria-label="menüyü kapat">
             <X className="size-4" />

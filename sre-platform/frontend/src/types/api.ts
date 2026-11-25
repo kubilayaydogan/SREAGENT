@@ -274,10 +274,22 @@ export interface Report {
   [k: string]: unknown;
 }
 
+export interface ConfigSnapshot {
+  hash: string;
+  trigger: string;
+  revisions: Record<string, number>;
+  agent: Record<string, unknown>;
+  connector: Record<string, unknown>;
+  llm: { enabled: boolean; chat: Record<string, unknown> | null; rca: Record<string, unknown> | null; model_override: string | null };
+  tracing: { langsmith: boolean; sampling_rate: number };
+}
+
 export interface InvestigationDetail extends Investigation {
   explanation: string | null;
   explanation_source: string | null;
   report: Report | null;
+  /** Koşu başında dondurulan Settings (secret içermez). Settings modülünden önceki kayıtlarda yok. */
+  config_snapshot?: ConfigSnapshot | null;
 }
 
 export interface Evidence {

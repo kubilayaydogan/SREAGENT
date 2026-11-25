@@ -16,6 +16,8 @@ from ...agent.investigation import InvestigationRunner
 from ...db.models import Role, Trigger, User
 from ...repositories import applications, conversations, incidents, investigations
 from ...services.runs import Run
+from ...settings import runtime as settings_runtime
+from ...settings import service as settings_service
 from ..deps import current_user, db, sre
 from ..schemas import (ChatIn, ConversationIn, ConversationOut, ConversationPatch, InvestigateIn, MessageOut, PageOut,
                        RunOut, page_of)
@@ -81,6 +83,7 @@ def _run_out(run: Run, **kw) -> RunOut:
 
 @router.post("/agent/chat", response_model=RunOut, status_code=202)
 async def chat(body: ChatIn, request: Request, u: User = Depends(sre), s: AsyncSession = Depends(db)):
+    settings_runtime.check_allowed(await settings_service.effective(request.app.state.rt, s), "manual")
     if body.application_id:
         await applications.get(s, body.application_id)
     if body.conversation_id:
@@ -125,6 +128,7 @@ async def resume(conv_id: uuid.UUID, request: Request, u: User = Depends(sre), s
 async def investigate(body: InvestigateIn, request: Request, u: User = Depends(sre), s: AsyncSession = Depends(db)):
     _check_limits(request, u)
     rt = request.app.state.rt
+    settings_runtime.check_allowed(await settings_service.effective(rt, s), "manual")
     if body.application_id:
         await applications.get(s, body.application_id)
     if body.incident_id:

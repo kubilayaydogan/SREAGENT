@@ -2,12 +2,29 @@
 (istemci arka planda gönderir, hatalar yalnız loglanır)."""
 from __future__ import annotations
 
+import contextvars
 import logging
 import os
 
 from .redact import redact
 
 log = logging.getLogger("airlab_agent.tracing")
+
+# Sampling dışı ya da ayarlardan kapatılmış koşular: bu bağlamdaki LLM/graf çağrıları trace göndermez.
+_TRACING_OFF: contextvars.ContextVar[bool] = contextvars.ContextVar("airlab_tracing_off", default=False)
+
+
+def tracing_off() -> bool:
+    return _TRACING_OFF.get()
+
+
+def without_tracing(fn, *args, **kwargs):
+    """`fn`'i tracing kapalı bağlamda çalıştırır (thread içinde de geçerli: to_thread bağlamı kopyalar)."""
+    token = _TRACING_OFF.set(True)
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        _TRACING_OFF.reset(token)
 
 
 def _hide(d):
@@ -59,6 +76,9 @@ def child_config(callbacks: list | None, run_name: str, **extra) -> dict:
     callback yöneticisini devralır ve çağrı aynı trace'in altına yerleşir. Üst adım yoksa (CLI, tek başına çağrı)
     verilen tracer'larla yeni kök trace açılır."""
     cfg: dict = {"run_name": run_name, **extra}
+    if _TRACING_OFF.get():
+        cfg["callbacks"] = []
+        return cfg
     p = parent_config()
     if not (p and p.get("callbacks")):
         cfg["callbacks"] = callbacks or []

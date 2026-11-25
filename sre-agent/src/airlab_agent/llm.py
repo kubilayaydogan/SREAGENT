@@ -6,6 +6,7 @@ araç uyduramaz ve telemetri içindeki metin (log içeriği, sorgu metni) talima
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import re
@@ -83,7 +84,9 @@ class Llm:
         self.settings = settings
         self.callbacks = callbacks or []
         self._override: str | None = None
-        self._clients: dict[tuple[str, str], object] = {}
+        # Görev başına yönetici profili (platform Settings → LLM). Yoksa ortam + defaults.yaml geçerlidir.
+        self._profiles: dict[str, dict] = {}
+        self._clients: dict[tuple, object] = {}
         self._lock = threading.Lock()
         self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
 
@@ -91,31 +94,47 @@ class Llm:
     def set_model(self, model: str | None) -> None:
         self._override = model or None
 
+    def set_profiles(self, profiles: dict[str, dict] | None) -> None:
+        """Görev ("chat" | "rca") başına profil: model, api_key, max_tokens, timeout_s, effort, retries, base_url.
+        Bir sonraki çağrıdan itibaren geçerlidir; istemciler profil değerlerine göre önbelleklenir (süren çağrı etkilenmez)."""
+        self._profiles = {k: dict(v) for k, v in (profiles or {}).items() if v}
+
     @property
     def model_name(self) -> str:
-        return self._override or self.settings.claude_model
+        return self._override or self._profiles.get("chat", {}).get("model") or self.settings.claude_model
 
     @property
     def rca_model_name(self) -> str:
-        return self._override or self.settings.claude_rca_model
+        return self._override or self._profiles.get("rca", {}).get("model") or self.settings.claude_rca_model
+
+    def _params(self, kind: str) -> dict:
+        b = self.settings.cfg["budgets"]
+        rca = kind == "rca"
+        out = {"api_key": self.settings.anthropic_key, "base_url": None,
+               "max_tokens": b["rca_max_tokens"] if rca else b["llm_max_tokens"], "retries": b["llm_retries"],
+               "timeout_s": b["rca_timeout_seconds"] if rca else b["llm_timeout_seconds"],
+               "effort": b["rca_effort"] if rca else b.get("llm_effort", "medium")}
+        prof = self._profiles.get(kind) or {}
+        out.update({k: v for k, v in prof.items() if k in out and v not in (None, "")})
+        return out
 
     def _client(self, model: str, kind: str):
-        key = (model, kind)
+        p = self._params(kind)
+        # anahtarın kendisi önbellek anahtarında tutulmaz (yalnız özeti)
+        fp = hashlib.sha256(str(p["api_key"]).encode()).hexdigest()[:12]
+        key = (model, kind, fp, p["base_url"], p["max_tokens"], p["retries"], p["timeout_s"], p["effort"])
         with self._lock:
             c = self._clients.get(key)
             if c is None:
                 from langchain_anthropic import ChatAnthropic
-                b = self.settings.cfg["budgets"]
-                rca = kind == "rca"
                 # Thinking parametresi gönderilmez (Opus/Sonnet 5.5'te adaptive); derinlik effort ile ayarlanır.
                 # thinking max_tokens'a dahildir. Refusal olursa sunucu tarafı fallback ("default") devreye girer.
-                c = ChatAnthropic(model=model, api_key=self.settings.anthropic_key,
-                                  max_tokens=b["rca_max_tokens"] if rca else b["llm_max_tokens"],
-                                  max_retries=b["llm_retries"],
-                                  default_request_timeout=b["rca_timeout_seconds"] if rca else b["llm_timeout_seconds"],
-                                  output_config={"effort": b["rca_effort"] if rca else b.get("llm_effort", "medium")},
+                kw = {"base_url": p["base_url"]} if p["base_url"] else {}
+                c = ChatAnthropic(model=model, api_key=p["api_key"], max_tokens=p["max_tokens"],
+                                  max_retries=p["retries"], default_request_timeout=p["timeout_s"],
+                                  output_config={"effort": p["effort"] or "medium"},
                                   betas=["server-side-fallback-2026-07-01"],
-                                  model_kwargs={"fallbacks": "default"})
+                                  model_kwargs={"fallbacks": "default"}, **kw)
                 self._clients[key] = c
             return c
 

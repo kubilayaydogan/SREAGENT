@@ -56,6 +56,12 @@ async def health_check(rt, params: dict) -> dict[str, Any]:
 
     from .agent.investigation import InvestigationRunner
     ps = rt.ps
+    from .settings import runtime as srt
+    eff = await srt.effective(rt)
+    try:
+        srt.check_allowed(eff, "scheduled")
+    except srt.RunNotAllowed as e:
+        return {"skipped": str(e)}
     lag = rt.agent.cfg["windows"]["ingest_lag_seconds"]
     end = (datetime.now(timezone.utc) - timedelta(seconds=lag)).replace(second=0, microsecond=0)
     start = end - timedelta(minutes=int(params.get("window_minutes", ps.health_check_window_minutes)))
@@ -65,7 +71,7 @@ async def health_check(rt, params: dict) -> dict[str, Any]:
                                           window_start=start, window_end=end,
                                           description="Periyodik analiz (sre-worker)")
         inv_id = inv.id
-    llm = rt.llm.llm if (ps.health_check_llm and rt.llm is not None and hasattr(rt.llm, "llm")) else None
+    llm = rt.llm.llm if (eff["agent"]["scheduled_llm"] and rt.llm is not None and hasattr(rt.llm, "llm")) else None
     async with rt.sem:
         done, report = await InvestigationRunner(rt).run(inv_id, emit=_noop, mode="scheduled", core_llm=llm,
                                                          notes=["zamanlanmış sağlık kontrolü"])
@@ -106,18 +112,22 @@ RETENTION_SQL = [
         AND NOT EXISTS (SELECT 1 FROM sre.agent_feedback f WHERE f.investigation_id = i.id)
         AND i.conversation_id IS NULL"""),
     ("watch_events", "DELETE FROM sre.watch_events WHERE ts < :cut"),
-    ("job_runs", "DELETE FROM sre.job_runs WHERE started_at < :cut_short"),
+    ("job_runs", "DELETE FROM sre.job_runs WHERE started_at < :cut"),
     ("llm_runs", "DELETE FROM sre.llm_runs WHERE start_time < :cut"),
 ]
 
 
 async def retention(rt, params: dict) -> dict[str, Any]:
-    days = int(params.get("days", rt.ps.retention_days))
+    """Kategori başına saklama süresi Settings > Retention'dan (yoksa SRE_RETENTION_DAYS; job_runs 30 gün)."""
+    from .settings import runtime as srt
+    ret = (await srt.effective(rt))["retention"]
+    days = {"investigations": ret["investigations_days"], "watch_events": ret["watch_events_days"],
+            "llm_runs": ret["llm_runs_days"], "job_runs": ret["job_runs_days"]}
     now = datetime.now(timezone.utc)
     out: dict[str, Any] = {"retention_days": days}
     async with transaction(rt.sm) as s:
         for name, sql in RETENTION_SQL:
-            res = await s.execute(text(sql), {"cut": now - timedelta(days=days), "cut_short": now - timedelta(days=30)})
+            res = await s.execute(text(sql), {"cut": now - timedelta(days=int(days[name]))})
             out[name] = res.rowcount or 0
         out["approvals_expired"] = await approvals.expire_due(s)
     return out
@@ -131,16 +141,19 @@ async def langsmith_sync(rt, params: dict) -> dict[str, Any]:
 HANDLERS = {"health_check": health_check, "retention": retention, "langsmith_sync": langsmith_sync}
 
 
+JOB_TYPES = {"watch": "watch", "health-check": "health_check", "langsmith-sync": "langsmith_sync"}
+
+
 async def ensure_jobs(rt) -> None:
-    ps, w = rt.ps, rt.agent.cfg["watch"]
+    """İş tanımlarını etkili ayarlardan (Settings > Scheduling; yoksa ortam değişkenleri) oluşturur/günceller."""
+    from .settings import runtime as srt
+    from .settings import service
     async with transaction(rt.sm) as s:
-        await jobs.ensure(s, "watch", "watch", int(w["poll_seconds"]), enabled=ps.watch_enabled)
-        await jobs.ensure(s, "health-check", "health_check", max(ps.health_check_minutes, 1) * 60,
-                          {"window_minutes": ps.health_check_window_minutes}, enabled=ps.health_check_minutes > 0)
-        await jobs.ensure(s, "retention", "retention", 3600, {"days": ps.retention_days})
-        await jobs.ensure(s, "langsmith-sync", "langsmith_sync", max(ps.langsmith_sync_minutes, 1) * 60,
-                          {"backfill_days": ps.langsmith_backfill_days},
-                          enabled=ps.langsmith_sync_minutes > 0 and bool(getattr(rt, "callbacks", None)))
+        eff = await service.effective(rt, s)
+        for name, spec in srt.job_specs(rt, eff).items():
+            await jobs.ensure(s, name, JOB_TYPES[name], spec["interval_seconds"], spec["params"],
+                              enabled=spec["enabled"])
+        await jobs.ensure(s, "retention", "retention", 3600, {})
 
 
 # ---------------------------------------------------------------- döngü
@@ -180,17 +193,19 @@ async def main(ps: PlatformSettings, *, once: bool = False, runtime=None) -> int
     rt = runtime or await create_runtime(ps, application_name="sre-worker")
     await bootstrap(rt)
     await ensure_jobs(rt)
-    watch = WatchJob(rt) if ps.watch_enabled else None
-    handlers = {**HANDLERS, **({"watch": watch} if watch else {})}
+    # Watch işi her zaman kurulur; açık/kapalı durumu zamanlama tablosundan (Settings) gelir → yeniden başlatma gerekmez.
+    watch = WatchJob(rt)
+    handlers = {**HANDLERS, "watch": watch}
     wid = ps.worker_id or "worker"
-    lease = ps.investigation_timeout_s + 120
+    from .settings import runtime as srt
+    lease = int((await srt.effective(rt))["agent"]["run_timeout_s"]) + 120
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
             loop.add_signal_handler(sig, STOP.set)
         except (NotImplementedError, RuntimeError):
             pass
-    log.info("sre-worker başladı", extra={"worker": wid, "watch": bool(watch), "health_min": ps.health_check_minutes})
+    log.info("sre-worker başladı", extra={"worker": wid, "lease_s": lease})
     try:
         while not STOP.is_set():
             try:

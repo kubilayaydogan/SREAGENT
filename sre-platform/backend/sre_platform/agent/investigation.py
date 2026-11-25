@@ -2,8 +2,9 @@
 MCP sorgu olaylarını ve düğüm ilerlemesini asyncio kuyruğuna köprüler; her araç çağrısını
 `agent_tool_executions` tablosuna yazar ve SSE olayı olarak yayar. Sonuç raporu araştırma kaydına işlenir.
 
-Sınırlar: genel zaman aşımı (SRE_INVESTIGATION_TIMEOUT_S), çekirdeğin sorgu bütçesi (max_queries_per_run),
-ek kanıt turu sınırı (max_iterations), LangGraph recursion_limit. İptal düğüm sınırlarında uygulanır.
+Sınırlar (Settings > Agent; koşu başında dondurulur, investigations.config_snapshot'a yazılır): genel zaman aşımı,
+sorgu bütçesi (max_queries_per_run), ek kanıt turu sınırı (max_iterations), LangGraph recursion_limit.
+İptal düğüm sınırlarında uygulanır.
 """
 from __future__ import annotations
 
@@ -41,14 +42,25 @@ class InvestigationRunner:
 
     async def run(self, inv_id: uuid.UUID, *, emit, cancel: threading.Event | None = None,
                   question: str | None = None, mode: str = "chat", core_llm=None,
-                  notes: list[str] | None = None) -> tuple[Investigation, dict | None]:
+                  notes: list[str] | None = None, rc=None) -> tuple[Investigation, dict | None]:
         cancel = cancel or threading.Event()
         sm = self.rt.sm
-        from ..services import model_switch
-        await model_switch.refresh(self.rt)             # worker/backend: arayüzde seçilen model
+        from ..settings import runtime as srt
+        if rc is None:                                  # sohbet turu kendi yapılandırmasını verir (aynı trace kararı)
+            async with transaction(sm) as s:
+                trig = (await investigations.get(s, inv_id)).trigger
+            # Koşu başına DEĞİŞMEZ yapılandırma: koşu sürerken yapılan ayar değişiklikleri bu koşuyu etkilemez.
+            rc = await srt.run_config(self.rt, trigger=getattr(trig, "value", str(trig)))
+            srt.apply_llm(self.rt, rc)                  # görev profilleri + arayüzde seçilen model
+        notes = list(notes or []) + rc.notes
+        if core_llm is not None and not rc.llm_rca:
+            core_llm = None
+            if not rc.effective["agent"]["llm_enabled"]:
+                notes.append("LLM ayarlardan kapalı; deterministik açıklama")
         async with transaction(sm) as s:
             inv = await investigations.get(s, inv_id)
             await investigations.mark_running(s, inv)
+            inv.config_snapshot = rc.snapshot
             run_id, start, end = inv.run_id, inv.window_start, inv.window_end
             trace_meta = {"investigation_id": str(inv_id), "trigger": getattr(inv.trigger, "value", str(inv.trigger)),
                           "conversation_id": str(inv.conversation_id) if inv.conversation_id else None,
@@ -74,17 +86,24 @@ class InvestigationRunner:
             if cancel.is_set():
                 raise Cancelled()
 
-        agent = self.rt.agent
+        agent = rc.agent
         use_llm = core_llm is not None
-        fut = asyncio.ensure_future(asyncio.to_thread(
-            run_analysis, agent, lambda: self.rt.gateway_factory(on_event=on_tool), start, end, llm=core_llm,
-            question=question, mode=mode, notes=notes, run_id=run_id, use_llm=use_llm, baseline=baseline,
-            checkpointer=self.rt.saver, persist_files=False, on_node=on_node,
-            callbacks=self.rt.callbacks or getattr(core_llm, "callbacks", None),
-            trace_run_id=inv_id, trace_metadata=trace_meta, trace_tags=trace_tags))
+        gw_factory = rc.gateway_factory
+        callbacks = (self.rt.callbacks or getattr(core_llm, "callbacks", None)) if rc.trace else []
+        trace_meta["config_hash"] = rc.snapshot["hash"]
+        kw = dict(llm=core_llm, question=question, mode=mode, notes=notes, run_id=run_id, use_llm=use_llm,
+                  baseline=baseline, checkpointer=self.rt.saver, persist_files=False, on_node=on_node,
+                  callbacks=callbacks, recursion_limit=rc.recursion_limit, trace_run_id=inv_id,
+                  trace_metadata=trace_meta, trace_tags=trace_tags)
+        args = (agent, lambda: gw_factory(on_event=on_tool), start, end)
+        if rc.trace:
+            fut = asyncio.ensure_future(asyncio.to_thread(run_analysis, *args, **kw))
+        else:                                       # sampling dışı / kapalı: LLM çağrıları da trace göndermez
+            from airlab_agent.tracing import without_tracing
+            fut = asyncio.ensure_future(asyncio.to_thread(without_tracing, run_analysis, *args, **kw))
         rows: dict[str, uuid.UUID] = {}
         node_t = [time.monotonic()]
-        deadline = loop.time() + self.rt.ps.investigation_timeout_s
+        deadline = loop.time() + rc.timeout_s
         timed_out = False
         while True:
             if fut.done() and q.empty():
@@ -104,7 +123,7 @@ class InvestigationRunner:
 
         error, cancelled, state = None, False, None
         if timed_out:
-            error = f"investigation timeout ({self.rt.ps.investigation_timeout_s} sn)"
+            error = f"investigation timeout ({rc.timeout_s} sn)"
             fut.add_done_callback(lambda f: f.exception())          # arka plandaki thread'in sonucu yok sayılır
         else:
             try:
@@ -130,10 +149,10 @@ class InvestigationRunner:
                 await investigations.fail(s, inv, error or "rapor üretilmedi", cancelled=cancelled)
         if report and not error and not cancel.is_set():
             try:
-                await self._correlate(inv_id, start, end, emit)
+                await self._correlate(inv_id, start, end, emit, rc)
             except Exception:  # noqa: BLE001 — ek kanıt toplanamazsa analiz sonucu geçerli kalır
                 log.exception("evidence correlation başarısız")
-        if report and not error:
+        if report and not error and rc.trace:
             from ..services.langsmith_trace import record_outcome
             await record_outcome(self.rt, inv_id)
         # Sohbette RCA metni bu adımdan sonra yazılır; bildirim orada (chat.respond) gönderilir.
@@ -145,14 +164,14 @@ class InvestigationRunner:
                                  "message": error, "investigation_id": str(inv_id)})
         return inv, report
 
-    async def _correlate(self, inv_id: uuid.UUID, start, end, emit) -> None:
+    async def _correlate(self, inv_id: uuid.UUID, start, end, emit, rc=None) -> None:
         """Yavaş trace kimlikleri + Davis problemleri → ek kanıt (puanlamayı değiştirmez)."""
         from ..services import correlation
         await emit("agent_thinking", {"step": "traces", "message": "En yavaş isteklerin trace kimlikleri ve Davis "
                                                                    "problem'leri evidence'a ekleniyor."})
         events: list[dict] = []
-        gw = self.rt.gateway_factory(on_event=events.append)
-        res = await asyncio.to_thread(gw.run_many, correlation.queries(start, end, self.rt.agent.cfg))
+        gw = (rc.gateway_factory if rc else self.rt.gateway_factory)(on_event=events.append)
+        res = await asyncio.to_thread(gw.run_many, correlation.queries(start, end, rc.agent.cfg if rc else self.rt.agent.cfg))
         rows: dict[str, uuid.UUID] = {}
         for ev in events:
             await self._handle(("tool", ev), inv_id, rows, [time.monotonic()], emit)

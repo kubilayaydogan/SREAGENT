@@ -18,6 +18,7 @@ const RcaDetail = lazy(() => import("@/pages/RcaDetailPage"));
 const Knowledge = lazy(() => import("@/pages/KnowledgePage"));
 const Approvals = lazy(() => import("@/pages/ApprovalsPage"));
 const LlmObservability = lazy(() => import("@/pages/LlmObservabilityPage"));
+const Settings = lazy(() => import("@/pages/SettingsPage"));
 
 function Loading() {
   return (
@@ -59,6 +60,7 @@ const router = createBrowserRouter([
       { path: "knowledge", element: s(<Knowledge />) },
       { path: "approvals", element: s(<Approvals />) },
       { path: "llm", element: s(<LlmObservability />) },
+      { path: "settings/:section?", element: s(<Settings />) },
       { path: "*", element: <EmptyState title="Sayfa bulunamadı" description="Adres hatalı olabilir." /> },
     ],
   },

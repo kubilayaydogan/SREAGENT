@@ -100,12 +100,20 @@ async def _post(url: str, payload: dict, attempts: int = 3) -> None:
 async def notify_rca(rt, inv_id: uuid.UUID) -> bool:
     """Koşullar sağlanıyorsa Slack'e gönderir. Gönderildiyse True. Asla exception fırlatmaz."""
     ps = rt.ps
-    if not ps.slack_webhook_url:
-        return False
     try:
+        from ..settings import secrets, service
         async with transaction(rt.sm) as s:
+            cfg = (await service.effective(rt, s))["notifications"]      # Settings > Notifications (yoksa ortam)
+            if not cfg["slack_enabled"]:
+                return False
+            try:
+                url = await secrets.resolve(s, cfg["slack_webhook_ref"])
+            except secrets.SecretError as e:
+                log.warning("Slack webhook secret çözülemedi: %s", e)
+                return False
+            threshold = float(cfg["slack_risk_threshold"])
             inv = await investigations.get(s, inv_id)
-            if not should_notify(inv, ps.slack_risk_threshold):
+            if not should_notify(inv, threshold):
                 return False
             sent = await s.scalar(select(ToolExecution.id).where(ToolExecution.investigation_id == inv_id,
                                                                  ToolExecution.tool_name == TOOL,
@@ -118,18 +126,18 @@ async def notify_rca(rt, inv_id: uuid.UUID) -> bool:
         t0 = time.monotonic()
         error = None
         span = ToolSpan(parent_config(), TOOL, {"investigation_id": str(inv_id), "risk_score": score,
-                                                "threshold": ps.slack_risk_threshold})
+                                                "threshold": threshold})
         try:
-            await _post(ps.slack_webhook_url, payload)
+            await _post(url, payload)
         except Exception as e:  # noqa: BLE001
-            error = redact_text(str(e)).replace(ps.slack_webhook_url, "<webhook>")
+            error = redact_text(str(e)).replace(url, "<webhook>")
         if error:
             span.error(error)
         else:
             span.end({"status": "SENT", "elapsed_ms": int((time.monotonic() - t0) * 1000)})
         async with transaction(rt.sm) as s:
             await investigations.record_tool(s, inv_id, TOOL, ok=error is None, step="notify",
-                                             arguments={"risk_score": score, "threshold": ps.slack_risk_threshold},
+                                             arguments={"risk_score": score, "threshold": threshold},
                                              duration_ms=int((time.monotonic() - t0) * 1000), error=error)
         if error:
             log.warning("Slack bildirimi gönderilemedi (%s): %s", inv_id, error)

@@ -1,4 +1,4 @@
-"""Arayüzden model seçimi: yalnız yönetici değiştirir, seçim KV'de kalıcıdır ve başka süreçte (worker) de uygulanır."""
+"""Arayüzden model seçimi: yalnız yönetici değiştirir, seçim Settings'te (llm.model_override) kalıcıdır ve başka süreçte (worker) de uygulanır."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -32,8 +32,10 @@ def test_select_persists_and_other_process_picks_it_up(settings):
     async def go():
         eng = make_engine(settings, "pytest")
         sm = make_sessionmaker(eng)
-        backend = SimpleNamespace(sm=sm, llm=SimpleNamespace(llm=FakeCore()))
-        worker = SimpleNamespace(sm=sm, llm=SimpleNamespace(llm=FakeCore()))
+        from airlab_agent.config import load_settings
+        agent = load_settings()
+        backend = SimpleNamespace(sm=sm, ps=settings, agent=agent, llm=SimpleNamespace(llm=FakeCore()))
+        worker = SimpleNamespace(sm=sm, ps=settings, agent=agent, llm=SimpleNamespace(llm=FakeCore()))
         try:
             before = await model_switch.refresh(worker)                       # kayıt yok → env varsayılanı
             st = await model_switch.select(backend, "claude-sonnet-5-5", username="admin")

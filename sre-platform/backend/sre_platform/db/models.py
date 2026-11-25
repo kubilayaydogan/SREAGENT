@@ -273,6 +273,8 @@ class Investigation(Base):
     explanation_source: Mapped[str | None] = mapped_column(String(128))
     report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)                     # deterministik rapor (redakte)
     error: Mapped[str | None] = mapped_column(Text)
+    # Koşunun başında alınan değişmez yapılandırma kopyası (bölüm revizyonları + etkili değerler; secret YOK).
+    config_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
     tsv: Mapped[Any] = _tsv("title", "description", "root_cause_hypothesis", "explanation", "primary_mechanism")
@@ -628,3 +630,114 @@ class LlmRun(Base):
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
     synced_at: Mapped[datetime] = _updated()
+
+
+# ---------------------------------------------------------------------------------------------- Settings modülü
+class SettingsSection(Base):
+    """Bölüm başına yöneticinin kaydettiği değerler (yalnız şemadan geçmiş, secret içermeyen alanlar).
+    Kayıt yoksa ortam/uygulama varsayılanları geçerlidir. `revision` iyimser eşzamanlılık için artar."""
+    __tablename__ = "settings_sections"
+    __table_args__ = (CheckConstraint("revision >= 1", name="ck_settings_revision"), {"schema": SCHEMA})
+    section: Mapped[str] = mapped_column(String(32), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    updated_by: Mapped[str | None] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = _updated()
+
+
+class SettingsRevision(Base):
+    """Değişmez revizyon geçmişi. Rollback eski veriyi YENİ bir revizyon olarak yazar."""
+    __tablename__ = "settings_revisions"
+    __table_args__ = (UniqueConstraint("section", "revision", name="uq_settings_rev"), {"schema": SCHEMA})
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    section: Mapped[str] = mapped_column(String(32), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    actor: Mapped[str | None] = mapped_column(String(64))
+    note: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = _created_clock()
+
+
+class Connector(Base):
+    """MCP sunucu bağlantısı. Secret değeri burada DEĞİL: `secret_ref` (env:AD / secret:ad) tutulur."""
+    __tablename__ = "connectors"
+    __table_args__ = (CheckConstraint("timeout_s BETWEEN 1 AND 300", name="ck_connector_timeout"),
+                      CheckConstraint("retries BETWEEN 0 AND 5", name="ck_connector_retries"),
+                      Index("uq_connectors_analysis", "analysis_source", unique=True,
+                            postgresql_where=text("analysis_source")), {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)            # dynatrace | custom
+    transport: Mapped[str] = mapped_column(String(32), nullable=False)           # streamable_http
+    endpoint: Mapped[str] = mapped_column(String(500), nullable=False)
+    auth_type: Mapped[str] = mapped_column(String(16), nullable=False)           # bearer | none
+    secret_ref: Mapped[str | None] = mapped_column(String(128))
+    timeout_s: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    retries: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    read_only: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    analysis_source: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)   # analiz grafiğinin veri kaynağı
+    allowed_tools: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list,
+                                                     server_default=text("'{}'"))
+    capabilities: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
+                                                         server_default=text("'{}'::jsonb"))
+    last_check: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
+                                                       server_default=text("'{}'::jsonb"))
+    managed: Mapped[str | None] = mapped_column(String(16))                       # 'bootstrap' = ortamdan tohumlandı
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+class LlmProfile(Base):
+    __tablename__ = "llm_profiles"
+    __table_args__ = (CheckConstraint("timeout_s BETWEEN 5 AND 600", name="ck_llm_timeout"),
+                      CheckConstraint("max_tokens BETWEEN 256 AND 128000", name="ck_llm_max_tokens"),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)            # anthropic (doğrulanmış adapter)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    base_url: Mapped[str | None] = mapped_column(String(500))
+    secret_ref: Mapped[str | None] = mapped_column(String(128))
+    timeout_s: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    max_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=16000)
+    effort: Mapped[str | None] = mapped_column(String(16))                       # low | medium | high
+    retries: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    monthly_budget_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_check: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
+                                                       server_default=text("'{}'::jsonb"))
+    managed: Mapped[str | None] = mapped_column(String(16))
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+class StoredSecret(Base):
+    """Şifreli secret (Fernet; anahtar SRE_SETTINGS_KEY ortamında, veritabanında DEĞİL). Değer hiçbir API'de dönmez."""
+    __tablename__ = "secrets"
+    __table_args__ = {"schema": SCHEMA}
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    hint: Mapped[str] = mapped_column(String(16), nullable=False)               # yalnız uzunluk ipucu
+    created_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = _created()
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AuditEvent(Base):
+    """Yapılandırma değişikliği denetim kaydı (redakte before/after). Uygulama yalnız INSERT eder."""
+    __tablename__ = "audit_events"
+    __table_args__ = (Index("ix_audit_ts", text("ts DESC")), Index("ix_audit_section", "section"), {"schema": SCHEMA})
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = _created_clock()
+    actor: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(48), nullable=False)
+    section: Mapped[str] = mapped_column(String(32), nullable=False)
+    target: Mapped[str | None] = mapped_column(String(128))
+    revision: Mapped[int | None] = mapped_column(Integer)
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    result: Mapped[str] = mapped_column(String(16), nullable=False)               # ok | rejected | error
+    detail: Mapped[str | None] = mapped_column(Text)

@@ -1,6 +1,7 @@
 """sre-platform komut satırı.
 
   sre-platform migrate [--seed]        Alembic upgrade head + LangGraph checkpoint/store kurulumu (+ bilgi bankası tohumu)
+  sre-platform migrate --downgrade REV Alembic downgrade (ör. 0002: Settings tablolarını kaldırır — veri kaybı)
   sre-platform serve [--port 8000]     FastAPI (tek worker; SSE çalıştırma kaydı süreç içidir)
   sre-platform worker                  zamanlanmış işler (watch / sağlık kontrolü / saklama)
   sre-platform create-user NAME ROLE   parola ortamdan: SRE_NEW_USER_PASSWORD
@@ -27,6 +28,10 @@ def _loop_factory():
 def cmd_migrate(a) -> int:
     from .db import migrate
     ps = load_platform_settings()
+    if a.downgrade:
+        migrate.downgrade(ps.database_url, a.downgrade)
+        log.info("downgrade tamam", extra={"revision": migrate.current_revision(ps.database_url)})
+        return 0
     migrate.upgrade(ps.database_url)
     migrate.setup_langgraph(ps.libpq_url)
     log.info("migration tamam", extra={"revision": migrate.current_revision(ps.database_url)})
@@ -86,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("migrate")
     m.add_argument("--seed", action="store_true")
+    m.add_argument("--downgrade", metavar="REV", help="belirtilen şema sürümüne geri dön")
     m.set_defaults(fn=cmd_migrate)
     s = sub.add_parser("serve")
     s.add_argument("--host", default="0.0.0.0")

@@ -34,6 +34,7 @@ class AgentRuntime:
     memory: MemoryService | None = None
     sem: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(2))
     callbacks: list = field(default_factory=list)      # LangSmith tracer (redakte eder); tracing kapalıysa boş
+    settings_started: dict | None = None              # süreç açılışındaki etkili ayarlar ("restart gerekli" tespiti)
     _closers: list = field(default_factory=list)
 
     @property
@@ -58,6 +59,7 @@ def default_gateway_factory(agent: Settings) -> Callable[..., object]:
     def make(on_event=None):
         return McpGateway(agent.mcp_url, agent.dt_token, timeout_s=b["query_timeout_seconds"], retries=b["query_retries"],
                           max_queries=b["max_queries_per_run"], on_event=on_event)
+    make._settings_default = True          # koşu başında Settings'teki analiz connector'ı ile değiştirilir
     return make
 
 

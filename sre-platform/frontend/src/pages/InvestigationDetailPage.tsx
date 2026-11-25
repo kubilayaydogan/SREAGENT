@@ -66,6 +66,18 @@ function Facts({ inv }: { inv: InvestigationDetail }) {
               {inv.run_id}
             </span>
           </Field>
+          {inv.config_snapshot && (
+            <Field label="Config">
+              <span
+                className="font-mono text-2xs"
+                title={`Settings revizyonları: ${Object.entries(inv.config_snapshot.revisions)
+                  .map(([k, v]) => `${k} r${v}`)
+                  .join(", ")} · LangSmith ${inv.config_snapshot.tracing.langsmith ? "izlendi" : "izlenmedi"}`}
+              >
+                {inv.config_snapshot.hash}
+              </span>
+            </Field>
+          )}
         </dl>
       </Card>
       <nav aria-label="bölümler" className="hidden px-1 lg:block">

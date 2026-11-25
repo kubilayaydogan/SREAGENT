@@ -42,6 +42,8 @@ async def bootstrap(rt) -> None:
         await applications.sync_from_config(s, rt.agent.cfg)
         if await users.ensure_admin(s, rt.ps.admin_username, rt.ps.admin_password):
             log.info("ilk admin kullanıcı oluşturuldu", extra={"username": rt.ps.admin_username})
+    from ..settings.runtime import apply_startup
+    await apply_startup(rt)                     # connector/LLM profili tohumlama + 'restart' ayarlarının uygulanması
 
 
 def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None) -> FastAPI:
@@ -74,7 +76,7 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
             origins = []
     if origins:                                   # aynı origin (nginx proxy) için CORS gerekmez; yalnız beyaz liste
         app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False,
-                           allow_methods=["GET", "POST", "PATCH"], allow_headers=["Authorization", "Content-Type",
+                           allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"], allow_headers=["Authorization", "Content-Type",
                                                                                   "Last-Event-ID", "X-Request-ID"],
                            expose_headers=["X-Correlation-ID"])
 
@@ -115,6 +117,28 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
     async def _ve(_, e):
         return _err(422, "invalid_value", str(e))
 
+    from pydantic import ValidationError
+
+    from ..settings.runtime import RunNotAllowed
+    from ..settings.service import SettingsConflict, SettingsInvalid
+
+    @app.exception_handler(SettingsConflict)
+    async def _sc(_, e: SettingsConflict):
+        return _err(409, "revision_conflict", str(e), {"current_revision": e.current})
+
+    @app.exception_handler(SettingsInvalid)
+    async def _si(_, e: SettingsInvalid):
+        return _err(422, "invalid_settings", str(e), e.details or None)
+
+    @app.exception_handler(RunNotAllowed)
+    async def _rn(_, e):
+        return _err(409, "agent_disabled", str(e))
+
+    @app.exception_handler(ValidationError)
+    async def _pv(_, e: ValidationError):
+        details = [{"loc": list(x.get("loc", [])), "msg": x.get("msg"), "type": x.get("type")} for x in e.errors()]
+        return _err(422, "validation_error", "ayar doğrulanamadı", details)
+
     @app.exception_handler(IntegrityError)
     async def _ie(_, e):
         msg = str(getattr(e, "orig", e)).split("\n")[0][:300]
@@ -143,7 +167,7 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
         details = [{"loc": list(x.get("loc", [])), "msg": x.get("msg"), "type": x.get("type")} for x in e.errors()]
         return _err(422, "validation_error", "istek doğrulanamadı", details)
 
-    from .routes import agent, auth, catalog, records
-    for r in (auth.router, catalog.router, catalog.system, agent.router, records.router):
+    from .routes import agent, auth, catalog, records, settings as settings_routes
+    for r in (auth.router, catalog.router, catalog.system, agent.router, records.router, settings_routes.router):
         app.include_router(r, prefix="/api")
     return app

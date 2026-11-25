@@ -59,6 +59,7 @@ class TurnContext:
     end: datetime | None = None
     cancel: threading.Event = field(default_factory=threading.Event)
     result: dict = field(default_factory=dict)
+    rc: Any = None                                 # tur başında kurulan değişmez Settings yapılandırması (RunConfig)
 
 
 def suggestions_for(route: dict, inv: dict | None, memory: dict | None) -> list[str]:
@@ -132,16 +133,20 @@ class ChatOrchestrator:
 
     # ------------------------------------------------------------ grafik
     def _graph(self, ctx: TurnContext):
-        rt, cfg = self.rt, self.rt.agent.cfg
+        rt = self.rt
+        rc = ctx.rc
+        cfg = rc.agent.cfg if rc else rt.agent.cfg
         apps = cfg["apps"]
+        chat_llm = rt.llm if (rc is None or rc.llm_chat) else None      # Settings: LLM kapalı / profil devre dışı
+        rca_llm = rt.llm if (rc is None or rc.llm_rca) else None
 
         async def route(state: ChatState) -> dict:
             q = state["question"]
             history = [m for m in state.get("messages", [])[:-1]]
             r: ChatRoute | None = None
-            if rt.llm is not None:
+            if chat_llm is not None:
                 try:
-                    r = await rt.llm.route(q, history, apps=apps, app=ctx.application_id)
+                    r = await chat_llm.route(q, history, apps=apps, app=ctx.application_id)
                 except LlmUnavailable as e:
                     await ctx.emit("agent_thinking", {"step": "start", "message":
                                                       f"Soru Claude ile yorumlanamadı; kural tabanlı yorum kullanıldı ({e})."})
@@ -186,7 +191,7 @@ class ChatOrchestrator:
                     inv_id = inv.id
                 ctx.result["investigation_id"] = str(inv_id)
                 inv, report = await self.runner.run(inv_id, emit=ctx.emit, cancel=ctx.cancel,
-                                                    question=state["question"], mode="chat", notes=notes)
+                                                    question=state["question"], mode="chat", notes=notes, rc=rc)
             summ = summary_of(inv, report)
             if report:
                 await rt.memory.remember_investigation(inv, user_id=ctx.user_id, conversation_id=ctx.conversation_id)
@@ -252,11 +257,12 @@ class ChatOrchestrator:
             answer, source = "", "deterministik"
             if banner:
                 await ctx.emit("token", {"text": banner})
-            if system and rt.llm is not None:
+            rca = intent in ("analyze", "compare")           # RCA cevabı → RCA modeli/profili
+            llm_ = rca_llm if rca else chat_llm
+            if system and llm_ is not None:
                 await ctx.emit("agent_thinking", {"step": "rca", "message": "Yanıt hazırlanıyor."})
                 try:
-                    rca = intent in ("analyze", "compare")   # RCA cevabı → RCA modeli (Opus 5.5)
-                    async for tok in rt.llm.astream(system, human, rca=rca):
+                    async for tok in llm_.astream(system, human, rca=rca):
                         if ctx.cancel.is_set():
                             break
                         answer += tok
@@ -267,7 +273,7 @@ class ChatOrchestrator:
                                                       f"Claude erişilemedi; deterministik özet kullanıldı ({e})."})
                     answer = ""
             if not answer.strip():
-                answer, source = fallback, "deterministik" + (" (Claude devre dışı)" if rt.llm is None else "")
+                answer, source = fallback, "deterministik" + (" (Claude devre dışı)" if llm_ is None else "")
                 await ctx.emit("token", {"text": answer})
             answer = banner + answer
             if inv and inv.get("investigation_id"):
@@ -299,10 +305,12 @@ class ChatOrchestrator:
         # Tur = tek LangSmith trace (sınıflandırma, analiz grafı, DQL'ler, hatırlama, cevap, Slack altında).
         # conversation_id metadata'sı LangSmith Threads görünümünde aynı konuşmanın turlarını birleştirir.
         llm = self.rt.llm
+        traced = ctx.rc is None or ctx.rc.trace
         cfg = {"configurable": {"thread_id": ctx.thread_id}, "recursion_limit": 12,
-               "callbacks": self.rt.callbacks, "run_name": "chat-turn", "tags": ["airlab", "chat"],
+               "callbacks": self.rt.callbacks if traced else [], "run_name": "chat-turn", "tags": ["airlab", "chat"],
                "metadata": {"conversation_id": str(ctx.conversation_id), "user_id": str(ctx.user_id),
-                            "model": getattr(llm, "model_name", None)}}
+                            "model": getattr(llm, "model_name", None),
+                            **({"config_hash": ctx.rc.snapshot["hash"]} if ctx.rc else {})}}
         if run_id is not None:
             cfg["run_id"] = run_id
         return cfg
@@ -315,20 +323,37 @@ class ChatOrchestrator:
         async with transaction(self.rt.sm) as s:
             m = await conversations.add_message(s, ctx.conversation_id, MessageRole.USER, question)
             ctx.result["user_message_id"] = str(m.id)
-        from ..services import model_switch
-        await model_switch.refresh(self.rt)             # arayüzde seçilen model (Opus/Sonnet)
+        await self._prepare(ctx)
         graph = self._graph(ctx)
-        state = await graph.ainvoke({"question": question, "messages": [{"role": "user", "content": question}]},
-                                    self._config(ctx, run_id=uuid.UUID(ctx.result["user_message_id"])))     # trace id = kullanıcı mesajının id'si
+        state = await self._invoke(ctx, graph, {"question": question, "messages": [{"role": "user", "content": question}]},
+                                   self._config(ctx, run_id=uuid.UUID(ctx.result["user_message_id"])))  # trace id = kullanıcı mesajının id'si
         return await self._finish(ctx, state)
+
+    async def _prepare(self, ctx: TurnContext) -> None:
+        """Tur başı: etkili ayarlardan değişmez yapılandırma; LLM profilleri ve arayüzde seçilen model uygulanır."""
+        from ..settings import runtime as srt
+        ctx.rc = await srt.run_config(self.rt, trigger="chat")
+        srt.apply_llm(self.rt, ctx.rc)
+
+    @staticmethod
+    async def _invoke(ctx: TurnContext, graph, inp, config):
+        if ctx.rc is None or ctx.rc.trace:
+            return await graph.ainvoke(inp, config)
+        from airlab_agent import tracing                # sampling dışı tur: alt LLM çağrıları da trace göndermez
+        token = tracing._TRACING_OFF.set(True)
+        try:
+            return await graph.ainvoke(inp, config)
+        finally:
+            tracing._TRACING_OFF.reset(token)
 
     async def resume(self, ctx: TurnContext) -> dict | None:
         """Yarıda kalmış (ör. süreç yeniden başlatıldı) turu son checkpoint'ten sürdürür."""
+        await self._prepare(ctx)
         graph = self._graph(ctx)
         snap = await graph.aget_state(self._config(ctx))
         if not snap.next:
             return None
-        state = await graph.ainvoke(None, self._config(ctx))
+        state = await self._invoke(ctx, graph, None, self._config(ctx))
         return await self._finish(ctx, state)
 
     async def pending(self, thread_id: str) -> list[str]:
