@@ -33,7 +33,7 @@ class PlatformSettings:
     retention_days: int = 180
     worker_id: str = ""
     environment: str = "lab"
-    watch_enabled: bool = True                    # eski sre-agent watch'un yerini alır (PG durumlu)
+    watch_enabled: bool = True                    # watch durum makinesi (PG durumlu, sre-worker)
     health_check_minutes: int = 15                # zamanlanmış sağlık kontrolü aralığı (0 = kapalı)
     health_check_window_minutes: int = 15
     health_check_llm: bool = True                 # periyodik kontrolde de RCA Claude (Opus 5.5) ile yazılır

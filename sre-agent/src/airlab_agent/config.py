@@ -48,14 +48,6 @@ class Settings:
     def reports_dir(self) -> Path:
         return self.data_dir / "reports"
 
-    @property
-    def state_db(self) -> Path:
-        return self.data_dir / "state.sqlite"
-
-    @property
-    def checkpoint_db(self) -> Path:
-        return self.data_dir / "checkpoints.sqlite"
-
     def ensure_dirs(self) -> None:
         self.reports_dir.mkdir(parents=True, exist_ok=True)
 

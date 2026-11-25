@@ -3,7 +3,7 @@ iş satırı `FOR UPDATE SKIP LOCKED` ile kiralanır (lease) ve next_run_at iler
 dolunca iş başka worker'a geçer.
 
 İşler:
-  watch         (poll_seconds)        eski sre-agent watch'unun PG durumlu hali → incident + araştırma
+  watch         (poll_seconds)        airlab_agent.watch durum makinesi, PG durumlu → incident + araştırma
   health_check  (SRE_HEALTH_CHECK_MINUTES) son N dakikanın tam analizi (LLM'siz) → araştırma kaydı
   retention     (saatlik)             eski kayıtların temizliği + süresi dolan onaylar
   langsmith_sync (SRE_LANGSMITH_SYNC_MINUTES) LangSmith trace/LLM özetleri → sre.llm_runs (LLM izleme panosu)

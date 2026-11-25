@@ -1,6 +1,5 @@
 """LangGraph akışı uçtan uca (sahte MCP): rapor ayrımı, kısmi rapor, Claude kesintisi, checkpoint, redaksiyon."""
 import json
-import sqlite3
 
 import pytest
 
@@ -97,10 +96,10 @@ def test_no_llm_mode(settings):
 
 
 def test_checkpoint_persisted(settings):
-    _run(settings, run_id="rep-test-ckpt")
-    con = sqlite3.connect(settings.checkpoint_db)
-    n = con.execute("SELECT count(*) FROM checkpoints WHERE thread_id='rep-test-ckpt'").fetchone()[0]
-    con.close()
+    from langgraph.checkpoint.memory import InMemorySaver
+    saver = InMemorySaver()
+    _run(settings, run_id="rep-test-ckpt", checkpointer=saver)
+    n = len(list(saver.list({"configurable": {"thread_id": "rep-test-ckpt"}})))
     assert n >= 5
 
 

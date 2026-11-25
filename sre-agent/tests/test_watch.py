@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from airlab_agent.config import Settings
-from airlab_agent.watch import StateStore, Watcher, step, verdict
+from airlab_agent.watch import Watcher, step, verdict
+from memstore import MemStore
 from scenarios import SCENARIOS
 from synth import TimelineGateway, cfg
 
@@ -31,7 +32,7 @@ def setup(tmp_path):
     def analyze(**kw):
         calls.append(kw)
         return {"run_id": kw["run_id"]}
-    w = Watcher(s, lambda: gw, analyze, StateStore(s.state_db), clock=lambda: now["t"])
+    w = Watcher(s, lambda: gw, analyze, MemStore(), clock=lambda: now["t"])
     return s, w, gw, now, bad, calls
 
 
@@ -49,7 +50,7 @@ def next_window_start(s, now):
 
 
 def event_kinds(w):
-    return [row[0] for row in w.store.db.execute("SELECT kind FROM events")]
+    return [e[1] for e in w.store.events]
 
 
 def test_verdict_and_hysteresis():
@@ -122,7 +123,7 @@ def test_restart_does_not_recount_windows(setup):
     w.tick()
     bad["from"] = next_window_start(s, now)
     advance(w, now, 2)                                              # 2 kötü pencere değerlendirildi
-    w2 = Watcher(s, lambda: gw, w.analyze_fn, StateStore(s.state_db), clock=lambda: now["t"])
+    w2 = Watcher(s, lambda: gw, w.analyze_fn, w.store, clock=lambda: now["t"])   # kalıcı durum yeni süreçte
     assert w2.tick()["evaluated"] == 0                              # aynı dakika: yeni pencere yok
     assert w2.store.open_incident() is None
     advance(w2, now, 1)                                             # 3. yeni pencere → olay

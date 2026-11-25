@@ -227,45 +227,11 @@ services:
       DB_OWNER_PASSWORD: ${OWNER_DB_PASSWORD}
       LAB_ALLOW_RESET: ${LAB_ALLOW_RESET:-false}
 
-  # ---- Aşama 2: SRE Agent (salt-okur; tek canlı veri kaynağı Dynatrace Remote MCP, DB bağlantısı YOK)
-  # Gizli değerler agent.env'de (scripts/gen-agent-env.sh üretir, chmod 600, repoya girmez).
-  sre-agent:
-    profiles: [agent]
-    restart: unless-stopped
-    image: airlab/sre-agent:${IMAGE_TAG:-1.0.0}
-    build: { context: ../sre-agent }
-    container_name: airlab-sre-agent
-    command: ["watch"]
-    env_file: [agent.env]
-    environment:
-      AGENT_DATA_DIR: /data
-    volumes: ["agent-data:/data"]
-    networks: [agent]            # airlab ağına (servisler/DB) bağlı değil; yalnız dışa HTTPS
-    mem_limit: 512m
-    cpus: 0.5
-    stop_grace_period: 30s       # SIGTERM → mevcut tick biter, durum SQLite'ta kalır
-
-  # Aynı imajdan ayrı CLI oturumları: docker compose run --rm sre-agent-cli ask "..."
-  sre-agent-cli:
-    profiles: [agent-cli]
-    image: airlab/sre-agent:${IMAGE_TAG:-1.0.0}
-    entrypoint: ["sre-agent"]
-    command: ["--help"]
-    env_file: [agent.env]
-    environment:
-      AGENT_DATA_DIR: /data
-    volumes: ["agent-data:/data"]
-    networks: [agent]
-    stdin_open: true
-    tty: true
-    mem_limit: 512m
-    cpus: 0.5
-
   # ---- SRE Operations Platform (sre-platform/): PostgreSQL + FastAPI + worker + React arayüz, aynı APP_VM'de.
   # Gizli değerler sre-platform.env (scripts/gen-sre-platform-env.sh üretir, chmod 600) + agent.env (Dynatrace/Claude).
   #   docker compose --profile platform build
   #   docker compose --profile platform up -d           # sre-migrate şemayı/tohumu uygular, sonra servisler kalkar
-  #   docker compose stop sre-agent                     # eski SQLite watch'unu durdur (sre-worker devralır)
+  # Ajan çekirdeği (sre-agent/) ayrı container değildir; sre-backend/sre-worker imajına paket olarak girer.
   # Arayüz: http://<APP_VM>:8090
   sre-postgres:
     profiles: [platform]
@@ -339,7 +305,7 @@ services:
       SRE_DB_POOL_SIZE: "3"
     volumes:
       - "sre-platform-data:/data"
-      - "agent-data:/legacy:ro"            # eski sre-agent raporları: sre-platform import-reports /legacy/reports
+      - "agent-data:/legacy:ro"            # kaldırılan eski agent container'ının raporları (import-reports /legacy/reports)
     depends_on:
       sre-migrate: { condition: service_completed_successfully }
     networks: [sre-data, agent]

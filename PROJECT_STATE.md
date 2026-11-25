@@ -27,7 +27,7 @@ Chaos v2 açık maddeleri:
 |---|---|
 | `sre-platform/` backend + frontend + worker, compose `platform` profili | ✅ APP_VM'de çalışıyor — UI `http://172.20.229.26:8090` |
 | sre-postgres 17.7 (internal ağ), Alembic 0001 + LangGraph checkpointer/Store | ✅ |
-| Watch: eski `airlab-sre-agent` (SQLite) durduruldu → `sre-worker` (PG durumlu) devraldı | ✅ gerçek MCP ile çalışıyor |
+| Watch: `sre-worker` (PG durumlu). Eski tek başına agent container'ı ve CLI 2026-11-25'te kaldırıldı | ✅ gerçek MCP ile çalışıyor |
 | Eski 7 JSON rapor `import` araştırması olarak içe aktarıldı | ✅ |
 | Testler | backend 37/37 (PG), ajan çekirdeği 38/38, frontend 17/17 + tsc + build; gerçek MCP E2E (login → araştırma → SSE → kanıt) ✅ |
 | Trace/Davis ilişkilendirmesi canlı veriyle | ⏳ dağıtım anında iş trafiği yoktu (sorgular doğru, sonuç EMPTY) — deney sırasında doğrulanmalı |
@@ -112,14 +112,14 @@ Kod `sre-agent/`; mimari kararlar `docs/decisions/ADR-007-sre-agent.md`; işleti
 
 | Konu | Durum |
 |---|---|
-| Yığın | Python 3.13, LangGraph 1.2.24 + SqliteSaver, langchain-anthropic 1.7.12 (`claude-sonnet-5-5`), langchain-mcp-adapters 0.3.2 / mcp 1.30.0, LangSmith 0.16 (redakte) |
+| Yığın | Python 3.13, LangGraph 1.2.24 (checkpoint: platformda PostgresSaver), langchain-anthropic 1.7.12 (`claude-sonnet-5-5`), langchain-mcp-adapters 0.3.2 / mcp 1.30.0, LangSmith 0.16 (redakte) |
 | Veri kaynağı | Yalnız Dynatrace Remote MCP `execute-dql`. 21 araç keşfedildi; sabit katalog (15 sinyal + 2 ek kanıt). DB bağlantısı yok, sessiz fallback yok |
-| CLI | `doctor`, `analyze` (`--last`, `--from/--to`, `--baseline-from/--baseline-to`), `ask`, `chat`, `watch`, `watch-status`, `report list/show` |
+| Arayüz | Yalnız SRE Operations Platform (CLI 2026-11-25'te kullanıcı kararıyla kaldırıldı) |
 | Puan / atıf | Deterministik. Risk, data coverage ve causality confidence ayrı. Mechanism'ler: row_lock (kök engelleyici), pool_saturation, global_connection_pressure (mutlak veya göreli), db_cpu, app_vm_cpu (agent'ın kendi CPU'su `self_is_source`), app_container_cpu, network_path_latency, independent_load; tail latency (mean ×5) |
 | Testler | ✅ 38/38 (`pytest`): puan formülü, veri kalitesi, 10 senaryo, graf (MCP/Claude kesintisi, checkpoint, redaksiyon, prompt injection), watch durum makinesi |
 | Değerlendirme | ✅ sentetik 10/10 (`deploy/evidence/sre-agent-eval-synthetic.json`, fixture). ✅ **gerçek VM deneyleri 5/5** (`deploy/evidence/sre-agent-eval-real.json`): E0 sorun yok; E2 row_lock reservation → checkin (yüksek güven); E1×3 baggage bağımsız yük, yayılma yok |
 | Örnek raporlar | `docs/examples/sre-agent/` (gerçek veri + Claude açıklaması) |
-| Dağıtım | `app-vm/docker-compose.yml` → `sre-agent` (watch, profil `agent`) + `sre-agent-cli` (profil `agent-cli`), volume `agent-data`, ağ `airlab-agent` (DB/servis ağına bağlı değil). Gizli bilgiler `app-vm/agent.env` (gitignored, `scripts/gen-agent-env.sh`) |
+| Dağıtım | Ayrı container yok: çekirdek `sre-platform` imajına paket olarak kurulur. Ağ `airlab-agent` (dışa HTTPS). Gizli bilgiler `app-vm/agent.env` (gitignored, `scripts/gen-agent-env.sh`). `agent-data` volume'u yalnız eski raporlar için (salt-okur) |
 
 Aşama 2 açık maddeleri:
 1. Eşikler 2026-11-21 deneylerine göre kalibre edildi. E3–E8 (havuz, global bağlantı, DB/APP CPU) VM'de koşulmadı; bu

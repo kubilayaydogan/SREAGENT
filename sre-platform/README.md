@@ -91,8 +91,7 @@ scp deploy/out/sre-platform.env airlab-app:/opt/airlab/app-vm/sre-platform.env  
 cd /opt/airlab/app-vm
 docker compose --profile platform build sre-migrate sre-frontend
 docker compose --profile platform up -d          # sre-migrate: alembic upgrade + tohum, sonra servisler
-docker compose stop sre-agent                     # eski SQLite watch'u — sre-worker devralır (ikisi birden çalışmasın)
-docker compose exec sre-worker sre-platform import-reports /legacy/reports   # eski raporlar (idempotent)
+docker compose exec sre-worker sre-platform import-reports /legacy/reports   # kaldırılan eski agent'ın raporları (idempotent)
 ```
 
 Göç komutları: `docker compose --profile platform run --rm sre-migrate` (= `sre-platform migrate --seed`);

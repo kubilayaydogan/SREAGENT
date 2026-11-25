@@ -1,12 +1,14 @@
 # airlab SRE Agent (Aşama 2)
 
-airlab laboratuvarı (4 Java servisi + PostgreSQL 17) için **salt-okur** SRE asistanı. Tek canlı veri kaynağı
+airlab laboratuvarı (4 Java servisi + PostgreSQL 17) için **salt-okur** SRE asistanının çekirdeği. Ayrı bir komut
+satırı aracı ya da container değildir: `sre-platform` (backend + worker) imajına Python paketi olarak kurulur ve
+yalnız platform üzerinden kullanılır (sohbet, araştırma, watch, periyodik kontrol). Tek canlı veri kaynağı
 **Dynatrace Remote MCP** (`execute-dql`). DB'ye, Docker'a veya uygulamalara bağlanmaz. MCP kesilirse başka kaynağa
 geçmez; kısmi rapor yazar.
 
 | Katman | Seçim |
 |---|---|
-| Akış | LangGraph 1.2 `StateGraph` + `SqliteSaver` checkpoint (`/data/checkpoints.sqlite`) |
+| Akış | LangGraph 1.2 `StateGraph`; checkpoint platformun PostgreSQL'inde (`PostgresSaver`) |
 | MCP | langchain-mcp-adapters 0.3.2 / mcp 1.30 (streamable HTTP, Bearer platform token) |
 | LLM | Claude `claude-opus-5-5` (langchain-anthropic). Yalnız iki iş yapar: soruyu yorumlamak ve bulguları Türkçe açıklamak |
 | İzleme | LangSmith (girdi/çıktı redakte edilir; LangSmith yoksa agent çalışmaya devam eder) |
@@ -33,23 +35,9 @@ plan ─► collect (15 katalog DQL, tek MCP oturumu) ─► analyze (özellik +
 * **Kaos etiketleri** (`experiment_id`, `lab_hold`) telemetri girişte silinir. Kanıt olarak kullanılmaz, rapora ve
   Claude'a gitmez.
 
-## CLI
-
-```bash
-sre-agent doctor                       # yapılandırma, MCP araç keşfi, zorunlu sinyaller, Claude, LangSmith
-sre-agent analyze --last 15            # son 15 dk (ingest gecikmesi 120 sn düşülür)
-sre-agent analyze --from 2026-11-21T14:52:00Z --to 2026-11-21T14:56:00Z \
-                  --baseline-from 2026-11-21T14:47:00Z --baseline-to 2026-11-21T14:51:00Z
-sre-agent ask "son 30 dakikada checkin neden yavaş?"
-sre-agent chat [--thread chat-xxxx]    # oturum geçmişi /data/state.sqlite'ta
-sre-agent watch [--once]               # sürekli izleme (normal döngüde Claude yok)
-sre-agent watch-status                 # açık olay, koşul sayaçları, son olaylar
-sre-agent report list | report show <id> [--json]
-```
-
-`--no-llm` her komutta Claude'u kapatır (deterministik açıklama).
-
 ## Watch
+
+Durum makinesi `airlab_agent.watch.Watcher`; platform worker'ı PostgreSQL durum deposuyla (`PgStateStore`) çalıştırır.
 
 * Tamamlanmış 1 dk pencereler. Pencere sonu `now − ingest_lag_seconds` olur.
 * Her pencere bir kez değerlendirilir; yeniden başlatmada aynı pencere tekrar sayılmaz.
@@ -69,7 +57,7 @@ sre-agent report list | report show <id> [--json]
 | `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` | Claude (varsayılan `claude-opus-5-5`, effort `medium`); anahtar yoksa deterministik mod |
 | `CLAUDE_RCA_MODEL` | RCA açıklamasını yazan model (varsayılan `claude-opus-5-5`, effort `high`, refusal'da sunucu tarafı fallback). Soru yorumlama ve sohbet `CLAUDE_MODEL` ile (o da varsayılan Opus 5.5) |
 | `LANGSMITH_API_KEY`, `LANGSMITH_TRACING`, `LANGSMITH_PROJECT` | İzleme (redakte) |
-| `AGENT_DATA_DIR` | Durum, checkpoint, rapor dizini (container'da `/data`) |
+| `AGENT_DATA_DIR` | Rapor dosyaları dizini (eval/test; platform raporları PostgreSQL'e yazar) |
 | `AGENT_CONFIG` | `defaults.yaml` üzerine birleştirilecek YAML (eşikler, ağırlıklar, bütçeler) |
 
 Bütçeler (`budgets`): çalıştırma başına sorgu sayısı, ek kanıt turu, toplam süre, sorgu zaman aşımı/yeniden deneme,
@@ -85,16 +73,9 @@ python eval/run_eval.py --real # gerçek VM deney pencereleri, MCP üzerinden (e
 
 Sentetik raporlar `fixture: true` ile işaretlenir ve Markdown'da "FIXTURE / SENTETİK VERİ" uyarısı taşır.
 
-## Dağıtım (APP_VM)
+## Dağıtım
 
-```bash
-scripts/gen-agent-env.sh                               # deploy/out/secrets.env → deploy/out/agent.env (600)
-scp deploy/out/agent.env airlab-app:/opt/airlab/app-vm/agent.env
-cd /opt/airlab/app-vm
-docker compose --profile agent build sre-agent
-docker compose --profile agent-cli run --rm sre-agent-cli doctor
-docker compose --profile agent up -d sre-agent         # watch
-docker compose --profile agent-cli run --rm sre-agent-cli ask "son 15 dakikada sorun var mı?"
-```
+Ajan ayrı dağıtılmaz; `sre-platform/README.md` → Kurulum. Gizli değerler `app-vm/agent.env`
+(`scripts/gen-agent-env.sh`), platform servisleri bunu `env_file` olarak okur.
 
 Ayrıntı: `docs/sre-agent-runbook.md`, `docs/decisions/ADR-007-sre-agent.md`.

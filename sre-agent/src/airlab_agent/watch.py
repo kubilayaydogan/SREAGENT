@@ -1,7 +1,7 @@
 """Sürekli izleme. Normal döngü tamamen deterministiktir (Claude çağrısı yok).
 
 - Değerlendirme birimi: ingest gecikmesi düşülmüş, TAMAMLANMIŞ 1 dakikalık pencereler.
-- Her pencere bir kez değerlendirilir (son değerlendirilen pencere SQLite'ta) → yeniden başlatmada aynı pencere ikinci
+- Her pencere bir kez değerlendirilir (son değerlendirilen pencere durum deposunda) → yeniden başlatmada aynı pencere ikinci
   kez onay sayılmaz; en fazla max_backfill_windows geriye gidilir.
 - Olay açma: aynı anahtar art arda confirm_windows YENİ pencerede `open` eşiğini aşmalı.
 - Hysteresis: kapanma `clear` eşiğinin altında art arda clear_windows pencere ister; arada kalan değer sayaçları sıfırlar.
@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import logging
 import signal
-import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 from statistics import median
@@ -95,68 +94,17 @@ def step(c: dict, v: str, now: datetime, cfg: dict) -> tuple[dict, str | None]:
 
 
 # ---------------------------------------------------------------- kalıcı durum
-class StateStore:
-    def __init__(self, path):
-        self.db = sqlite3.connect(str(path))
-        self.db.executescript("""
-        CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT);
-        CREATE TABLE IF NOT EXISTS cond(k TEXT PRIMARY KEY, v TEXT);
-        CREATE TABLE IF NOT EXISTS hist(end TEXT PRIMARY KEY, v TEXT);
-        CREATE TABLE IF NOT EXISTS incidents(id TEXT PRIMARY KEY, opened_at TEXT, closed_at TEXT, status TEXT,
-                                             keys TEXT, reports TEXT);
-        CREATE TABLE IF NOT EXISTS events(ts TEXT, kind TEXT, key TEXT, detail TEXT);
-        CREATE TABLE IF NOT EXISTS chat(thread TEXT, ts TEXT, role TEXT, content TEXT);
-        """)
-
-    def get(self, k, default=None):
-        r = self.db.execute("SELECT v FROM kv WHERE k=?", (k,)).fetchone()
-        return json.loads(r[0]) if r else default
-
-    def put(self, k, v):
-        self.db.execute("INSERT OR REPLACE INTO kv VALUES(?,?)", (k, json.dumps(v)))
-        self.db.commit()
-
-    def conds(self) -> dict[str, dict]:
-        return {k: json.loads(v) for k, v in self.db.execute("SELECT k, v FROM cond")}
-
-    def put_cond(self, k, v):
-        self.db.execute("INSERT OR REPLACE INTO cond VALUES(?,?)", (k, json.dumps(v)))
-
-    def history(self, n: int) -> list[dict]:
-        rows = self.db.execute("SELECT v FROM hist ORDER BY end DESC LIMIT ?", (n,)).fetchall()
-        return [json.loads(r[0]) for r in reversed(rows)]
-
-    def add_hist(self, end: str, m: dict, keep: int):
-        self.db.execute("INSERT OR REPLACE INTO hist VALUES(?,?)", (end, json.dumps(m)))
-        self.db.execute("DELETE FROM hist WHERE end NOT IN (SELECT end FROM hist ORDER BY end DESC LIMIT ?)", (keep,))
-
-    def event(self, kind, key, detail):
-        ts = iso(datetime.now(timezone.utc))
-        self.db.execute("INSERT INTO events VALUES(?,?,?,?)", (ts, kind, key, json.dumps(detail, default=str)))
-        self.db.commit()
-        log.info("event %s %s %s", kind, key, json.dumps(detail, default=str, ensure_ascii=False))
-
-    def open_incident(self) -> dict | None:
-        r = self.db.execute("SELECT id, opened_at, keys, reports FROM incidents WHERE status='open'").fetchone()
-        return {"id": r[0], "opened_at": r[1], "status": "open", "keys": json.loads(r[2]),
-                "reports": json.loads(r[3])} if r else None
-
-    def save_incident(self, inc: dict):
-        self.db.execute("INSERT OR REPLACE INTO incidents VALUES(?,?,?,?,?,?)",
-                        (inc["id"], inc["opened_at"], inc.get("closed_at"), inc["status"], json.dumps(inc["keys"]),
-                         json.dumps(inc["reports"])))
-        self.db.commit()
-
-    def commit(self):
-        self.db.commit()
+# Durum deposu dışarıdan verilir (platform: sre_platform.services.watch_pg.PgStateStore). Arayüz:
+#   get(k, default) / put(k, v) / conds() / put_cond(k, v) / history(n) / add_hist(end, m, keep)
+#   event(kind, key, detail) / open_incident() / save_incident(inc) / commit()
 
 
 # ---------------------------------------------------------------- döngü
 class Watcher:
-    def __init__(self, settings, gateway_factory, analyze_fn, store: StateStore | None = None, clock=None):
+    def __init__(self, settings, gateway_factory, analyze_fn, store, clock=None):
         self.s, self.cfg = settings, settings.cfg
         self.gw_factory, self.analyze_fn = gateway_factory, analyze_fn
-        self.store = store or StateStore(settings.state_db)
+        self.store = store
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     def _new_windows(self) -> tuple[list[Window], list[Window]]:

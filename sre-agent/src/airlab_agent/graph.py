@@ -1,5 +1,5 @@
-"""LangGraph analiz akışı. Her çalıştırma ayrı thread_id ile SQLite checkpoint'e yazılır (yarıda kalan çalıştırma
-aynı run_id ile kaldığı yerden sürdürülebilir).
+"""LangGraph analiz akışı. Her çalıştırma ayrı thread_id ile checkpoint'e yazılır (platformda PostgresSaver: yarıda
+kalan çalıştırma aynı run_id ile kaldığı yerden sürdürülebilir).
 
 plan → collect → analyze → [extra_evidence ≤ max_iterations] → explain → finalize
 """
@@ -235,7 +235,7 @@ def run_analysis(settings, gateway_factory, start: datetime, end: datetime, *, l
                  baseline: tuple[datetime, datetime] | None = None, checkpointer=None, persist_files: bool = True,
                  on_node=None, recursion_limit: int = 25, trace_run_id=None,
                  trace_metadata: dict | None = None, trace_tags: list[str] | None = None) -> dict[str, Any]:
-    """Analizi çalıştırır. `checkpointer` verilmezse SQLite (CLI); platform PostgresSaver verir.
+    """Analizi çalıştırır. `checkpointer` verilmezse bellek içi (eval/test); platform PostgresSaver verir.
     `on_node(name, update)` her düğüm bittiğinde çağrılır (ilerleme olayları için).
     Tracing: üstte çalışan bir adım (ör. sohbet turu) varsa analiz onun trace'inin altına yerleşir; yoksa kök trace
     açılır. `trace_run_id` verilirse bu run'ın LangSmith kimliği olur (platformda investigation id → trace linki)."""
@@ -263,7 +263,7 @@ def run_analysis(settings, gateway_factory, start: datetime, end: datetime, *, l
         if persist_files:
             settings.ensure_dirs()
         return _go(checkpointer)
-    from langgraph.checkpoint.sqlite import SqliteSaver
-    settings.ensure_dirs()
-    with SqliteSaver.from_conn_string(str(settings.checkpoint_db)) as saver:
-        return _go(saver)
+    from langgraph.checkpoint.memory import InMemorySaver      # checkpointer verilmezse (eval, test) kalıcı değil
+    if persist_files:
+        settings.ensure_dirs()
+    return _go(InMemorySaver())
