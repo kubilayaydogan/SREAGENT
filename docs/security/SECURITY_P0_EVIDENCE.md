@@ -3,8 +3,8 @@
 Plan: [SECURITY_IMPLEMENTATION_PLAN.md](SECURITY_IMPLEMENTATION_PLAN.md) §3 · Gap analizi:
 [SECURITY_GAP_ANALYSIS.md](SECURITY_GAP_ANALYSIS.md) · Tarih: 2026-11-25
 
-**Durum:** P0 kodu, testleri ve yapılandırması tamamlandı ve test edildi. **APP_VM'e deploy EDİLMEDİ** — deploy
-uyumsuz değişiklik içerir (herkes yeniden giriş yapar, frontend container portu 80→8080) ve onay bekler (§9).
+**Durum:** P0 kodu, testleri ve yapılandırması tamamlandı, test edildi ve **2026-11-25 APP_VM'e deploy edildi**
+(kullanıcı onayıyla; aktif chaos deneyi yokken). Canlı doğrulama §3.1.
 
 ## 1. Özet
 
@@ -139,6 +139,23 @@ hız sınırı, agent devre dışıyken resume ve chat, viewer'ın admin ucu (au
 dört göz ihlali, DNS rebinding (MCP + LLM), metadata adresine Slack gönderimi, `/api/docs` erişimi,
 audit'te parola sızıntısı.
 
+### 3.1 Canlı deploy doğrulaması (APP_VM, 2026-11-25)
+
+| Kontrol | Sonuç |
+|---|---|
+| Migration | `0004 → 0006` (`migration tamam`, revision 0006) |
+| Container durumu | sre-frontend/backend/worker/postgres `healthy` |
+| Çalışma kullanıcısı / kök FS / yetenekler | frontend `nginx`, backend/worker `sre`; `ReadonlyRootfs=true`, `CapDrop=[ALL]`, `no-new-privileges:true` |
+| `GET /healthz`, `/api/health`, `/` | 200 |
+| `GET /api/openapi.json`, `/api/docs` | 404 |
+| `GET /api/auth/me` (token yok) | 401 |
+| Başarısız login | 401 + audit `auth.login / denied / bad_credentials`, `source_ip` = gerçek istemci (nginx değil) |
+| Güvenlik başlıkları | CSP, `X-Frame-Options: DENY` |
+| Worker | `watch` ve `langsmith-sync` işleri `ok` (çalışma anı SSRF kontrolü MCP'yi engellemedi); heartbeat dosyası güncel; log'da hata yok |
+| Mevcut oturumlar | Deploy anında `auth_sessions` boş → tüm eski token'lar geçersiz (beklenen) |
+
+Kullanıcı tarafından doğrulanacak: arayüzde yeniden giriş, çıkış sonrası eski sekmenin 401 alması, bir sohbet turu.
+
 ## 4. Kalan riskler ve sınırlamalar
 
 | # | Risk | Neden kaldı | Plan |
@@ -155,7 +172,7 @@ audit'te parola sızıntısı.
 | R10 | Worker healthcheck eşiği 900 sn (uzun iş sırasında tur sürer) | Tur içi iş | Kabul |
 | R11 | `SRE_TRUSTED_PROXIES` varsayılanı tüm Docker özel aralığı (172.16.0.0/12) | Ağ alt ağı otomatik atanıyor | Gerekirse sre-web alt ağı sabitlenip daraltılır |
 
-## 5. Deploy ve rollback (onay bekliyor)
+## 5. Deploy ve rollback
 
 **Uyumsuz etkiler:** (1) tüm mevcut token'lar geçersiz → herkes yeniden giriş yapar; (2) frontend container portu
 8080 (host portu 8090 değişmez); (3) `/api/docs` kapanır.

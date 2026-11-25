@@ -11,4 +11,10 @@ regexes = [
   '''hooks\.slack\.com/services/T000/B000/secretsecret''',               # tests/test_slack_notify.py
   '''ci-only-password''',                                                # .github/workflows/ci.yml geçici CI veritabanı
   '''test-x{40}''',                                                       # tests/conftest.py JWT test secret'ı
+  '''^[a-z]+-parola-[0-9]+$''',                                          # testlerde sentetik kullanıcı parolaları (ör. sre1-parola-123)
+]
+# Tek tek dosya (dizin değil): içerikleri incelendi, secret yok
+paths = [
+  '''^docs/security/SECURITY_IMPLEMENTATION\.md$''',                    # gereksinim metni ("signing/encryption keys" vb. düz metin)
+  '''^scripts/export-openapi\.sh$''',                                   # curl URL'sinde kabuk değişkeni ($H:${s#*:}), kimlik bilgisi yok
 ]
