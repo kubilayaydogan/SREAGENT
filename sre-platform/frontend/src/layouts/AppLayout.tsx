@@ -1,8 +1,8 @@
 import { Activity, BookOpen, Bot, ClipboardCheck, FileText, History, LayoutDashboard, LogOut, Menu, Siren, X } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router";
-import { Badge } from "@/components/ui/primitives";
-import { useSystemInfo } from "@/hooks/queries";
+import { Badge, Select } from "@/components/ui/primitives";
+import { useLlmModel, useSetLlmModel, useSystemInfo } from "@/hooks/queries";
 import { useAuth } from "@/services/auth";
 import { cn } from "@/lib/utils";
 
@@ -28,10 +28,37 @@ function SystemStatus() {
       <Badge title={data.dynatrace_environment ?? ""} className={data.mcp_configured ? "" : "border-st-warning/50 text-st-warning"}>
         MCP {data.mcp_configured ? "yapılandırıldı" : "yapılandırılmadı"}
       </Badge>
-      <Badge className={data.llm_enabled ? "" : "border-st-warning/50 text-st-warning"}>
-        {data.llm_enabled ? `LLM ${data.llm_model ?? ""}` : "LLM kapalı (deterministik)"}
-      </Badge>
+      {data.llm_enabled ? <ModelSwitch fallback={data.llm_model} /> : (
+        <Badge className="border-st-warning/50 text-st-warning">LLM kapalı (deterministik)</Badge>
+      )}
     </div>
+  );
+}
+
+/** Claude modeli: yönetici seçer (Opus/Sonnet), diğer roller yalnız görür. Seçim backend ve worker'da hemen geçerli. */
+function ModelSwitch({ fallback }: { fallback: string | null }) {
+  const { user } = useAuth();
+  const { data } = useLlmModel();
+  const set = useSetLlmModel();
+  const current = data?.model ?? fallback;
+  const label = data?.options.find((o) => o.id === current)?.label ?? current ?? "";
+  const who = data?.changed_by ? `Son değiştiren: ${data.changed_by}${data.changed_at ? " · " + new Date(data.changed_at).toLocaleString("tr-TR") : ""}` : "";
+  if (user?.role !== "admin" || !data) return <Badge title={who}>LLM {label}</Badge>;
+  return (
+    <label className="flex items-center gap-1.5" title={who}>
+      <span className="text-muted">LLM</span>
+      <Select
+        aria-label="Claude modeli"
+        className="h-7 py-0 text-[11px]"
+        value={current ?? ""}
+        disabled={set.isPending}
+        onChange={(e) => set.mutate(e.target.value)}
+      >
+        {data.options.map((o) => (
+          <option key={o.id} value={o.id}>{o.label}</option>
+        ))}
+      </Select>
+    </label>
   );
 }
 

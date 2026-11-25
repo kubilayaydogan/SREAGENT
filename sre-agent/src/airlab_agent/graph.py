@@ -181,7 +181,7 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
                                          "features_summary", "status")}
         try:
             text = llm.explain(payload, state.get("question"))
-            return {"explanation": text, "explanation_source": f"Claude ({settings.claude_rca_model})"}
+            return {"explanation": text, "explanation_source": f"Claude ({getattr(llm, 'rca_model_name', settings.claude_rca_model)})"}
         except LlmUnavailable as e:
             return {"explanation": rpt.deterministic_explanation(draft),
                     "explanation_source": "deterministik (Claude erişilemedi)",

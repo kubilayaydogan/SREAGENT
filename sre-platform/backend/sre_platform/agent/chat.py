@@ -307,6 +307,8 @@ class ChatOrchestrator:
         async with transaction(self.rt.sm) as s:
             m = await conversations.add_message(s, ctx.conversation_id, MessageRole.USER, question)
             ctx.result["user_message_id"] = str(m.id)
+        from ..services import model_switch
+        await model_switch.refresh(self.rt)             # arayüzde seçilen model (Opus/Sonnet)
         graph = self._graph(ctx)
         state = await graph.ainvoke({"question": question, "messages": [{"role": "user", "content": question}]},
                                     self._config(ctx))

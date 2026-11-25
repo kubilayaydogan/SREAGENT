@@ -69,8 +69,14 @@ class ClaudePort:
 
     def __init__(self, llm):
         self.llm = llm
-        self.model_name = llm.settings.claude_model
-        self.rca_model_name = getattr(llm.settings, "claude_rca_model", self.model_name)
+
+    @property
+    def model_name(self) -> str:                      # arayüzden değiştirilebilir (services.model_switch)
+        return getattr(self.llm, "model_name", None) or self.llm.settings.claude_model
+
+    @property
+    def rca_model_name(self) -> str:
+        return getattr(self.llm, "rca_model_name", None) or self.model_name
 
     async def route(self, question, history, *, apps, app=None) -> ChatRoute:
         sys = ROUTE_SYSTEM.format(now=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

@@ -7,6 +7,7 @@ araç uyduramaz ve telemetri içindeki metin (log içeriği, sorgu metni) talima
 from __future__ import annotations
 
 import json
+import threading
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -73,26 +74,59 @@ def heuristic_request(question: str, apps: list[str]) -> AnalysisRequest:
 
 
 class Llm:
+    """Claude istemcileri. Model çalışırken değiştirilebilir (`set_model`): platform arayüzünden Opus/Sonnet seçimi.
+    Override yoksa genel istemci CLAUDE_MODEL, RCA istemcisi CLAUDE_RCA_MODEL kullanır; override her ikisini belirler.
+    İstemciler (model, tür) başına bir kez kurulur ve önbellekte tutulur."""
+
     def __init__(self, settings, callbacks=None):
-        from langchain_anthropic import ChatAnthropic
-        b = settings.cfg["budgets"]
         self.settings = settings
         self.callbacks = callbacks or []
-        self.chat = ChatAnthropic(model=settings.claude_model, api_key=settings.anthropic_key,
-                                  max_tokens=b["llm_max_tokens"], max_retries=b["llm_retries"],
-                                  default_request_timeout=b["llm_timeout_seconds"],
-                                  output_config={"effort": b.get("llm_effort", "medium")},
+        self._override: str | None = None
+        self._clients: dict[tuple[str, str], object] = {}
+        self._lock = threading.Lock()
+        self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
+
+    # ------------------------------------------------------------ model seçimi
+    def set_model(self, model: str | None) -> None:
+        self._override = model or None
+
+    @property
+    def model_name(self) -> str:
+        return self._override or self.settings.claude_model
+
+    @property
+    def rca_model_name(self) -> str:
+        return self._override or self.settings.claude_rca_model
+
+    def _client(self, model: str, kind: str):
+        key = (model, kind)
+        with self._lock:
+            c = self._clients.get(key)
+            if c is None:
+                from langchain_anthropic import ChatAnthropic
+                b = self.settings.cfg["budgets"]
+                rca = kind == "rca"
+                # Thinking parametresi gönderilmez (Opus/Sonnet 5.5'te adaptive); derinlik effort ile ayarlanır.
+                # thinking max_tokens'a dahildir. Refusal olursa sunucu tarafı fallback ("default") devreye girer.
+                c = ChatAnthropic(model=model, api_key=self.settings.anthropic_key,
+                                  max_tokens=b["rca_max_tokens"] if rca else b["llm_max_tokens"],
+                                  max_retries=b["llm_retries"],
+                                  default_request_timeout=b["rca_timeout_seconds"] if rca else b["llm_timeout_seconds"],
+                                  output_config={"effort": b["rca_effort"] if rca else b.get("llm_effort", "medium")},
                                   betas=["server-side-fallback-2026-07-01"],
                                   model_kwargs={"fallbacks": "default"})
-        # RCA açıklaması ayrı istemciyle (varsayılan claude-opus-5-5). Thinking parametresi gönderilmez (Opus 5.5'te
-        # her zaman adaptive); derinlik effort ile ayarlanır. Refusal olursa sunucu tarafı fallback devreye girer.
-        self.rca_chat = ChatAnthropic(model=settings.claude_rca_model, api_key=settings.anthropic_key,
-                                      max_tokens=b["rca_max_tokens"], max_retries=b["llm_retries"],
-                                      default_request_timeout=b["rca_timeout_seconds"],
-                                      output_config={"effort": b["rca_effort"]},
-                                      betas=["server-side-fallback-2026-07-01"],
-                                      model_kwargs={"fallbacks": "default"})
-        self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
+                self._clients[key] = c
+            return c
+
+    @property
+    def chat(self):
+        """Yorumlama, yönlendirme ve sohbet cevapları."""
+        return self._client(self.model_name, "chat")
+
+    @property
+    def rca_chat(self):
+        """RCA açıklaması (daha yüksek effort ve token bütçesi)."""
+        return self._client(self.rca_model_name, "rca")
 
     def _track(self, msg) -> None:
         u = getattr(msg, "usage_metadata", None) or {}

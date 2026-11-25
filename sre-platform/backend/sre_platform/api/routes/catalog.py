@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db.models import IncidentStatus, InvestigationStatus, User, WatchCondition
 from ...repositories import applications, incidents, investigations
-from ..deps import current_user, db
+from ..deps import admin, current_user, db
 from ..schemas import ApplicationOut, IncidentOut, InvestigationOut, RangeKey
 
 router = APIRouter(tags=["applications"])
@@ -130,6 +130,8 @@ async def ready(request: Request):
 @system.get("/system/info")
 async def info(request: Request, _: User = Depends(current_user)):
     rt = request.app.state.rt
+    from ...services import model_switch
+    await model_switch.refresh(rt)                     # başka süreçte (ör. worker) yapılan seçim de görünsün
     return {"environment": rt.ps.environment, "llm_enabled": rt.llm_enabled,
             "llm_model": rt.llm.model_name if rt.llm else None, "mcp_configured": bool(rt.agent.mcp_url and rt.agent.dt_token),
             "dynatrace_environment": rt.agent.dt_env or None,
@@ -140,3 +142,22 @@ async def info(request: Request, _: User = Depends(current_user)):
                 "max_iterations": rt.agent.cfg["budgets"]["max_iterations"],
                 "max_window_minutes": rt.agent.cfg["windows"]["max_minutes"]},
             "active_runs": request.app.state.runs.active_count()}
+
+
+@system.get("/system/llm-model")
+async def get_llm_model(request: Request, _: User = Depends(current_user)):
+    from ...services import model_switch
+    return await model_switch.state(request.app.state.rt)
+
+
+@system.put("/system/llm-model")
+async def put_llm_model(request: Request, body: dict, u: User = Depends(admin)):
+    from fastapi import HTTPException
+    from ...services import model_switch
+    rt = request.app.state.rt
+    if rt.llm is None:
+        raise HTTPException(409, "LLM kapalı (ANTHROPIC_API_KEY yok); model seçilemez")
+    try:
+        return await model_switch.select(rt, str(body.get("model", "")), username=u.username)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from None

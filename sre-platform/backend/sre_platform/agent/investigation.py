@@ -44,6 +44,8 @@ class InvestigationRunner:
                   notes: list[str] | None = None) -> tuple[Investigation, dict | None]:
         cancel = cancel or threading.Event()
         sm = self.rt.sm
+        from ..services import model_switch
+        await model_switch.refresh(self.rt)             # worker/backend: arayüzde seçilen model
         async with transaction(sm) as s:
             inv = await investigations.get(s, inv_id)
             await investigations.mark_running(s, inv)

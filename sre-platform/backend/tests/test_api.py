@@ -93,6 +93,8 @@ def test_health_auth_rbac(api_settings, tmp_path):
         assert r.status_code == 403 and r.json()["error"] == "forbidden"
         assert (await c.post("/api/incidents", headers=v, json={"title": "x x x"})).status_code == 403
         assert (await c.get("/api/users", headers=v)).status_code == 403
+        assert (await c.put("/api/system/llm-model", headers=v, json={"model": "claude-sonnet-5-5"})).status_code == 403
+        assert (await c.get("/api/system/llm-model", headers=v)).status_code == 200      # okuma herkese açık
         for _ in range(5):
             await c.post("/api/auth/login", json={"username": "izleyici", "password": "yanlis-parola"})
         assert (await c.post("/api/auth/login", json={"username": "izleyici",

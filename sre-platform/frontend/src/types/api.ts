@@ -403,6 +403,15 @@ export interface Approval {
   created_at: string;
 }
 
+export interface LlmModelState {
+  enabled: boolean;
+  model: string | null;
+  rca_model: string | null;
+  options: { id: string; label: string }[];
+  changed_by: string | null;
+  changed_at: string | null;
+}
+
 export interface SystemInfo {
   environment: string;
   llm_enabled: boolean;

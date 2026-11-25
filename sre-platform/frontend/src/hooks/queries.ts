@@ -16,6 +16,7 @@ import type {
   InvestigationDetail,
   KnownIssue,
   KnownIssueDetail,
+  LlmModelState,
   Message,
   Page,
   RangeKey,
@@ -36,6 +37,7 @@ export function errorToast(e: unknown, title = "İşlem başarısız") {
 export const keys = {
   apps: ["apps"] as const,
   info: ["info"] as const,
+  llmModel: ["llm-model"] as const,
   dashboard: (range: RangeKey, app?: string) => ["dashboard", range, app ?? ""] as const,
   conversations: (q?: string) => ["conversations", q ?? ""] as const,
   conversation: (id: string) => ["conversation", id] as const,
@@ -53,6 +55,23 @@ export const useApplications = () =>
 
 export const useSystemInfo = () =>
   useQuery({ queryKey: keys.info, queryFn: () => api.get<SystemInfo>("/system/info"), staleTime: 60_000 });
+
+export const useLlmModel = () =>
+  useQuery({ queryKey: keys.llmModel, queryFn: () => api.get<LlmModelState>("/system/llm-model"), staleTime: 30_000 });
+
+/** Yönetici: Claude modelini (Opus/Sonnet) değiştirir; backend ve worker bir sonraki sorguda yeni modeli kullanır. */
+export function useSetLlmModel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (model: string) => api.put<LlmModelState>("/system/llm-model", { model }),
+    onSuccess: (d) => {
+      qc.setQueryData(keys.llmModel, d);
+      qc.invalidateQueries({ queryKey: keys.info });
+      toast.success(`Model değişti: ${d.options.find((o) => o.id === d.model)?.label ?? d.model}`);
+    },
+    onError: (e) => errorToast(e, "Model değiştirilemedi"),
+  });
+}
 
 export const useDashboard = (range: RangeKey, app?: string) =>
   useQuery({

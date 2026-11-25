@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActivityTimeline, toolsFromRecords } from "@/components/ActivityTimeline";
+import { AppLayout } from "@/layouts/AppLayout";
 import DashboardPage from "@/pages/DashboardPage";
 import LoginPage from "@/pages/LoginPage";
 import { AuthProvider } from "@/services/auth";
@@ -118,5 +119,43 @@ describe("ActivityTimeline", () => {
     expect(screen.getByLabelText("hata")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: /PostgreSQL metric'leri/ }));
     expect(screen.getByText("MCP timeout")).toBeInTheDocument();
+  });
+});
+
+describe("LLM model seçici", () => {
+  afterEach(() => { vi.unstubAllGlobals(); tokenStore.clear(); });
+  const info = { environment: "lab", llm_enabled: true, llm_model: "claude-opus-5-5", mcp_configured: true,
+    dynatrace_environment: null, langsmith_tracing: false, limits: {}, active_runs: 0 };
+  const state = (model: string) => ({ enabled: true, model, rca_model: model, changed_by: null, changed_at: null,
+    options: [{ id: "claude-opus-5-5", label: "Claude Opus 5.5" }, { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" }] });
+
+  it("yönetici Opus ↔ Sonnet seçer ve seçim API'ye PUT edilir", async () => {
+    tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
+    const puts: string[] = [];
+    mockFetch({
+      "/api/auth/me": { ...USER, role: "admin" },
+      "/api/system/info": info,
+      "/api/system/llm-model": (init?: RequestInit) => {
+        if (init?.method === "PUT") {
+          const m = JSON.parse(String(init.body)).model as string;
+          puts.push(m);
+          return json(state(m));
+        }
+        return json(state("claude-opus-5-5"));
+      },
+    });
+    wrap(<AppLayout />);
+    const sel = (await screen.findAllByLabelText("Claude modeli"))[0] as HTMLSelectElement;
+    expect(sel.value).toBe("claude-opus-5-5");
+    await userEvent.setup().selectOptions(sel, "claude-sonnet-5-5");
+    await vi.waitFor(() => expect(puts).toEqual(["claude-sonnet-5-5"]));
+  });
+
+  it("yönetici olmayan kullanıcı yalnız modeli görür", async () => {
+    tokenStore.set("tok", new Date(Date.now() + 3_600_000).toISOString());
+    mockFetch({ "/api/auth/me": USER, "/api/system/info": info, "/api/system/llm-model": state("claude-sonnet-5-5") });
+    wrap(<AppLayout />);
+    expect((await screen.findAllByText("LLM Claude Sonnet 5.5")).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText("Claude modeli")).toBeNull();
   });
 });
