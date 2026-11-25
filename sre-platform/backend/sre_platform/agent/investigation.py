@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from airlab_agent.graph import run_analysis
+from airlab_agent.mcp_gateway import safe_error_summary
 from airlab_agent.redact import redact_text
 
 from ..db.models import Investigation, ToolExecution, ToolStatus
@@ -25,7 +26,7 @@ from ..repositories import investigations
 from .events import NODE_MESSAGE, SIGNAL_STEP
 
 log = logging.getLogger("sre.investigation")
-FAILED_STATUSES = {"ERROR", "PERMISSION", "UNAVAILABLE", "TIMEOUT"}
+FAILED_STATUSES = {"ERROR", "PERMISSION", "UNAVAILABLE", "TIMEOUT", "CANCELLED"}
 # Analiz aralığının kaynağı (trace'te plan adımında görünür)
 WINDOW_SOURCE = {"chat": "user_question", "manual": "user", "scheduled": "scheduler", "watch": "watch"}
 
@@ -188,10 +189,13 @@ class InvestigationRunner:
                                                                    "problem'leri evidence'a ekleniyor."})
         events: list[dict] = []
         gw = (rc.gateway_factory if rc else self.rt.gateway_factory)(on_event=events.append)
-        res = await asyncio.to_thread(gw.run_many, correlation.queries(start, end, rc.agent.cfg if rc else self.rt.agent.cfg))
         rows: dict[str, uuid.UUID] = {}
-        for ev in events:
-            await self._handle(("tool", ev), inv_id, rows, [time.monotonic()], emit)
+        try:
+            res = await asyncio.to_thread(gw.run_many,
+                                          correlation.queries(start, end, rc.agent.cfg if rc else self.rt.agent.cfg))
+        finally:                                  # MCP erişilemese de gönderilen çağrılar kayda geçer
+            for ev in events:
+                await self._handle(("tool", ev), inv_id, rows, [time.monotonic()], emit, step_override="traces")
         items = correlation.evidence(res, end)
         async with transaction(self.rt.sm) as s:
             await investigations.upsert_evidence(s, inv_id, items)
@@ -201,41 +205,56 @@ class InvestigationRunner:
                                               "records": 1, "trace_id": it.get("trace_id"),
                                               "dynatrace_query_id": it.get("dynatrace_query_id")})
 
-    async def _handle(self, item: tuple, inv_id: uuid.UUID, rows: dict, node_t: list, emit) -> None:
+    async def _handle(self, item: tuple, inv_id: uuid.UUID, rows: dict, node_t: list, emit,
+                      step_override: str | None = None) -> None:
         kind = item[0]
         if kind == "tool":
             ev = item[1]
             key = ev["key"]
             step = SIGNAL_STEP.get(key, "extra")
+            step = step_override or step
             call_id = _uuid(ev.get("mcp_call_id"))
-            args = {"dqlQueryString": ev["dql"], **({"mcp_call_id": str(call_id)} if call_id else {}),
+            # Ham DQL çağrı kaydına yazılmaz: yalnız kimlikler; istek önizlemesi request_preview kolonunda
+            args = {"query_key": key, **({"mcp_call_id": str(call_id)} if call_id else {}),
                     **({"langsmith_span": True} if ev.get("traced") else {})}
+            mcp = mcp_fields(ev)
+            tid = call_id or rows.get(key) or uuid.uuid4()
             if ev["phase"] == "start":
-                async with transaction(self.rt.sm) as s:
-                    # Çağrı kaydının kimliği = gateway'in mcp_call_id'si = LangSmith tool span kimliği
-                    t = await investigations.tool_started(s, inv_id, ev.get("tool", "execute-dql"), step=step,
-                                                          signal=key, arguments=args, id=call_id)
-                    rows[key] = t.id
-                await emit("tool_started", {"id": str(t.id), "tool": t.tool_name, "signal": key, "step": step,
-                                            "mcp_call_id": str(t.id)})
+                try:
+                    async with transaction(self.rt.sm) as s:
+                        # Çağrı kaydının kimliği = gateway'in mcp_call_id'si = LangSmith tool span kimliği
+                        t = await investigations.tool_started(s, inv_id, ev.get("tool", "execute-dql"), step=step,
+                                                              signal=key, arguments=args, id=tid, mcp=mcp)
+                        rows[key] = t.id
+                except Exception:  # noqa: BLE001 — çağrı kaydı yazılamazsa analiz sonucu değişmez
+                    log.warning("MCP çağrı kaydı yazılamadı (start, %s)", key, exc_info=True)
+                await emit("tool_started", {"id": str(tid), "tool": ev.get("tool", "execute-dql"), "signal": key,
+                                            "step": step, "mcp_call_id": str(tid)})
                 return
             status = ev.get("status")
             ok = status not in FAILED_STATUSES
-            async with transaction(self.rt.sm) as s:
-                if key in rows:
-                    t = await s.get(ToolExecution, rows.pop(key))
-                    await investigations.tool_finished(s, t, ok=ok, duration_ms=ev.get("elapsed_ms"),
-                                                       result_status=status, record_count=ev.get("records"),
-                                                       query_id=ev.get("query_id"), evidence_key=ev.get("evidence_id"),
-                                                       error=ev.get("error"), skipped=status == "SKIPPED_BUDGET")
-                else:
-                    t = await investigations.record_tool(s, inv_id, "execute-dql", ok=ok, step=step, signal=key,
-                                                         arguments=args, result_status=status,
-                                                         error=ev.get("error"), skipped=status == "SKIPPED_BUDGET",
-                                                         duration_ms=ev.get("elapsed_ms"), id=call_id)
-            data = {"id": str(t.id), "tool": t.tool_name, "signal": key, "step": step, "status": status,
-                    "outcome": ev.get("outcome"), "attempts": ev.get("attempts"), "mcp_call_id": str(t.id),
-                    "records": ev.get("records"), "duration_ms": ev.get("elapsed_ms"),
+            err = ev.get("error_summary") or (safe_error_summary(ev.get("error")) if ev.get("error") else None)
+            tid = rows.pop(key, None) or tid
+            try:
+                async with transaction(self.rt.sm) as s:
+                    t = await s.get(ToolExecution, tid)
+                    if t is not None:
+                        await investigations.tool_finished(s, t, ok=ok, duration_ms=ev.get("elapsed_ms"),
+                                                           result_status=status, record_count=ev.get("records"),
+                                                           query_id=ev.get("query_id"),
+                                                           evidence_key=ev.get("evidence_id"), error=err,
+                                                           skipped=status == "SKIPPED_BUDGET", mcp=mcp)
+                    else:
+                        await investigations.record_tool(s, inv_id, ev.get("tool", "execute-dql"), ok=ok, step=step,
+                                                         signal=key, arguments=args, result_status=status,
+                                                         record_count=ev.get("records"), error=err,
+                                                         skipped=status == "SKIPPED_BUDGET",
+                                                         duration_ms=ev.get("elapsed_ms"), id=tid, mcp=mcp)
+            except Exception:  # noqa: BLE001 — çağrı kaydı yazılamazsa analiz sonucu değişmez
+                log.warning("MCP çağrı kaydı yazılamadı (end, %s)", key, exc_info=True)
+            data = {"id": str(tid), "tool": ev.get("tool", "execute-dql"), "signal": key, "step": step,
+                    "status": status, "outcome": ev.get("outcome"), "attempts": ev.get("attempts"),
+                    "mcp_call_id": str(tid), "records": ev.get("records"), "duration_ms": ev.get("elapsed_ms"),
                     "dynatrace_query_id": ev.get("query_id")}
             if ok:
                 await emit("tool_completed", data)
@@ -243,7 +262,7 @@ class InvestigationRunner:
                     await emit("evidence_found", {"evidence_key": ev.get("evidence_id"), "signal": key, "step": step,
                                                   "records": ev.get("records"), "dynatrace_query_id": ev.get("query_id")})
             else:
-                await emit("tool_failed", {**data, "error": ev.get("error")})
+                await emit("tool_failed", {**data, "error": err})
             return
         if kind == "node":
             name, info = item[1], item[2]
@@ -259,6 +278,15 @@ class InvestigationRunner:
                 await emit("agent_thinking", {"step": {"analyze": "correlate", "extra_evidence": "extra",
                                                        "explain": "rca", "finalize": "rca"}.get(name, name),
                                               "node": name, "message": msg})
+
+
+def mcp_fields(ev: dict) -> dict:
+    """Gateway olayından çağrı kaydının MCP alanları. Gönderilmeyen çağrıda (sent=False) mcp_method yazılmaz."""
+    out = {"connector": ev.get("connector"), "request_preview": ev.get("request_preview"),
+           "outcome": ev.get("outcome"), "http_status": ev.get("http_status"), "attempts": ev.get("attempt_log")}
+    if ev.get("sent", True) and ev.get("phase") in ("start", "end") and ev.get("request_preview") is not None:
+        out["mcp_method"] = "tools/call"
+    return {k: v for k, v in out.items() if v is not None}
 
 
 def _uuid(v) -> uuid.UUID | None:

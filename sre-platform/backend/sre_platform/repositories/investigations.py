@@ -82,12 +82,13 @@ async def mark_running(s: AsyncSession, inv: Investigation) -> None:
 
 async def tool_started(s: AsyncSession, inv_id: uuid.UUID, tool_name: str, *, step: str | None = None,
                        signal: str | None = None, arguments: dict[str, Any] | None = None,
-                       id: uuid.UUID | None = None) -> ToolExecution:
-    """`id` verilirse kaydın kimliği odur (MCP çağrısında gateway'in mcp_call_id'si = LangSmith span kimliği)."""
+                       id: uuid.UUID | None = None, mcp: dict[str, Any] | None = None) -> ToolExecution:
+    """`id` verilirse kaydın kimliği odur (MCP çağrısında gateway'in mcp_call_id'si = LangSmith span kimliği).
+    `mcp`: {mcp_method, connector, request_preview} — yalnız gönderilen tools/call için."""
     t = ToolExecution(**({"id": id} if id else {}), investigation_id=inv_id, tool_name=tool_name, step=step,
                       signal=signal,
                       tool_arguments=redact(arguments or {}), execution_status=ToolStatus.STARTED,
-                      started_at=datetime.now(timezone.utc))
+                      started_at=datetime.now(timezone.utc), **_mcp_fields(mcp))
     s.add(t)
     await s.flush()
     return t
@@ -96,7 +97,9 @@ async def tool_started(s: AsyncSession, inv_id: uuid.UUID, tool_name: str, *, st
 async def tool_finished(s: AsyncSession, t: ToolExecution, *, ok: bool, duration_ms: int | None = None,
                         result_status: str | None = None, record_count: int | None = None,
                         query_id: str | None = None, evidence_key: str | None = None, error: str | None = None,
-                        skipped: bool = False) -> ToolExecution:
+                        skipped: bool = False, mcp: dict[str, Any] | None = None) -> ToolExecution:
+    for k, v in _mcp_fields(mcp).items():
+        setattr(t, k, v)
     t.execution_status = ToolStatus.SKIPPED if skipped else (ToolStatus.SUCCEEDED if ok else ToolStatus.FAILED)
     if duration_ms is None and t.started_at is not None:
         duration_ms = int((datetime.now(timezone.utc) - t.started_at).total_seconds() * 1000)
@@ -111,11 +114,23 @@ async def record_tool(s: AsyncSession, inv_id: uuid.UUID, tool_name: str, *, ok:
                       signal: str | None = None, arguments: dict | None = None, duration_ms: int | None = None,
                       result_status: str | None = None, record_count: int | None = None, query_id: str | None = None,
                       evidence_key: str | None = None, error: str | None = None, skipped: bool = False,
-                      id: uuid.UUID | None = None) -> ToolExecution:
-    t = await tool_started(s, inv_id, tool_name, step=step, signal=signal, arguments=arguments, id=id)
+                      id: uuid.UUID | None = None, mcp: dict[str, Any] | None = None) -> ToolExecution:
+    t = await tool_started(s, inv_id, tool_name, step=step, signal=signal, arguments=arguments, id=id, mcp=mcp)
     return await tool_finished(s, t, ok=ok, duration_ms=duration_ms, result_status=result_status,
                                record_count=record_count, query_id=query_id, evidence_key=evidence_key, error=error,
-                               skipped=skipped)
+                               skipped=skipped, mcp=mcp)
+
+
+_MCP_COLS = ("mcp_method", "connector", "outcome", "http_status", "attempts", "request_preview")
+
+
+def _mcp_fields(mcp: dict[str, Any] | None) -> dict[str, Any]:
+    """Yalnız bilinen MCP kolonları; önizleme ve denemeler yine redakte edilir (savunma katmanı)."""
+    out = {k: v for k, v in (mcp or {}).items() if k in _MCP_COLS and v is not None}
+    for k in ("attempts", "request_preview"):
+        if k in out:
+            out[k] = redact(out[k])
+    return out
 
 
 async def upsert_evidence(s: AsyncSession, inv_id: uuid.UUID, items: list[dict[str, Any]]) -> int:

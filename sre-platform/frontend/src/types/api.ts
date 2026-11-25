@@ -356,6 +356,63 @@ export interface ToolExecution {
   duration_ms: number | null;
   error_message: string | null;
   created_at: string;
+  outcome?: string | null;
+  connector?: string | null;
+  request_preview?: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------- MCP çağrıları
+export type McpOutcome = "success" | "empty" | "timeout" | "permission_denied" | "tool_error" | "unavailable" | "cancelled";
+
+export interface McpCallRow {
+  id: string;
+  started_at: string | null;
+  connector: string | null;
+  tool: string;
+  step: string | null;
+  query_key: string | null;
+  outcome: McpOutcome | null;
+  failed: boolean;
+  duration_ms: number | null;
+  record_count: number | null;
+  attempts: number;
+  investigation_id: string;
+  run_id: string;
+}
+
+export interface McpCallDetail extends McpCallRow {
+  request: {
+    method: string;
+    connector: string | null;
+    tool: string;
+    query_key: string | null;
+    params: Record<string, unknown>;
+    query_start: string | null;
+    query_end: string | null;
+    limit: number | null;
+    omitted_params: string[];
+    legacy?: boolean | null;
+  };
+  query: { query_key: string | null; dql_template: string; dql_chars: number; dql_sha256: string; window: "incident" | "baseline" | "custom" | null } | null;
+  response: {
+    outcome: McpOutcome | null;
+    failed: boolean;
+    result_status: string | null;
+    duration_ms: number | null;
+    http_status: number | null;
+    record_count: number | null;
+    error_summary: string | null;
+    evidence_key: string | null;
+    dynatrace_query_id: string | null;
+  };
+  attempts_log: { attempt: number; elapsed_ms: number | null; outcome: string; http_status: number | null; error_type: string | null }[];
+  related: { mcp_call_id: string; run_id: string; investigation_id: string; step: string | null; trigger: string | null; langsmith_span_url: string | null };
+}
+
+export interface McpFacets {
+  connectors: string[];
+  tools: string[];
+  statuses: McpOutcome[];
 }
 
 export interface Incident {

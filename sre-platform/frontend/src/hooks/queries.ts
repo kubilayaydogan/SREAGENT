@@ -3,6 +3,9 @@ import { toast } from "sonner";
 import { ApiError, api } from "@/services/api";
 import { qs } from "@/lib/utils";
 import type {
+  McpCallDetail,
+  McpCallRow,
+  McpFacets,
   Application,
   Approval,
   Conversation,
@@ -337,3 +340,28 @@ export function useApprovalMutations() {
     }),
   };
 }
+
+// ---------------------------------------------------------------- MCP çağrıları (observability:read)
+export interface McpCallParams {
+  since?: string;
+  until?: string;
+  connector?: string;
+  tool?: string;
+  status?: string;
+  run_id?: string;
+  page?: number;
+  size?: number;
+}
+
+export const useMcpCalls = (p: McpCallParams) =>
+  useQuery({
+    queryKey: ["mcp-calls", p],
+    queryFn: () => api.get<Page<McpCallRow>>(`/mcp-calls${qs({ ...p })}`),
+    placeholderData: keepPreviousData,
+  });
+
+export const useMcpCall = (id?: string | null) =>
+  useQuery({ queryKey: ["mcp-call", id ?? ""], queryFn: () => api.get<McpCallDetail>(`/mcp-calls/${id}`), enabled: !!id });
+
+export const useMcpFacets = () =>
+  useQuery({ queryKey: ["mcp-facets"], queryFn: () => api.get<McpFacets>("/mcp-calls/facets"), staleTime: 300_000 });

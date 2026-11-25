@@ -1,4 +1,4 @@
-import { ExternalLink, FileText, GitCompare, ListChecks, Siren } from "lucide-react";
+import { ExternalLink, FileText, GitCompare, ListChecks, Plug, Siren } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { AppTag, ConfidenceBadge, InvestigationStatusBadge, SeverityBadge } from "@/components/badges";
@@ -211,6 +211,11 @@ export default function InvestigationDetailPage() {
               <Button size="sm" variant="outline" onClick={() => nav(`/activity/${d.id}`)}>
                 <ListChecks /> Adımlar
               </Button>
+              {can("sre") && (
+                <Link to={`/mcp-calls?run_id=${encodeURIComponent(d.run_id)}`} className={buttonVariants({ variant: "outline", size: "sm" })} title={`run_id ${d.run_id}`}>
+                  <Plug /> MCP çağrıları
+                </Link>
+              )}
               {can("sre") && done && (
                 <Button size="sm" variant="outline" loading={gen.isPending} onClick={() => gen.mutate({ investigationId: d.id }, { onSuccess: (r) => nav(`/rca/${r.id}`) })}>
                   <FileText /> RCA üret

@@ -70,7 +70,7 @@ class McpUnavailable(RuntimeError):
 # Mantıksal MCP çağrısının sonucu (trace, platform çağrı kaydı ve SSE'de aynı sınıflandırma)
 OUTCOME = {"OK": "success", "EMPTY": "empty", "PERMISSION": "permission_denied", "ERROR": "tool_error",
            "UNAVAILABLE": "unavailable", "TIMEOUT": "timeout", "SKIPPED_BUDGET": "skipped_budget",
-           "REJECTED": "rejected"}
+           "REJECTED": "rejected", "CANCELLED": "cancelled"}
 _TIME_RANGE = re.compile(r'from:\s*"([^"]+)"\s*,\s*to:\s*"([^"]+)"')
 
 
@@ -78,6 +78,72 @@ def time_range_of(dql: str) -> dict | None:
     """DQL'deki from/to aralıklarının kapsadığı toplam aralık (yalnız zaman damgaları; query'nin kendisi değil)."""
     found = _TIME_RANGE.findall(dql or "")
     return {"start": min(a for a, _ in found), "end": max(b for _, b in found)} if found else None
+
+
+# ------------------------------------------------------------------ çağrı kaydı için güvenli özetler
+# Connector/tool bazlı alan listesi: hangi parametre değeri olduğu gibi saklanabilir, hangisi yalnız özetlenir.
+# Listede olmayan parametreler kaydedilmez (yalnız adları `omitted_params`'ta).
+PREVIEW_FIELDS: dict[tuple[str, str], dict] = {
+    ("dynatrace", "execute-dql"): {"raw": ("includeTypes",), "dql": "dqlQueryString"},
+}
+_STR_LIT = re.compile(r'"(?:[^"\\]|\\.)*"' + r"|'(?:[^'\\]|\\.)*'")
+_LIMIT = re.compile(r"\|\s*limit\s+(\d+)", re.I)
+_HTTP_STATUS = re.compile(r"(?:\bHTTP\S*|status(?:[ _]code)?|error) ?[:=']? ?([1-5]\d\d)\b", re.I)
+
+
+def dql_template(dql: str, max_chars: int = 400) -> str:
+    """Güvenli DQL şablonu: tüm string literal'leri (zaman damgaları, filtre değerleri) `"…"` olur; boşluk sadeleşir.
+    Ham DQL kaydedilmez — şablon yalnız query'nin şeklini gösterir."""
+    t = _STR_LIT.sub('"…"', dql or "")
+    t = re.sub(r"\s+", " ", t).strip()
+    return t if len(t) <= max_chars else t[:max_chars] + " …"
+
+
+def request_preview(connector: str, tool: str, args: dict, query_key: str | None = None) -> dict:
+    """Gerçekten gönderilen `tools/call` parametrelerinden güvenli önizleme (PREVIEW_FIELDS alan listesine göre)."""
+    spec = PREVIEW_FIELDS.get((connector, tool), {})
+    raw = spec.get("raw", ())
+    out: dict = {"method": "tools/call", "connector": connector, "tool": tool, "query_key": query_key,
+                 "params": {k: args[k] for k in raw if k in args and isinstance(args[k], (bool, int, float))}}
+    dql_param = spec.get("dql")
+    dql = args.get(dql_param) if dql_param else None
+    if isinstance(dql, str):
+        tr = time_range_of(dql) or {}
+        lim = _LIMIT.findall(dql)
+        out.update(query_start=tr.get("start"), query_end=tr.get("end"), limit=int(lim[-1]) if lim else None,
+                   dql_template=dql_template(dql), dql_chars=len(dql),
+                   dql_sha256=hashlib.sha256(dql.encode()).hexdigest()[:16])
+    out["omitted_params"] = sorted(k for k in args if k not in raw and k != dql_param)
+    return out
+
+
+def safe_error_summary(text: str | None, max_chars: int = 200) -> str | None:
+    """Kayda yazılabilir hata özeti: ilk satır, string literal'ler maskeli, secret'lar redakte, kısa."""
+    if not text:
+        return None
+    first = next((ln.strip() for ln in str(text).splitlines() if ln.strip()), "")
+    first = redact_text(_STR_LIT.sub('"…"', first))
+    return first if len(first) <= max_chars else first[:max_chars] + "…"
+
+
+def http_status_of(e: BaseException | None) -> int | None:
+    """Exception zincirinden HTTP durum kodu (httpx yanıtı ya da mesajdaki kod). Bulunamazsa None."""
+    seen = 0
+    stack = [e]
+    while stack and seen < 20:
+        x = stack.pop()
+        seen += 1
+        if x is None:
+            continue
+        resp = getattr(x, "response", None)
+        code = getattr(resp, "status_code", None)
+        if isinstance(code, int):
+            return code
+        m = _HTTP_STATUS.search(str(x))
+        if m:
+            return int(m.group(1))
+        stack += list(getattr(x, "exceptions", []) or []) + [x.__cause__, x.__context__]
+    return None
 
 
 class BudgetExceeded(RuntimeError):
@@ -201,55 +267,82 @@ class McpGateway:
                        f"evidence_id={r.evidence_id} mcp_call_id={call_id}")
         return r
 
-    def _end(self, r: QueryResult, *, elapsed_ms: int, traced: bool, outcome: str | None = None) -> QueryResult:
+    def _end(self, r: QueryResult, *, elapsed_ms: int, traced: bool, outcome: str | None = None,
+             sent: bool = True, http_status: int | None = None, preview: dict | None = None) -> QueryResult:
         r.outcome = outcome or OUTCOME.get(r.status, r.status.lower())
+        counted = r.status in ("OK", "EMPTY")               # kayıt sayısı yalnız başarılı yanıtta anlamlı
         self._emit({"phase": "end", "key": r.key, "dql": r.dql, "status": r.status, "outcome": r.outcome,
-                    "records": len(r.records), "query_id": r.query_id, "elapsed_ms": elapsed_ms, "error": r.error,
-                    "attempts": len(r.attempts) or None, "evidence_id": r.evidence_id, "mcp_call_id": r.call_id,
-                    "traced": traced})
+                    "records": len(r.records) if counted else None, "query_id": r.query_id,
+                    "elapsed_ms": elapsed_ms, "error": r.error, "error_summary": safe_error_summary(r.error),
+                    "attempts": len(r.attempts) or None, "attempt_log": list(r.attempts),
+                    "evidence_id": r.evidence_id, "mcp_call_id": r.call_id, "traced": traced, "sent": sent,
+                    "connector": SERVER, "tool": DQL_TOOL, "http_status": http_status,
+                    "request_preview": preview})
         return r
 
     async def _one_inner(self, session, key: str, dql: str, call_id: str | None = None,
                          traced: bool = False) -> QueryResult:
         call_id = call_id or str(uuid.uuid4())
+        args = {"dqlQueryString": dql, "includeTypes": False}
+        preview = request_preview(SERVER, DQL_TOOL, args if isinstance(dql, str) else {}, key)
         bad = validate_dql(dql)
-        if bad:
+        if bad:                                       # tools/call GÖNDERİLMEDİ
             r = QueryResult(key, str(dql)[:MAX_DQL_CHARS], "ERROR", error=f"DQL reddedildi: {bad}", call_id=call_id)
-            return self._end(r, elapsed_ms=0, traced=traced, outcome="rejected")
+            return self._end(r, elapsed_ms=0, traced=traced, outcome="rejected", sent=False, preview=preview)
         if self.queries_used >= self.max_queries:
             r = QueryResult(key, dql, "SKIPPED_BUDGET", error="query budget doldu", call_id=call_id)
-            return self._end(r, elapsed_ms=0, traced=traced)
+            return self._end(r, elapsed_ms=0, traced=traced, sent=False, preview=preview)
         self.queries_used += 1
         self._emit({"phase": "start", "key": key, "dql": dql, "tool": DQL_TOOL, "mcp_call_id": call_id,
-                    "traced": traced})
+                    "traced": traced, "connector": SERVER, "request_preview": preview})
         last = None
         attempts: list[dict] = []
         t_all = time.monotonic()
         for attempt in range(self.retries + 1):
             t0 = time.monotonic()
             try:
-                res = await asyncio.wait_for(
-                    session.call_tool(DQL_TOOL, {"dqlQueryString": dql, "includeTypes": False}), self.timeout_s)
+                res = await asyncio.wait_for(session.call_tool(DQL_TOOL, args), self.timeout_s)
                 status, recs, qid, err, notes = _classify(res)
+                # Yanıt geldi → HTTP 200; tool hatası (isError) yine BAŞARISIZ sayılır (outcome tool_error/permission)
                 attempts.append({"attempt": attempt + 1, "outcome": OUTCOME.get(status, status.lower()),
-                                 "elapsed_ms": int((time.monotonic() - t0) * 1000)})
+                                 "elapsed_ms": int((time.monotonic() - t0) * 1000), "http_status": 200})
                 r = QueryResult(key, dql, status, recs, qid, err, int((time.monotonic() - t0) * 1000), notes,
                                 call_id=call_id, attempts=attempts)
-                return self._end(r, elapsed_ms=int((time.monotonic() - t_all) * 1000), traced=traced)
+                return self._end(r, elapsed_ms=int((time.monotonic() - t_all) * 1000), traced=traced,
+                                 http_status=200, preview=preview)
+            except asyncio.CancelledError:
+                # Paralel bir çağrı MCP'yi erişilemez buldu ve oturum kapandı: kayıt açık kalmasın
+                attempts.append({"attempt": attempt + 1, "outcome": "cancelled",
+                                 "elapsed_ms": int((time.monotonic() - t0) * 1000)})
+                self._emit({"phase": "end", "key": key, "dql": dql, "status": "CANCELLED", "outcome": "cancelled",
+                            "records": None, "query_id": None, "elapsed_ms": int((time.monotonic() - t_all) * 1000),
+                            "error": None, "error_summary": "çağrı iptal edildi (paralel çağrı MCP'yi erişilemez buldu)",
+                            "attempts": len(attempts), "attempt_log": attempts, "mcp_call_id": call_id,
+                            "traced": traced, "sent": True, "connector": SERVER, "tool": DQL_TOOL,
+                            "http_status": None, "request_preview": preview})
+                raise
             except Exception as e:  # noqa: BLE001
                 last = e
-                attempts.append({"attempt": attempt + 1,
-                                 "outcome": "timeout" if isinstance(e, TimeoutError) else "unavailable",
+                code = http_status_of(e)
+                oc = "timeout" if isinstance(e, TimeoutError) else \
+                    "permission_denied" if code in (401, 403) else "unavailable"
+                attempts.append({"attempt": attempt + 1, "outcome": oc,
                                  "elapsed_ms": int((time.monotonic() - t0) * 1000),
-                                 "error_type": type(e).__name__})
+                                 "error_type": type(e).__name__, "http_status": code})
+                if oc == "permission_denied":           # yetki hatası tekrar denenmez
+                    break
                 if attempt < self.retries:               # son denemeden sonra beklemeden hata döner
                     await asyncio.sleep(min(2 ** attempt, 8))
         kind = "timeout" if isinstance(last, TimeoutError) else "unavailable"
+        outcome = attempts[-1]["outcome"]
         err = redact_text(f"{type(last).__name__}: {last}")
-        self._emit({"phase": "end", "key": key, "dql": dql, "status": "TIMEOUT" if kind == "timeout" else "UNAVAILABLE",
-                    "outcome": kind, "records": 0, "query_id": None,
-                    "elapsed_ms": int((time.monotonic() - t_all) * 1000), "error": err, "attempts": len(attempts),
-                    "mcp_call_id": call_id, "traced": traced})
+        self._emit({"phase": "end", "key": key, "dql": dql,
+                    "status": {"timeout": "TIMEOUT", "permission_denied": "PERMISSION"}.get(outcome, "UNAVAILABLE"),
+                    "outcome": outcome, "records": None, "query_id": None,
+                    "elapsed_ms": int((time.monotonic() - t_all) * 1000), "error": err,
+                    "error_summary": safe_error_summary(err), "attempts": len(attempts), "attempt_log": attempts,
+                    "mcp_call_id": call_id, "traced": traced, "sent": True, "connector": SERVER, "tool": DQL_TOOL,
+                    "http_status": attempts[-1].get("http_status"), "request_preview": preview})
         ex = McpUnavailable(err, kind=kind)
         ex.attempts = attempts
         raise ex

@@ -195,7 +195,8 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
         details = [{"loc": list(x.get("loc", [])), "msg": x.get("msg"), "type": x.get("type")} for x in e.errors()]
         return _err(422, "validation_error", "istek doğrulanamadı", details)
 
-    from .routes import agent, auth, catalog, records, settings as settings_routes
-    for r in (auth.router, catalog.router, catalog.system, agent.router, records.router, settings_routes.router):
+    from .routes import agent, auth, catalog, mcp_calls, records, settings as settings_routes
+    for r in (auth.router, catalog.router, catalog.system, agent.router, records.router, mcp_calls.router,
+              settings_routes.router):
         app.include_router(r, prefix="/api")
     return app

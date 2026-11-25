@@ -318,6 +318,8 @@ class ToolExecution(Base):
     __tablename__ = "agent_tool_executions"
     __table_args__ = (Index("ix_tools_investigation", "investigation_id", "created_at"),
                       Index("ix_tools_created", "created_at"),
+                      Index("ix_tools_mcp_created", text("created_at DESC"),
+                            postgresql_where=text("mcp_method IS NOT NULL")),
                       CheckConstraint("duration_ms IS NULL OR duration_ms >= 0", name="ck_tools_duration"),
                       {"schema": SCHEMA})
     id: Mapped[uuid.UUID] = _pk()
@@ -336,6 +338,15 @@ class ToolExecution(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     error_message: Mapped[str | None] = mapped_column(Text)
+    # MCP çağrı kaydı (0012): yalnız gönderilen tools/call'larda mcp_method dolu; ham DQL/yanıt/token yazılmaz
+    mcp_method: Mapped[str | None] = mapped_column(String(32))
+    connector: Mapped[str | None] = mapped_column(String(64))
+    outcome: Mapped[str | None] = mapped_column(String(24))      # success|empty|timeout|permission_denied|tool_error…
+    http_status: Mapped[int | None] = mapped_column(SmallInteger)
+    attempts: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list,
+                                                           server_default=text("'[]'::jsonb"))
+    request_preview: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
+                                                            server_default=text("'{}'::jsonb"))
     created_at: Mapped[datetime] = _created_clock()
     investigation: Mapped[Investigation] = relationship(back_populates="tools")
 

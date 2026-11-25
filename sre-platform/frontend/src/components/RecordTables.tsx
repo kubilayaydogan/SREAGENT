@@ -67,7 +67,7 @@ export function ToolTable({ rows, callUrlTemplate }: { rows: ToolExecution[]; ca
           <tbody>
             {shown.map((t) => {
               const isOpen = open === t.id;
-              const dql = (t.tool_arguments as { dqlQueryString?: string }).dqlQueryString;
+              const dql = (t.request_preview?.dql_template ?? (t.tool_arguments as { dql_template?: string }).dql_template) as string | undefined;
               const spanUrl = callTraceUrl(t, callUrlTemplate);
               return (
                 <Fragment key={t.id}>
@@ -120,7 +120,7 @@ export function ToolTable({ rows, callUrlTemplate }: { rows: ToolExecution[]; ca
 export function DqlBlock({ dql }: { dql: string }) {
   return (
     <div>
-      <div className="mb-1 text-xs font-medium text-muted">DQL</div>
+      <div className="mb-1 text-xs font-medium text-muted">DQL şablonu (değerler maskeli)</div>
       <pre className="overflow-x-auto rounded-md border border-line bg-surface p-2 font-mono text-2xs whitespace-pre-wrap text-ink-2">{dql}</pre>
     </div>
   );

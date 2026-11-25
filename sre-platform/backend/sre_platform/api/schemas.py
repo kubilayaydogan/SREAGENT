@@ -253,6 +253,18 @@ class ToolOut(Out):
     duration_ms: int | None
     error_message: str | None
     created_at: datetime
+    outcome: str | None = None
+    connector: str | None = None
+    request_preview: dict[str, Any] = {}
+
+    @field_validator("tool_arguments", mode="before")
+    @classmethod
+    def _no_raw_dql(cls, v):
+        """Eski kayıtlarda tool_arguments'ta ham DQL olabilir: API yalnız güvenli şablonu döner."""
+        if isinstance(v, dict) and isinstance(v.get("dqlQueryString"), str):
+            from airlab_agent.mcp_gateway import dql_template
+            v = {**{k: x for k, x in v.items() if k != "dqlQueryString"}, "dql_template": dql_template(v["dqlQueryString"])}
+        return v
 
 
 # ---------------------------------------------------------------- incident
