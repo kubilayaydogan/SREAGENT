@@ -260,3 +260,39 @@ def test_unauthorized_access(api_settings, tmp_path):
     assert out["viewer"] == [403, 403, 403] and out["key_no"] == [403, 403, 403]
     assert out["sre"] == [200, 200, 200] and out["key_ok"] == [200, 200, 200]
     assert out["missing"] == 404
+
+
+def test_migration_0013_scrubs_legacy_raw_dql(db_url):
+    """0012 öncesi biçimdeki kayıt: ham DQL tool_arguments'tan silinir, güvenli önizleme üretilir; zaten önizlemesi
+    olan kayıtta önizleme korunur."""
+    import sqlalchemy as sa
+    from sre_platform.db import migrate
+    migrate.downgrade(db_url, "0012")
+    dql = (f'fetch logs, from:"2026-11-21T10:00:00Z", to:"2026-11-21T10:15:00Z" | filter content == "{PLAIN}" '
+           '| limit 50')
+    eng = sa.create_engine(db_url, poolclass=sa.pool.NullPool)
+    with eng.begin() as c:
+        inv = c.execute(sa.text(
+            "INSERT INTO sre.investigations (run_id, trigger, title, status, severity, window_start, window_end) "
+            "VALUES ('legacy-1', 'manual', 'eski', 'COMPLETED', 'unknown', now() - interval '1 hour', now()) "
+            "RETURNING id")).scalar_one()
+        for sig, prev in (("pg_lock_logs", "{}"), ("http", '{"dql_template": "korunur"}')):
+            c.execute(sa.text(
+                "INSERT INTO sre.agent_tool_executions (investigation_id, tool_name, signal, step, tool_arguments, "
+                "execution_status, result_status, mcp_method, connector, outcome, request_preview) VALUES "
+                "(:i, 'execute-dql', :s, 'logs', CAST(:a AS jsonb), 'SUCCEEDED', 'OK', 'tools/call', 'dynatrace', "
+                "'success', CAST(:p AS jsonb))"),
+                {"i": inv, "s": sig, "a": json.dumps({"dqlQueryString": dql, "mcp_call_id": "x"}), "p": prev})
+    migrate.upgrade(db_url)
+    with eng.connect() as c:
+        rows = {r.signal: r for r in c.execute(sa.text(
+            "SELECT signal, tool_arguments, request_preview FROM sre.agent_tool_executions"))}
+    eng.dispose()
+    assert migrate.current_revision(db_url) == "0013"
+    blob = json.dumps({k: [r.tool_arguments, r.request_preview] for k, r in rows.items()}, ensure_ascii=False)
+    assert PLAIN not in blob and dql not in blob and "dqlQueryString" not in blob
+    a, p = rows["pg_lock_logs"].tool_arguments, rows["pg_lock_logs"].request_preview
+    assert a == {"mcp_call_id": "x", "query_key": "pg_lock_logs"}
+    assert p["dql_template"].startswith('fetch logs, from:"…", to:"…" | filter content == "…"') and p["backfilled"]
+    assert (p["query_start"], p["query_end"], p["limit"]) == ("2026-11-21T10:00:00Z", "2026-11-21T10:15:00Z", 50)
+    assert rows["http"].request_preview == {"dql_template": "korunur"}

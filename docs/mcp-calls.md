@@ -65,7 +65,7 @@ Eski satırlarda ham DQL `tool_arguments.dqlQueryString`'de durabilir. API bu de
 - `/mcp-calls/{id}` önizlemeyi sunucu tarafında üretir.
 - `/investigations/{id}/tools` (`ToolOut`) değeri şablona çevirir.
 
-Veritabanındaki eski değerleri silmek veri değişikliği olduğu için yapılmadı; bkz. R-MC1.
+Bu eski değerler migration 0013 ile veritabanından da silindi; bkz. R-MC1 ve bölüm 11.
 
 ## 4. API
 
@@ -143,8 +143,9 @@ adım `traces` olarak kaydedilir.
 
 ## 9. Bilinen sınırlar
 
-- **R-MC1:** 0012 öncesi satırlarda ham DQL `tool_arguments`'ta kalır. API döndürmez; ancak DB yedeklerinde vardır.
-  Temizlik için bir backfill (ham DQL → önizleme) ayrı onayla yapılabilir.
+- **R-MC1 (kapatıldı, 2026-11-26):** 0012 öncesi satırlardaki ham DQL migration 0013 ile silindi; yerine güvenli
+  önizleme üretildi (`request_preview.backfilled = true`). Geri alınamaz; yalnız bu tarihten önceki DB yedeklerinde
+  ham DQL bulunur.
 - **R-MC2:** MCP Python istemcisi başarılı yanıtın HTTP kodunu dışarı vermez. Yanıt geldiyse 200 kabul edilir; hata
   kodları exception zincirinden okunur, okunamazsa boş kalır.
 - **R-MC3:** Evidence kayıtlarının `query_reference` alanı bu işin kapsamında değildir; evidence görünümü değişmedi.
@@ -159,3 +160,12 @@ sınıflandırıldı (sınıfsız kayıt 0). Servisler healthy.
 - `/api/mcp-calls` kimliksiz istekte 401 dönüyor; `/mcp-calls` sayfası 200.
 - Liste, detay ve facet handler'ları container içinde canlı DB ile çalıştırıldı (salt okunur). Eski bir kayıtta ham DQL
   DB'de duruyor (R-MC1), API çıktısında yok.
+
+## 11. Eski ham DQL temizliği (2026-11-26, kullanıcı onaylı)
+
+Migration 0013 uygulandı; rollback image'ı `:pre-scrub` (veri geri gelmez). Canlı sonuç:
+
+- 3644 kayıttan ham DQL silindi; `dqlQueryString` içeren kayıt 0, önizlemesi olmayan MCP kaydı 0.
+- API kontrolü: eski kayıt artık sunucu tarafında üretilen değil kayıtlı önizlemeyle dönüyor; ham DQL ne DB'de ne
+  API'de var.
+- Test: `test_migration_0013_scrubs_legacy_raw_dql`; backend 142/142.
