@@ -10,7 +10,7 @@ umask 077
   echo "DT_ENV=${DT_ENV}"
   echo "DT_PLATFORM_TOKEN=${T_MCP}"
   echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}"
-  echo "CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5-5}"
+  echo "CLAUDE_MODEL=${CLAUDE_MODEL:-claude-opus-5-5}"
   echo "LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}"
   echo "LANGSMITH_TRACING=${LANGSMITH_TRACING:-true}"
   echo "LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-airlab-sre-agent}"

@@ -8,7 +8,7 @@ geçmez; kısmi rapor yazar.
 |---|---|
 | Akış | LangGraph 1.2 `StateGraph` + `SqliteSaver` checkpoint (`/data/checkpoints.sqlite`) |
 | MCP | langchain-mcp-adapters 0.3.2 / mcp 1.30 (streamable HTTP, Bearer platform token) |
-| LLM | Claude `claude-sonnet-5-5` (langchain-anthropic). Yalnız iki iş yapar: soruyu yorumlamak ve bulguları Türkçe açıklamak |
+| LLM | Claude `claude-opus-5-5` (langchain-anthropic). Yalnız iki iş yapar: soruyu yorumlamak ve bulguları Türkçe açıklamak |
 | İzleme | LangSmith (girdi/çıktı redakte edilir; LangSmith yoksa agent çalışmaya devam eder) |
 | Puan / atıf | Deterministik Python. Claude puanı değiştiremez, aracı yoktur |
 
@@ -66,8 +66,8 @@ sre-agent report list | report show <id> [--json]
 |---|---|
 | `DT_ENV` / `DT_MCP_URL` | Tenant kimliği (URL ondan türetilir) ya da tam MCP URL'si |
 | `DT_PLATFORM_TOKEN` | MCP platform token (gizli) |
-| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` | Claude (varsayılan `claude-sonnet-5-5`); anahtar yoksa deterministik mod |
-| `CLAUDE_RCA_MODEL` | RCA açıklamasını yazan model (varsayılan `claude-opus-5-5`, effort `high`, refusal'da sunucu tarafı fallback). Soru yorumlama ve sohbet `CLAUDE_MODEL` ile kalır |
+| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` | Claude (varsayılan `claude-opus-5-5`, effort `medium`); anahtar yoksa deterministik mod |
+| `CLAUDE_RCA_MODEL` | RCA açıklamasını yazan model (varsayılan `claude-opus-5-5`, effort `high`, refusal'da sunucu tarafı fallback). Soru yorumlama ve sohbet `CLAUDE_MODEL` ile (o da varsayılan Opus 5.5) |
 | `LANGSMITH_API_KEY`, `LANGSMITH_TRACING`, `LANGSMITH_PROJECT` | İzleme (redakte) |
 | `AGENT_DATA_DIR` | Durum, checkpoint, rapor dizini (container'da `/data`) |
 | `AGENT_CONFIG` | `defaults.yaml` üzerine birleştirilecek YAML (eşikler, ağırlıklar, bütçeler) |

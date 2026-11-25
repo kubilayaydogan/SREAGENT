@@ -36,7 +36,7 @@ class PlatformSettings:
     watch_enabled: bool = True                    # eski sre-agent watch'un yerini alır (PG durumlu)
     health_check_minutes: int = 15                # zamanlanmış sağlık kontrolü aralığı (0 = kapalı)
     health_check_window_minutes: int = 15
-    health_check_llm: bool = False                # normal döngüde Claude çağrısı yok (maliyet); olayda watch açar
+    health_check_llm: bool = True                 # periyodik kontrolde de RCA Claude (Opus 5.5) ile yazılır
     slack_webhook_url: str = field(default="", repr=False)   # Slack Incoming Webhook; boşsa bildirim kapalı
     slack_risk_threshold: float = 75.0           # risk_score >= eşik olan tamamlanmış RCA'lar bildirilir
     public_url: str = "http://172.20.229.26:8090"   # bildirimdeki araştırma linki için arayüz adresi
@@ -82,7 +82,7 @@ def load_platform_settings() -> PlatformSettings:
         watch_enabled=os.getenv("SRE_WATCH_ENABLED", "true").lower() in ("1", "true", "yes"),
         health_check_minutes=_int("SRE_HEALTH_CHECK_MINUTES", 15),
         health_check_window_minutes=_int("SRE_HEALTH_CHECK_WINDOW_MINUTES", 15),
-        health_check_llm=os.getenv("SRE_HEALTH_CHECK_LLM", "false").lower() in ("1", "true", "yes"),
+        health_check_llm=os.getenv("SRE_HEALTH_CHECK_LLM", "true").lower() in ("1", "true", "yes"),
         slack_webhook_url=os.getenv("SRE_SLACK_WEBHOOK_URL", "").strip(),
         slack_risk_threshold=float(os.getenv("SRE_SLACK_RISK_THRESHOLD", "75")),
         public_url=os.getenv("SRE_PUBLIC_URL", "http://172.20.229.26:8090").rstrip("/"),

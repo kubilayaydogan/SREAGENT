@@ -87,8 +87,11 @@ budgets:
   run_timeout_seconds: 240
   query_timeout_seconds: 60
   query_retries: 2
-  llm_max_tokens: 2500
-  llm_timeout_seconds: 90
+  # Genel istemci (yorumlama, yönlendirme, sohbet cevapları) — Claude Opus 5.5: thinking her zaman açık ve max_tokens'a
+  # dahil; 2500 token yapılandırılmış çıktıyı kesebileceği için 16000. Effort varsayılanı (medium) açıkça verilir.
+  llm_max_tokens: 16000
+  llm_timeout_seconds: 120
+  llm_effort: medium
   llm_retries: 2
   # RCA açıklaması (Claude Opus 5.5): thinking her zaman açık ve max_tokens'a dahil; effort varsayılanı medium olduğu
   # için açıkça high verilir. Refusal'da sunucu tarafı fallback ("default") açık.

@@ -80,7 +80,10 @@ class Llm:
         self.callbacks = callbacks or []
         self.chat = ChatAnthropic(model=settings.claude_model, api_key=settings.anthropic_key,
                                   max_tokens=b["llm_max_tokens"], max_retries=b["llm_retries"],
-                                  default_request_timeout=b["llm_timeout_seconds"])
+                                  default_request_timeout=b["llm_timeout_seconds"],
+                                  output_config={"effort": b.get("llm_effort", "medium")},
+                                  betas=["server-side-fallback-2026-07-01"],
+                                  model_kwargs={"fallbacks": "default"})
         # RCA açıklaması ayrı istemciyle (varsayılan claude-opus-5-5). Thinking parametresi gönderilmez (Opus 5.5'te
         # her zaman adaptive); derinlik effort ile ayarlanır. Refusal olursa sunucu tarafı fallback devreye girer.
         self.rca_chat = ChatAnthropic(model=settings.claude_rca_model, api_key=settings.anthropic_key,

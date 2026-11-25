@@ -200,7 +200,7 @@ class PlatformWatcher(Watcher):
             inc_id, opened = inc.id, inc.detected_at
         start = opened - timedelta(minutes=self.cfg["watch"]["analysis_minutes"])
         done, _ = await self._investigate(inc_id, start, w.end, relation="recovery", mode="watch-recovery", app=None,
-                                          title="Watch recovery analizi", use_llm=False,
+                                          title="Watch recovery analizi", use_llm=True,
                                           notes=[f"tüm watch koşulları normale döndü ({iso(w.end)})"])
         async with transaction(self.rt.sm) as s:
             inc = await incidents.get(s, inc_id)

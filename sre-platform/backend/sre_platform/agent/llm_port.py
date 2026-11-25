@@ -1,7 +1,7 @@
 """Platformun LLM bağlantı noktası. Mevcut entegrasyon (langchain-anthropic ChatAnthropic, airlab_agent.llm.Llm)
 yeniden kullanılır; burada yalnız iki yetenek eklenir:
 
-* `route()`   — sohbet sorusunu yapılandırılmış niyete çevirir (json_schema; Sonnet 5.5'te zorunlu yöntem).
+* `route()`   — sohbet sorusunu yapılandırılmış niyete çevirir (json_schema yöntemi).
 * `astream()` — yanıt metnini token token üretir (SSE `token` olayları). `rca=True` → RCA modeli (CLAUDE_RCA_MODEL,
   varsayılan Opus 5.5); diğer yanıtlar CLAUDE_MODEL ile.
 

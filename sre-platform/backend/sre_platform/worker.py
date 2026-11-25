@@ -62,7 +62,7 @@ async def health_check(rt, params: dict) -> dict[str, Any]:
         inv = await investigations.create(s, run_id=new_run_id("hc"), trigger=Trigger.SCHEDULED,
                                           title=f"Zamanlanmış sağlık kontrolü {start:%H:%M}–{end:%H:%M} UTC",
                                           window_start=start, window_end=end,
-                                          description="Periyodik deterministik analiz (sre-worker)")
+                                          description="Periyodik analiz (sre-worker)")
         inv_id = inv.id
     llm = rt.llm.llm if (ps.health_check_llm and rt.llm is not None and hasattr(rt.llm, "llm")) else None
     async with rt.sem:

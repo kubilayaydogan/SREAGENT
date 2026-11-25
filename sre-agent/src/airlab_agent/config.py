@@ -32,7 +32,7 @@ class Settings:
     mcp_url: str = ""
     dt_token: str = field(default="", repr=False)
     anthropic_key: str = field(default="", repr=False)
-    claude_model: str = "claude-sonnet-5-5"
+    claude_model: str = "claude-opus-5-5"        # tüm LLM çağrıları (yorumlama, sohbet, özet)
     claude_rca_model: str = "claude-opus-5-5"   # RCA açıklaması (explain); yorumlama/sohbet claude_model'de kalır
     langsmith_key: str = field(default="", repr=False)
     langsmith_project: str = "airlab-sre-agent"
@@ -73,7 +73,7 @@ def load_settings(config_path: str | None = None) -> Settings:
         mcp_url=url,
         dt_token=os.getenv("DT_PLATFORM_TOKEN", ""),
         anthropic_key=os.getenv("ANTHROPIC_API_KEY", ""),
-        claude_model=os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5"),
+        claude_model=os.getenv("CLAUDE_MODEL", "claude-opus-5-5"),
         claude_rca_model=os.getenv("CLAUDE_RCA_MODEL", "claude-opus-5-5"),
         langsmith_key=os.getenv("LANGSMITH_API_KEY", ""),
         langsmith_project=os.getenv("LANGSMITH_PROJECT", "airlab-sre-agent"),
