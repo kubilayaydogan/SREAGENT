@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { Chart } from '../components/Chart'
-import { APP_COLOR, fmt, isTerminal, rolesOf, series } from '../lib'
+import { APP_COLOR, agentWindows, fmt, isTerminal, localTime, rolesOf, series } from '../lib'
 import type { Experiment, Sample, State } from '../types'
 import { PHASES } from '../types'
 
@@ -42,7 +42,7 @@ export function Live({ id, go }: { id: string; go: (h: string) => void }) {
   const terminal = isTerminal(exp.state)
   const observed = exp.report?.expectedVsObserved?.observedAffected ?? []
   const expected = exp.plan?.expectedAffected ?? []
-  const labels = samples.map((s) => s.at.slice(11, 19))
+  const labels = samples.map((s) => localTime(s.at))
   // faz bantları: örneklerin phase alanından (backend kaynaklı)
   const bands: { from: number; to: number; label: string; tone: string }[] = []
   samples.forEach((s, i) => {
@@ -91,11 +91,20 @@ export function Live({ id, go }: { id: string; go: (h: string) => void }) {
         {PHASES.map((p) => {
           const tr = exp.transitions.find((t) => t.state === p)
           const cur = exp.state === p
-          return <li key={p} className={(tr ? 'done ' : '') + (cur ? 'cur' : '')}>{p}<small>{tr ? tr.at.slice(11, 19) : ''}</small></li>
+          return <li key={p} className={(tr ? 'done ' : '') + (cur ? 'cur' : '')}>{p}<small>{tr ? localTime(tr.at) : ''}</small></li>
         })}
         {['FAILED', 'ABORTED', 'TIMED_OUT'].includes(exp.state) && <li className="cur bad">{exp.state}</li>}
       </ol>
       <p className="muted">{exp.stateReason}</p>
+      {(() => {
+        const w = agentWindows(exp.transitions)
+        if (!w.baseline && !w.chaos) return null
+        return <p className="agent-window">Agent penceresi (İstanbul saati):{' '}
+          {w.baseline && <>baseline <code>{w.baseline[0]} – {w.baseline[1].slice(11)}</code></>}
+          {w.baseline && w.chaos && ' · '}
+          {w.chaos && <>chaos <code>{w.chaos[0]} – {w.chaos[1].slice(11)}</code></>}
+        </p>
+      })()}
 
       <section className="roles">
         {apps.map((a) => {
@@ -182,7 +191,7 @@ export function Live({ id, go }: { id: string; go: (h: string) => void }) {
 
       <section>
         <h3>Log</h3>
-        <pre className="log">{exp.logs.slice(-80).map((l) => `${l.at.slice(11, 19)} ${l.level.padEnd(5)} ${l.message}`).join('\n')}</pre>
+        <pre className="log">{exp.logs.slice(-80).map((l) => `${localTime(l.at)} ${l.level.padEnd(5)} ${l.message}`).join('\n')}</pre>
       </section>
     </div>
   )

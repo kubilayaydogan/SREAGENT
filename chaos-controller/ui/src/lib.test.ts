@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseRoute } from './App'
-import { DEFAULT_DURATIONS, DEFAULT_TRAFFIC, buildRequest, cleanCustom, fmt, isTerminal, phaseProgress, rolesOf, series } from './lib'
+import { DEFAULT_DURATIONS, DEFAULT_TRAFFIC, agentWindows, buildRequest, cleanCustom, fmt, isTerminal, localDateTime, localTime, phaseProgress, rolesOf, series } from './lib'
 import type { Sample } from './types'
 
 const form = {
@@ -82,5 +82,27 @@ describe('parseRoute', () => {
     expect(parseRoute('')).toEqual({ view: 'overview', arg: undefined })
     expect(parseRoute('#/live/v2-1')).toEqual({ view: 'live', arg: 'v2-1' })
     expect(parseRoute('#/builder/S07')).toEqual({ view: 'builder', arg: 'S07' })
+  })
+})
+
+describe('yerel saat gösterimi', () => {
+  it('UTC ISO değerini İstanbul saatine (+03) çevirir', () => {
+    expect(localTime('2026-11-24T21:22:37.372105572Z')).toBe('00:22:37')
+    expect(localDateTime('2026-11-24T21:22:37.372Z')).toBe('2026-11-25 00:22:37')
+    expect(localTime(null)).toBe('')
+    expect(localTime('bozuk')).toBe('')
+  })
+  it('agent pencerelerini fazlardan tam dakikaya içe yuvarlar', () => {
+    const tr = [
+      { state: 'BASELINING', at: '2026-11-24T21:22:40Z' },
+      { state: 'RAMPING_UP', at: '2026-11-24T21:26:10Z' },
+      { state: 'RUNNING', at: '2026-11-24T21:26:40Z' },
+      { state: 'RECOVERING', at: '2026-11-24T21:31:10Z' },
+    ]
+    expect(agentWindows(tr)).toEqual({
+      baseline: ['2026-11-25 00:23', '2026-11-25 00:26'],
+      chaos: ['2026-11-25 00:27', '2026-11-25 00:31'],
+    })
+    expect(agentWindows(tr.slice(0, 2)).chaos).toBeNull()
   })
 })

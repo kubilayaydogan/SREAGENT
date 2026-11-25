@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { localDateTime } from '../lib'
 import type { Summary } from '../types'
 
 export function History({ go }: { go: (h: string) => void }) {
@@ -25,7 +26,7 @@ export function History({ go }: { go: (h: string) => void }) {
         <thead><tr><th>ID</th><th>Senaryo</th><th>Initiator → targets</th><th>Intensity</th><th>Durum</th><th>Verdict</th><th>Recovery</th><th /></tr></thead>
         <tbody>{rows.map((e) => (
           <tr key={e.id}>
-            <td><a onClick={() => go('#/live/' + e.id)}>{e.id}</a><br /><small className="muted">{e.createdAt.slice(0, 19).replace('T', ' ')}</small></td>
+            <td><a onClick={() => go('#/live/' + e.id)}>{e.id}</a><br /><small className="muted">{localDateTime(e.createdAt)}</small></td>
             <td>{e.scenarioId} {e.scenarioName}{e.label ? <><br /><small className="muted">{e.label}</small></> : null}</td>
             <td>{e.initiator} → {e.targets.join(', ')}</td>
             <td>{e.intensity}</td>

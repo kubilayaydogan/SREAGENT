@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { Chart } from '../components/Chart'
-import { APP_COLOR, fmt, series } from '../lib'
+import { APP_COLOR, fmt, localTime, series } from '../lib'
 import type { Overview as OV, Sample } from '../types'
 
 export function Overview({ go }: { go: (h: string) => void }) {
@@ -24,7 +24,7 @@ export function Overview({ go }: { go: (h: string) => void }) {
 
   if (!ov) return <p className="muted">{err ?? 'yükleniyor…'}</p>
   const db = ov.db
-  const labels = hist.map((s) => s.at.slice(11, 19))
+  const labels = hist.map((s) => localTime(s.at))
   const appLines = (pick: (a: Sample['apps'][string]) => number | null) =>
     ov.apps.map((c) => ({ name: c.app, color: APP_COLOR[c.app] ?? '#666', values: series(hist, (s) => {
       const a = s.apps[c.app]; return a && a.up ? pick(a) : null }) }))

@@ -6,6 +6,7 @@ import com.lab.air.chaos.engine.ExperimentService;
 import com.lab.air.chaos.v2.analysis.ImpactAnalyzer;
 import com.lab.air.chaos.v2.engine.AdaptiveController;
 import com.lab.air.chaos.v2.engine.Orchestrator;
+import com.lab.air.chaos.v2.engine.ReportWriter;
 import com.lab.air.chaos.v2.engine.SafetyGuard;
 import com.lab.air.chaos.v2.engine.WindowStats;
 import com.lab.air.chaos.v2.metrics.MetricsCollector;
@@ -431,5 +432,13 @@ class V2UnitTest {
         var b = o.submit(r, "test");
         assertEquals(a.experiment().id, b.experiment().id);
         assertEquals(200, b.status());
+    }
+
+    @Test
+    void reportShowsIstanbulTimeNextToUtc() {
+        assertEquals("2026-11-25 00:22:37 İstanbul (2026-11-24T21:22:37.372105572Z)",
+                ReportWriter.withLocal("2026-11-24T21:22:37.372105572Z"));
+        assertEquals("-", ReportWriter.withLocal(null));
+        assertEquals("bozuk", ReportWriter.withLocal("bozuk"));
     }
 }

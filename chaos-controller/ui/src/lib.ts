@@ -103,3 +103,57 @@ export function phaseProgress(state: State, elapsedInPhaseSec: number, d: Durati
 export function newClientRequestId(): string {
   return 'ui-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
 }
+
+/** Ekran saat dilimi. Kayıtlar ve API UTC'dir; yalnız gösterim yerel saate çevrilir (lab İstanbul'da, UTC+3). */
+export const DISPLAY_TZ = 'Europe/Istanbul'
+
+/** Backend Instant.toString() nanosaniye kesir verebilir; tüm tarayıcılarda güvenli parse için kesiri ms'ye kısalt. */
+function toMs(iso: string | null | undefined): number {
+  if (!iso) return NaN
+  return Date.parse(iso.replace(/(\.\d{3})\d+/, '$1'))
+}
+
+function parts(ms: number): Record<string, string> {
+  const f = new Intl.DateTimeFormat('en-GB', {
+    timeZone: DISPLAY_TZ, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })
+  return Object.fromEntries(f.formatToParts(new Date(ms)).map((p) => [p.type, p.value]))
+}
+
+/** UTC ISO → yerel "HH:MM:SS". Geçersiz/boş değer "". */
+export function localTime(iso: string | null | undefined): string {
+  const ms = toMs(iso)
+  if (Number.isNaN(ms)) return ''
+  const p = parts(ms)
+  return `${p.hour}:${p.minute}:${p.second}`
+}
+
+/** UTC ISO → yerel "YYYY-MM-DD HH:MM:SS". */
+export function localDateTime(iso: string | null | undefined): string {
+  const ms = toMs(iso)
+  if (Number.isNaN(ms)) return ''
+  const p = parts(ms)
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`
+}
+
+const MIN = 60_000
+
+/** Agent'a sorulacak pencereler (yerel saat, tam dakikaya içe yuvarlanmış; Dynatrace 1 dk çözünürlük).
+ * baseline = BASELINING → RAMPING_UP, chaos = RUNNING → RECOVERING. Faz eksikse ya da 1 dk'dan kısaysa null. */
+export function agentWindows(transitions: { state: string; at: string }[]):
+    { baseline: [string, string] | null; chaos: [string, string] | null } {
+  const at = (s: string) => {
+    const t = transitions.find((x) => x.state === s)
+    return t ? toMs(t.at) : NaN
+  }
+  const win = (from: number, to: number): [string, string] | null => {
+    if (Number.isNaN(from) || Number.isNaN(to)) return null
+    const f = Math.ceil(from / MIN) * MIN
+    const t = Math.floor(to / MIN) * MIN
+    if (t - f < MIN) return null
+    const hm = (ms: number) => localDateTime(new Date(ms).toISOString()).slice(0, 16)
+    return [hm(f), hm(t)]
+  }
+  return { baseline: win(at('BASELINING'), at('RAMPING_UP')), chaos: win(at('RUNNING'), at('RECOVERING')) }
+}

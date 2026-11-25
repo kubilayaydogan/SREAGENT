@@ -2,13 +2,32 @@ package com.lab.air.chaos.v2.engine;
 
 import com.lab.air.chaos.v2.store.Experiment;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
 /** Deney raporu (markdown). Açıklamalar Türkçe, teknik terimler İngilizce; tüm değerler ölçülmüş örneklerden. */
 public final class ReportWriter {
 
+    /** Kayıtlar UTC; raporda yanına yerel saat (lab İstanbul'da) yazılır. */
+    static final ZoneId LOCAL = ZoneId.of("Europe/Istanbul");
+    private static final DateTimeFormatter LOCAL_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(LOCAL);
+
     private ReportWriter() {
+    }
+
+    /** UTC ISO → "yyyy-MM-dd HH:mm:ss (İstanbul) / <utc>". Parse edilemezse değer aynen döner. */
+    public static String withLocal(String iso) {
+        if (iso == null || iso.isBlank()) {
+            return "-";
+        }
+        try {
+            return LOCAL_FMT.format(Instant.parse(iso)) + " İstanbul (" + iso + ")";
+        } catch (RuntimeException ex) {
+            return iso;
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -24,7 +43,11 @@ public final class ReportWriter {
         row(b, "Seed", String.valueOf(e.seed));
         row(b, "Final state", String.valueOf(r.get("finalState")));
         row(b, "Verdict", String.valueOf(r.get("verdict")));
-        row(b, "Başlangıç / bitiş", e.startedAt + " / " + (e.endedAt == null ? "-" : e.endedAt));
+        row(b, "Başlangıç", withLocal(e.startedAt));
+        row(b, "Bitiş", withLocal(e.endedAt));
+        for (var t : e.transitions) {
+            row(b, "Faz " + t.state(), withLocal(t.at()));
+        }
         if (r.get("stopReason") != null && !String.valueOf(r.get("stopReason")).isEmpty()) {
             row(b, "Durdurma sebebi", String.valueOf(r.get("stopReason")));
         }

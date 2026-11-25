@@ -172,8 +172,12 @@ public class V2ApiController {
 
     @GetMapping("/experiments")
     public Map<String, Object> list() {
-        return Map.of("experiments", store.list(), "queue", orch.queued(),
-                "active", orch.active().map(r -> r.experiment().summary()).orElse(null));
+        // Boştayken active null'dır; Map.of null kabul etmez (önceden IDLE'da 500 dönüyordu).
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("experiments", store.list());
+        out.put("queue", orch.queued());
+        out.put("active", orch.active().map(r -> r.experiment().summary()).orElse(null));
+        return out;
     }
 
     @GetMapping("/experiments/{id}")
