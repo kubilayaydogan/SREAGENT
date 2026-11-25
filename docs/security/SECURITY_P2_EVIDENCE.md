@@ -1,6 +1,6 @@
 # Güvenlik P2: Kanıt
 
-Durum: P2.8 ve P2.2 kodlandı, test edildi ve 2026-11-25'te APP_VM'ye deploy edildi (alembic 0008).
+Durum: P2.8, P2.2 ve P2.3 kodlandı, test edildi ve 2026-11-25'te APP_VM'ye deploy edildi (alembic 0009).
 
 ## P2.8 Security & Governance UI
 
@@ -55,10 +55,47 @@ Notlar:
 - R-P2.2b: Anahtar başına ayrı rate limit yoktur; LLM koşu bütçesi (P1.6) ve eşzamanlı koşu sınırı geçerlidir.
 - R-P2.2c: TLS yok (kullanıcı kararı). Anahtar ağda düz metin taşınır; oturum token'ı ile aynı risk.
 
+## P2.3 SIEM iletimi ve güvenlik alarmları
+
+İkisi de **varsayılan kapalı**. Settings › Notifications'tan açılır; durumları Security & Governance ekranındadır. Worker işi `security-ops` 60 saniyede bir çalışır ve ayar kapalıyken hiçbir şey yapmaz.
+
+**SIEM iletimi** (`services/security_ops.py`)
+- Outbox olarak append-only `sre.audit_events` ve bir cursor kullanılır (`sre.security_state`, migration 0009); ayrı bir kopya tablo yoktur.
+- Teslim at-least-once'tır: 2xx gelmeden cursor ilerlemez. Olay `id`'si alıcıda tekrarı ayıklamak için kullanılabilir. Bir turda en çok 5 batch gönderilir; batch boyutu 10–1000 (varsayılan 200).
+- İlk açılışta geçmiş gönderilmez; cursor o anki son id'ye konur.
+- Hedef adres secret referansıyla verilir. Kayıtta ve her gönderimde SSRF kontrolü yapılır, redirect izlenmez.
+- İsteğe bağlı HMAC-SHA256 imzası `X-SRE-Signature: sha256=…` başlığıyla gönderilir; ayrıca `X-SRE-Batch-Id` eklenir.
+- Gövde audit'e yazılırken redakte edilmiştir; gönderimde ayrıca "export" sink'i uygulanır.
+- Teslim hatası her turda değil, yalnız durum değişiminde audit'lenir: `siem.delivery_failed` ve `siem.delivery_recovered`. SSRF reddi `egress.denied` olarak yazılır.
+
+**Alarm kuralları** (kodda tanımlı; threshold ve pencere ayardan gelir)
+
+| Kural | Eylemler | Varsayılan threshold |
+|---|---|---|
+| `login_failures` | `auth.login` (başarısız / engellenen) | 10 |
+| `authz_denied` | `authz.denied` | 20 |
+| `apikey_rejected` | `auth.apikey.rejected` | 10 |
+| `policy_denied` | `tool.denied`, `run.denied`, `egress.denied`, `llm.model_denied`, `llm.budget_exceeded` | 5 |
+| `tool_definition_changed` | `connector.tool_changed` | 1 (sabit) |
+
+- Pencere varsayılan 15 dakikadır. Aynı kural pencere içinde bir kez alarm üretir (cooldown).
+- Alarm audit'e `security.alert` olarak yazılır (`result=alert`, `reason_code=<kural>`); Slack webhook tanımlıysa Slack'e de gider. Alarmlar güvenlik olay özetinde görünür ve SIEM'e de iletilir.
+
+**Testler** (`test_security_p2.py`)
+- `test_security_ops_disabled_by_default`: kapalıyken no-op; referanssız açma 422 döner.
+- `test_siem_forwarding_at_least_once`: geçmiş gönderilmez, batch'lere bölünür, sıralı ve tekrarsızdır. Hatada cursor ilerlemez ve tek audit yazılır; düzelince kayıpsız devam eder.
+- `test_siem_signature_and_ssrf`: HMAC doğrulanır; iç ağ adresine kayıt reddedilir.
+- `test_security_alert_rules_and_cooldown`: threshold altında alarm yok, aşınca bir alarm çıkar; cooldown, audit, olay özeti ve Slack kontrol edilir.
+
+**Kalan riskler**
+- R-P2.3a: Hedef yalnız HTTPS webhook (JSON). Syslog/CEF adapter'ı yok.
+- R-P2.3b: TLS'siz iç ağda SIEM'e giden trafik, hedef adres `https` olduğu sürece şifrelidir. Platformun kendi arayüzü TLS'sizdir (kullanıcı kararı).
+- R-P2.3c: Alarm kuralları kodda tanımlıdır; arayüzden yalnız threshold ve pencere değişir.
+
 ## Regresyon
 
-- Backend: 126 geçti, 1 atlandı. P2.8 için 4, P2.2 için 3 yeni test; migration testi 0008 ve geri alma kontrolü içeriyor.
-- Frontend: `tsc` temiz, vitest 41/41, `vite build` başarılı.
+- P2.8 + P2.2 (deploy edilen): backend 126 geçti / 1 atlandı, frontend 41/41.
+- P2.3 sonrası: backend 130 geçti, 1 atlandı (migration testi 0009 ve geri alma kontrolü içeriyor); frontend `tsc` temiz, vitest 42/42, `vite build` başarılı.
 
 ## Canlı doğrulama (2026-11-25)
 
@@ -69,12 +106,14 @@ Notlar:
 - Frontend bundle'ında "Oturumlarım" ve "Users & API Keys" var.
 - Geri alma: `docker compose run --rm sre-migrate` yerine `--downgrade 0007` ve image'ları `:pre-p2`'den geri etiketleme.
 
+**P2.3 canlı doğrulama (2026-11-25):** Rollback image'ları `:pre-p23`. `alembic_version` = 0009. `security-ops` işi etkin (60 sn); ilk koşu SUCCEEDED, sonuç `{"siem": "disabled", "alerts": []}` (varsayılan kapalı). Kimliksiz `/api/settings/security` → 401. Frontend bundle'ında SIEM kartı var.
+
 ## Kalan P2 maddeleri
 
 | Madde | Durum |
 |---|---|
 | P2.2 Service account API anahtarları | Kodlandı ve test edildi (yukarıda) |
-| P2.3 SIEM outbox ve alarm kuralları (varsayılan kapalı) | Sırada |
+| P2.3 SIEM outbox ve alarm kuralları (varsayılan kapalı) | Deploy edildi (alembic 0009) |
 | P2.4 Secret rotation/expiry metadata | Sırada |
 | P2.7 Retention | Sırada; silme varsayılanları muhafazakâr olacak |
 | P2.1 IdP/SSO | Karar bekliyor (IdP seçilmedi) |

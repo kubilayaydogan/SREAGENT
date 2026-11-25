@@ -336,8 +336,8 @@ export function NotificationsSection() {
   const sec = useSecrets();
   const refs = [...(sec.data?.stored ?? []).map((s) => s.ref), ...(sec.data?.env ?? []).map((e) => e.ref ?? "")].filter(Boolean);
   const render: FieldRenderer = ({ name, value, onChange, disabled }) =>
-    name === "slack_webhook_ref" ? (
-      <Select className="w-72" value={String(value ?? "")} disabled={disabled} onChange={(e) => onChange(e.target.value || null)} aria-label="Slack webhook secret">
+    name.endsWith("_ref") ? (
+      <Select className="w-72" value={String(value ?? "")} disabled={disabled} onChange={(e) => onChange(e.target.value || null)} aria-label={`${name} secret`}>
         <option value="">— seçilmedi —</option>
         {Array.from(new Set([...(value ? [String(value)] : []), ...refs])).map((r) => (
           <option key={r} value={r}>
@@ -350,7 +350,7 @@ export function NotificationsSection() {
     <SectionForm
       section="notifications"
       title="Notifications"
-      description="Webhook adresi secret olarak tutulur (Security & Audit › Secrets); burada yalnız referansı seçilir. Investigation başına en fazla bir bildirim."
+      description="Webhook adresleri secret olarak tutulur (Security & Governance › Secrets); burada yalnız referansı seçilir. Investigation başına en fazla bir RCA bildirimi. SIEM iletimi ve güvenlik alarmları varsayılan kapalıdır; durumları Security & Governance ekranındadır."
       render={render}
       aside={(v) => {
         const st = v.status as { channels: { id: string; label: string; supported: boolean; reason?: string }[]; retries: string };

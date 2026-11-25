@@ -7,7 +7,7 @@ import { api, type ApiError } from "@/services/api";
 import { useAuth } from "@/services/auth";
 import { fmtRelative, fmtTime } from "@/lib/utils";
 import { PERM_LABEL, ROLE_LABEL } from "@/features/account/permissions";
-import { useAudit, useAuditSummary, useSecrets, useSecurity, useSettingsAction, type SecurityInfo } from "./api";
+import { useAudit, useAuditSummary, useSecrets, useSecurity, useSettingsAction, type SecurityInfo, type SecurityOps } from "./api";
 import { ConfirmDialog, show } from "./common";
 
 const NAME_RE = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
@@ -197,6 +197,9 @@ const ACTION_LABEL: Record<string, string> = {
   "approval.cancel": "Onay iptali",
   "export.rca_markdown": "RCA dışa aktarma",
   "memory.focus.clear": "Odak temizleme",
+  "security.alert": "Güvenlik alarmı",
+  "siem.delivery_failed": "SIEM teslim hatası",
+  "siem.delivery_recovered": "SIEM teslimi düzeldi",
 };
 
 const label = (a: string) => ACTION_LABEL[a] ?? a;
@@ -466,12 +469,71 @@ function SecurityEventsCard({ onPick }: { onPick: (action: string) => void }) {
   );
 }
 
+/** SIEM gecikmesi + teslim durumundan tek satır özet (test edilir). */
+export function siemState(s: SecurityOps["siem"]): { tone: "ok" | "warn" | "off"; text: string } {
+  if (!s.enabled) return { tone: "off", text: "Kapalı" };
+  if (s.failing) return { tone: "warn", text: `Teslim başarısız (${s.failing.error}); ${s.lag ?? "?"} olay bekliyor` };
+  if (s.cursor === null) return { tone: "ok", text: "Açık; ilk tur bekleniyor" };
+  return { tone: s.lag && s.lag > 1000 ? "warn" : "ok", text: `Açık · bekleyen ${s.lag ?? 0} olay` };
+}
+
+function SecurityOpsCard({ ops }: { ops: SecurityOps }) {
+  const st = siemState(ops.siem);
+  return (
+    <Card>
+      <CardHeader
+        title="SIEM iletimi ve güvenlik alarmları"
+        description="Worker her dakika audit olaylarını SIEM'e iletir (at-least-once, olay id'si ile tekrar ayıklanabilir) ve alarm kurallarını değerlendirir. İkisi de varsayılan kapalı; Settings › Notifications'tan açılır."
+      />
+      <CardBody className="grid gap-4 lg:grid-cols-2">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          <dt className="text-muted">SIEM</dt>
+          <dd className={st.tone === "warn" ? "text-st-warning-ink" : "text-ink"}>{st.text}</dd>
+          <dt className="text-muted">İmza</dt>
+          <dd>{ops.siem.signed ? "HMAC-SHA256 (X-SRE-Signature)" : "yok"}</dd>
+          <dt className="text-muted">Son başarılı</dt>
+          <dd>{ops.siem.last_ok ? `${fmtRelative(ops.siem.last_ok.ts)} · ${ops.siem.last_ok.count} olay` : "—"}</dd>
+          <dt className="text-muted">Başlangıç</dt>
+          <dd>{ops.siem.started_at ? fmtTime(ops.siem.started_at) : "—"}</dd>
+          <dt className="text-muted">Alarmlar</dt>
+          <dd>
+            {ops.alerts.enabled ? `Açık · pencere ${ops.alerts.window_minutes} dk` : "Kapalı"}
+            {ops.alerts.enabled && !ops.alerts.slack && " · Slack webhook yok (yalnız audit)"}
+          </dd>
+        </dl>
+        <table className="data-table w-full">
+          <thead>
+            <tr>
+              <th>Kural</th>
+              <th className="text-right">Threshold</th>
+              <th>Son alarm</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ops.alerts.rules.map((r) => (
+              <tr key={r.rule}>
+                <td className="text-xs" title={r.actions.join(", ")}>
+                  {r.label}
+                  <div className="font-mono text-2xs text-muted">{r.rule}</div>
+                </td>
+                <td className="text-right text-xs tabular-nums">{r.threshold}</td>
+                <td className="text-xs">{r.last_fired ? fmtRelative(r.last_fired) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardBody>
+    </Card>
+  );
+}
+
 export function SecuritySection() {
   const q = useSecurity();
   const [filter, setFilter] = useState<AuditFilter>({ action: "", result: "" });
   return (
     <div className="space-y-3">
       <SecurityEventsCard onPick={(action) => setFilter({ action, result: "" })} />
+      {q.data?.security_ops && <SecurityOpsCard ops={q.data.security_ops} />}
       {q.data && <PermissionMatrix d={q.data} />}
       {q.data && <DataProtectionCard d={q.data} />}
       <SecretsCard />

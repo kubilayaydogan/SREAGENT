@@ -110,6 +110,16 @@ async def _check(rt, s: AsyncSession, section: str, model) -> None:
             await asyncio.to_thread(netguard.check_url, url)
         except netguard.UnsafeUrl as e:
             raise service.SettingsInvalid(f"Slack webhook adresi reddedildi: {e}") from None
+    if section == "notifications" and model.siem_enabled:
+        try:
+            url = await secrets.resolve(s, model.siem_url_ref)
+            await secrets.resolve(s, model.siem_signing_ref)
+        except secrets.SecretError as e:
+            raise service.SettingsInvalid(f"SIEM secret: {e}") from None
+        try:
+            await asyncio.to_thread(netguard.check_url, url)
+        except netguard.UnsafeUrl as e:
+            raise service.SettingsInvalid(f"SIEM adresi reddedildi: {e}") from None
 
 
 async def _after_save(rt, s: AsyncSession, section: str) -> None:
@@ -135,7 +145,7 @@ def _status(rt, section: str, values: dict) -> dict:
             {"id": "slack", "label": "Slack (Incoming Webhook)", "supported": True},
             {"id": "teams", "label": "Microsoft Teams", "supported": False, "reason": "adapter yok"},
             {"id": "smtp", "label": "E-posta (SMTP)", "supported": False, "reason": "adapter yok"},
-            {"id": "webhook", "label": "Genel webhook", "supported": False, "reason": "adapter yok"}],
+            {"id": "siem", "label": "SIEM (HTTPS webhook, JSON; audit olayları)", "supported": True}],
             "dedup": "investigation başına en fazla bir bildirim", "retries": "3 deneme, 4xx tekrar denenmez"}
     if section == "scheduling":
         return {"cron": {"supported": False, "reason": "cron ifadesi için zamanlayıcı kütüphanesi kurulu değil; "
@@ -213,8 +223,11 @@ async def audit_summary(hours: int = Query(24, ge=1, le=720), _: User = Depends(
 
 
 @router.get("/security")
-async def security(request: Request, _: User = Depends(perm(P.SETTINGS_READ))):
+async def security(request: Request, _: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
+    from ...services import security_ops
+    ops = await security_ops.status(s, (await service.effective(_rt(request), s))["notifications"])
     return {
+        "security_ops": ops,
         "roles": [
             {"role": Role.VIEWER.value, "can": ["Kayıtları görüntüleme", "Görüntü tercihleri"]},
             {"role": Role.SRE.value, "can": ["Investigation başlatma", "Incident / RCA / onay işlemleri",

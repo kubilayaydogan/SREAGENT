@@ -866,3 +866,12 @@ class ApiKey(Base):
     last_used_ip: Mapped[str | None] = mapped_column(String(64))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_reason: Mapped[str | None] = mapped_column(String(32))
+
+
+class SecurityState(Base):
+    """Güvenlik operasyonları durum anahtarları (P2.3): SIEM cursor'ı, teslim durumu, alarm cooldown'ları."""
+    __tablename__ = "security_state"
+    __table_args__ = ({"schema": SCHEMA},)
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    updated_at: Mapped[datetime] = _created()

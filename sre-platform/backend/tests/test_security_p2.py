@@ -180,3 +180,134 @@ def test_api_key_follows_owner(api_settings, tmp_path):
         allk = (await c.get("/api/api-keys", headers=h, params={"include_inactive": True})).json()["items"]
         assert allk[0]["revoked_reason"] == "owner_disabled"
     with_client(api_settings, tmp_path, fn)
+
+
+# ------------------------------------------------------------------------------------- P2.3 SIEM iletimi + alarmlar
+SIEM_URL = "https://siem.example.com/hook"
+
+
+def _siem_env(monkeypatch, resolve_to="93.184.216.34"):
+    from sre_platform.settings import netguard
+    monkeypatch.setenv("SRE_SECRET_SIEM_URL", SIEM_URL)
+    monkeypatch.setenv("SRE_SECRET_SIEM_SIGN", "imza" + "-anahtari-" + "test")
+    monkeypatch.setattr(netguard, "_resolve", lambda host, port: [resolve_to])
+
+
+async def _notif(c, h, **values):
+    cur = (await c.get("/api/settings/notifications", headers=h)).json()
+    r = await c.patch("/api/settings/notifications", headers=h, json={"revision": cur["revision"], "values": values})
+    return r
+
+
+def test_security_ops_disabled_by_default(api_settings, tmp_path, monkeypatch):
+    async def fn(c, app):
+        from sre_platform.services import security_ops
+        sent = []
+        monkeypatch.setattr(security_ops, "_send", lambda *a: sent.append(a))
+        h = await login(c)
+        out = await security_ops.run(app.state.rt, {})
+        assert out == {"siem": "disabled", "alerts": []} and sent == []
+        st = (await c.get("/api/settings/security", headers=h)).json()["security_ops"]
+        assert st["siem"]["enabled"] is False and st["alerts"]["enabled"] is False
+        assert {r["rule"] for r in st["alerts"]["rules"]} >= {"login_failures", "authz_denied", "policy_denied"}
+        # SIEM açılamaz: referans yok
+        assert (await _notif(c, h, siem_enabled=True)).status_code == 422
+    with_client(api_settings, tmp_path, fn)
+
+
+def test_siem_forwarding_at_least_once(api_settings, tmp_path, monkeypatch):
+    _siem_env(monkeypatch)
+
+    async def fn(c, app):
+        import json
+        from sre_platform.services import security_ops
+        sent, fail = [], {"on": False}
+
+        async def fake_send(url, body, signing, batch_id):
+            if fail["on"]:
+                raise RuntimeError("HTTP 503")
+            sent.append((url, json.loads(body), signing, batch_id))
+        monkeypatch.setattr(security_ops, "_send", fake_send)
+        h = await login(c)
+        await c.get("/api/auth/me", headers=h)
+        r = await _notif(c, h, siem_enabled=True, siem_url_ref="env:SRE_SECRET_SIEM_URL",
+                         siem_signing_ref="env:SRE_SECRET_SIEM_SIGN", siem_batch_size=10)
+        assert r.status_code == 200, r.text
+        rt = app.state.rt
+        assert (await security_ops.run(rt, {}))["sent"] == 0                       # ilk açılış: geçmiş gönderilmez
+        v = await mkuser(c, h, "izleyici", "viewer")
+        for _ in range(12):
+            await c.get("/api/settings/audit", headers=v)                            # 12 authz.denied
+        out = await security_ops.run(rt, {})
+        assert out["siem"] == "ok" and out["sent"] >= 13 and len(sent) >= 2            # batch'lere bölündü
+        events = [e for _, b, _, _ in sent for e in b["events"]]
+        ids = [e["id"] for e in events]
+        assert ids == sorted(ids) and len(ids) == len(set(ids))
+        assert sent[0][0] == SIEM_URL and sent[0][2] and sent[0][1]["source"] == "airlab-sre-platform"
+        assert {"user.create", "authz.denied"} <= {e["action"] for e in events}
+        assert all("password" not in json.dumps(e).lower() or "redacted" in json.dumps(e).lower() for e in events)
+        # hata: cursor ilerlemez, tek audit; düzelince kaldığı yerden
+        n = len(ids)
+        await c.get("/api/settings/audit", headers=v)
+        fail["on"] = True
+        assert (await security_ops.run(rt, {}))["siem"] == "error"
+        assert (await security_ops.run(rt, {}))["siem"] == "error"
+        fails = (await c.get("/api/settings/audit", headers=h, params={"action": "siem.delivery_failed"})).json()
+        assert fails["total"] == 1
+        st = (await c.get("/api/settings/security", headers=h)).json()["security_ops"]["siem"]
+        assert st["failing"] and st["lag"] >= 1
+        fail["on"] = False
+        assert (await security_ops.run(rt, {}))["siem"] == "ok"
+        again = [e["id"] for _, b, _, _ in sent for e in b["events"]][n:]
+        assert again and min(again) > max(ids)                                      # kayıp yok, tekrar yok
+        rec = (await c.get("/api/settings/audit", headers=h, params={"action": "siem.delivery_recovered"})).json()
+        assert rec["total"] == 1
+    with_client(api_settings, tmp_path, fn)
+
+
+def test_siem_signature_and_ssrf(api_settings, tmp_path, monkeypatch):
+    from sre_platform.services import security_ops
+    sig = security_ops.sign("k", b'{"a":1}')
+    import hashlib
+    import hmac
+    assert sig == "sha256=" + hmac.new(b"k", b'{"a":1}', hashlib.sha256).hexdigest()
+    _siem_env(monkeypatch, resolve_to="10.0.0.5")                                    # iç ağ adresi
+
+    async def fn(c, app):
+        h = await login(c)
+        r = await _notif(c, h, slack_enabled=False, siem_enabled=True, siem_url_ref="env:SRE_SECRET_SIEM_URL")
+        assert r.status_code == 422 and "SIEM adresi reddedildi" in r.text          # kayıtta engel
+    with_client(api_settings, tmp_path, fn)
+
+
+def test_security_alert_rules_and_cooldown(api_settings, tmp_path, monkeypatch):
+    _siem_env(monkeypatch)
+
+    async def fn(c, app):
+        from sre_platform.services import security_ops
+        slack = []
+
+        async def fake_post(url, payload, attempts=3):
+            slack.append(payload["text"])
+        monkeypatch.setattr("sre_platform.services.slack_notify._post", fake_post)
+        h = await login(c)
+        r = await _notif(c, h, security_alerts_enabled=True, alert_authz_denied=3, alert_window_minutes=15)
+        assert r.status_code == 200, r.text
+        v = await mkuser(c, h, "izleyici", "viewer")
+        rt = app.state.rt
+        await c.get("/api/settings/audit", headers=v)
+        assert (await security_ops.run(rt, {}))["alerts"] == []                      # eşik altında
+        for _ in range(3):
+            await c.get("/api/settings/audit", headers=v)
+        fired = (await security_ops.run(rt, {}))["alerts"]
+        assert [f["rule"] for f in fired] == ["authz_denied"] and fired[0]["count"] >= 3
+        assert (await security_ops.run(rt, {}))["alerts"] == []                      # cooldown
+        if (await c.get("/api/settings/notifications", headers=h)).json()["values"]["slack_webhook_ref"]:
+            assert len(slack) == 1 and "güvenlik alarmı" in slack[0]                 # Slack tanımlıysa bir kez
+        al = (await c.get("/api/settings/audit", headers=h, params={"action": "security.alert"})).json()["items"]
+        assert len(al) == 1 and al[0]["result"] == "alert" and al[0]["reason_code"] == "authz_denied"
+        sm = (await c.get("/api/settings/audit/summary", headers=h)).json()
+        assert any(i["action"] == "security.alert" for i in sm["items"])
+        st = (await c.get("/api/settings/security", headers=h)).json()["security_ops"]["alerts"]
+        assert next(r for r in st["rules"] if r["rule"] == "authz_denied")["last_fired"]
+    with_client(api_settings, tmp_path, fn)

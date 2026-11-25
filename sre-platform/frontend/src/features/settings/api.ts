@@ -178,6 +178,25 @@ export interface AuditItem {
   run_id?: string | null;
 }
 
+/** P2.3: SIEM iletimi ve güvenlik alarm kuralları durumu (worker işi security-ops). */
+export interface SecurityOps {
+  siem: {
+    enabled: boolean;
+    signed: boolean;
+    cursor: number | null;
+    lag: number | null;
+    started_at: string | null;
+    last_ok: { ts: string; count: number; last_id: number } | null;
+    failing: { since: string; error: string } | false | null;
+  };
+  alerts: {
+    enabled: boolean;
+    window_minutes: number;
+    slack: boolean;
+    rules: { rule: string; label: string; actions: string[]; threshold: number; last_fired: string | null }[];
+  };
+}
+
 export interface AuditSummary {
   hours: number;
   total: number;
@@ -236,6 +255,7 @@ export interface SecurityInfo {
   permissions: { permission: string; roles: string[] }[];
   dlp: Record<string, { secrets: boolean; pii: boolean }>;
   llm_model_allowlist: string[];
+  security_ops?: SecurityOps;
   secret_store: { available: boolean; reason: string | null; env_allowlist: string[] };
   outbound_allowlist: string[];
   locks: Record<string, Record<string, unknown>>;

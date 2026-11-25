@@ -205,7 +205,31 @@ class NotificationSettings(_Section):
     slack_risk_threshold: float = Field(75.0, ge=0, le=100, json_schema_extra=_meta(
         env="SRE_SLACK_RISK_THRESHOLD", help="Bu risk score ve üstü bildirilir"))
 
-    @field_validator("slack_webhook_ref")
+    # P2.3 SIEM iletimi (audit olayları → HTTPS webhook). Varsayılan kapalı.
+    siem_enabled: bool = Field(False, json_schema_extra=_meta(
+        apply="next_tick", help="Audit olaylarını SIEM'e (HTTPS webhook, JSON) ilet. İlk açılışta geçmiş gönderilmez"))
+    siem_url_ref: str | None = Field(None, json_schema_extra=_meta(
+        help="SIEM webhook adresinin secret referansı (ör. Splunk HEC / Elastic / Sentinel ara katmanı)"))
+    siem_signing_ref: str | None = Field(None, json_schema_extra=_meta(
+        help="İsteğe bağlı: gövdeyi HMAC-SHA256 ile imzalamak için secret referansı (X-SRE-Signature)"))
+    siem_batch_size: int = Field(200, ge=10, le=1000, json_schema_extra=_meta(
+        apply="next_tick", help="Bir istekte gönderilen en çok olay"))
+    # P2.3 güvenlik alarmları (kodda tanımlı kurallar, eşik + pencere). Varsayılan kapalı.
+    security_alerts_enabled: bool = Field(False, json_schema_extra=_meta(
+        apply="next_tick", help="Güvenlik alarm kurallarını değerlendir; alarm audit'e (security.alert) ve "
+                                "Slack webhook tanımlıysa Slack'e gider"))
+    alert_window_minutes: int = Field(15, ge=5, le=1440, json_schema_extra=_meta(
+        apply="next_tick", help="Sayım penceresi; aynı kural bu süre içinde bir kez alarm üretir", unit="dk"))
+    alert_login_failures: int = Field(10, ge=1, le=10000, json_schema_extra=_meta(
+        apply="next_tick", help="Başarısız / engellenen giriş threshold'u"))
+    alert_authz_denied: int = Field(20, ge=1, le=10000, json_schema_extra=_meta(
+        apply="next_tick", help="Yetki reddi (403) threshold'u"))
+    alert_apikey_rejected: int = Field(10, ge=1, le=10000, json_schema_extra=_meta(
+        apply="next_tick", help="Reddedilen API anahtarı threshold'u"))
+    alert_policy_denied: int = Field(5, ge=1, le=10000, json_schema_extra=_meta(
+        apply="next_tick", help="Policy reddi threshold'u (tool / koşu / dış bağlantı / model / LLM bütçesi)"))
+
+    @field_validator("slack_webhook_ref", "siem_url_ref", "siem_signing_ref")
     @classmethod
     def _ref(cls, v):
         if v is not None and not SECRET_REF_RE.match(v):
@@ -216,6 +240,8 @@ class NotificationSettings(_Section):
     def _need_ref(self):
         if self.slack_enabled and not self.slack_webhook_ref:
             raise ValueError("Slack açıkken webhook secret referansı gerekli")
+        if self.siem_enabled and not self.siem_url_ref:
+            raise ValueError("SIEM açıkken webhook secret referansı gerekli")
         return self
 
 
@@ -258,6 +284,11 @@ LABELS = {
     "rca_profile": "RCA profili", "model_override": "Model seçimi (üst bar)", "langsmith_enabled": "LangSmith tracing",
     "langsmith_project": "LangSmith project", "sampling_rate": "Sampling oranı", "environment_tag": "Environment etiketi",
     "slack_enabled": "Slack bildirimi", "slack_webhook_ref": "Slack webhook secret", "slack_risk_threshold": "Risk score threshold",
+    "siem_enabled": "SIEM iletimi", "siem_url_ref": "SIEM webhook secret", "siem_signing_ref": "SIEM imza secret",
+    "siem_batch_size": "SIEM batch boyutu", "security_alerts_enabled": "Güvenlik alarmları",
+    "alert_window_minutes": "Alarm penceresi", "alert_login_failures": "Threshold: başarısız giriş",
+    "alert_authz_denied": "Threshold: yetki reddi", "alert_apikey_rejected": "Threshold: API anahtarı reddi",
+    "alert_policy_denied": "Threshold: policy reddi",
     "investigations_days": "Investigation kayıtları", "watch_events_days": "Watch olayları",
     "llm_runs_days": "LLM Monitoring özetleri", "job_runs_days": "İş geçmişi",
 }

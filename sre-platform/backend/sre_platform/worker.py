@@ -7,6 +7,7 @@ dolunca iş başka worker'a geçer.
   health_check  (SRE_HEALTH_CHECK_MINUTES) son N dakikanın tam analizi (LLM'siz) → araştırma kaydı
   retention     (saatlik)             eski kayıtların temizliği + süresi dolan onaylar
   langsmith_sync (SRE_LANGSMITH_SYNC_MINUTES) LangSmith trace/LLM özetleri → sre.llm_runs (LLM izleme panosu)
+  security_ops  (60 sn)              SIEM iletimi + güvenlik alarm kuralları (varsayılan kapalı; P2.3)
 """
 from __future__ import annotations
 
@@ -158,7 +159,13 @@ def _heartbeat() -> None:
         pass
 
 
-HANDLERS = {"health_check": health_check, "retention": retention, "langsmith_sync": langsmith_sync}
+async def security_ops(rt, params: dict) -> dict[str, Any]:
+    from .services.security_ops import run
+    return await run(rt, params)
+
+
+HANDLERS = {"health_check": health_check, "retention": retention, "langsmith_sync": langsmith_sync,
+            "security_ops": security_ops}
 
 
 JOB_TYPES = {"watch": "watch", "health-check": "health_check", "langsmith-sync": "langsmith_sync"}
@@ -174,6 +181,7 @@ async def ensure_jobs(rt) -> None:
             await jobs.ensure(s, name, JOB_TYPES[name], spec["interval_seconds"], spec["params"],
                               enabled=spec["enabled"])
         await jobs.ensure(s, "retention", "retention", 3600, {})
+        await jobs.ensure(s, "security-ops", "security_ops", 60, {})      # SIEM + alarmlar (ayar kapalıysa no-op)
 
 
 # ---------------------------------------------------------------- döngü

@@ -22,3 +22,15 @@ describe("account", () => {
     expect(keyFormProblem("ci-bot", ["record:read"], 366, 365)).toMatch(/Geçerlilik/);
   });
 });
+
+describe("SIEM durumu", () => {
+  const base = { enabled: true, signed: false, cursor: 10, lag: 0, started_at: null, last_ok: null, failing: false as const };
+  it("kapalı / açık / hata / gecikme", async () => {
+    const { siemState } = await import("@/features/settings/Security");
+    expect(siemState({ ...base, enabled: false }).tone).toBe("off");
+    expect(siemState(base)).toEqual({ tone: "ok", text: "Açık · bekleyen 0 olay" });
+    expect(siemState({ ...base, cursor: null }).text).toMatch(/ilk tur/);
+    expect(siemState({ ...base, lag: 5000 }).tone).toBe("warn");
+    expect(siemState({ ...base, lag: 3, failing: { since: "x", error: "HTTP 503" } })).toEqual({ tone: "warn", text: "Teslim başarısız (HTTP 503); 3 olay bekliyor" });
+  });
+});
