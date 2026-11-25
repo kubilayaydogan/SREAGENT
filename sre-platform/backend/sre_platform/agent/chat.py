@@ -276,6 +276,9 @@ class ChatOrchestrator:
                     row.explanation, row.explanation_source = answer, source
                     await investigations.record_tool(s, row.id, source.split(" ")[0].lower() + ":answer", ok=True,
                                                      step="rca")
+                if intent in ("analyze", "compare"):     # RCA metni kesinleşti → yüksek riskte Slack bildirimi
+                    from ..services.slack_notify import notify_rca
+                    await notify_rca(rt, uuid.UUID(inv["investigation_id"]))
             sugg = suggestions_for(r, inv, mem)
             return {"answer": answer, "answer_source": source, "suggestions": sugg,
                     "messages": [{"role": "assistant", "content": answer[:8000]}]}

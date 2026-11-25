@@ -37,6 +37,9 @@ class PlatformSettings:
     health_check_minutes: int = 15                # zamanlanmış sağlık kontrolü aralığı (0 = kapalı)
     health_check_window_minutes: int = 15
     health_check_llm: bool = False                # normal döngüde Claude çağrısı yok (maliyet); olayda watch açar
+    slack_webhook_url: str = field(default="", repr=False)   # Slack Incoming Webhook; boşsa bildirim kapalı
+    slack_risk_threshold: float = 75.0           # risk_score >= eşik olan tamamlanmış RCA'lar bildirilir
+    public_url: str = "http://172.20.229.26:8090"   # bildirimdeki araştırma linki için arayüz adresi
 
     @property
     def libpq_url(self) -> str:
@@ -44,7 +47,7 @@ class PlatformSettings:
         return self.database_url.replace("postgresql+psycopg://", "postgresql://", 1)
 
     def secrets(self) -> list[str]:
-        out = [self.jwt_secret, self.admin_password]
+        out = [self.jwt_secret, self.admin_password, self.slack_webhook_url]
         if "@" in self.database_url and ":" in self.database_url.split("@", 1)[0]:
             out.append(self.database_url.split("@", 1)[0].rsplit(":", 1)[1])
         return [s for s in out if s and len(s) >= 6]
@@ -80,6 +83,9 @@ def load_platform_settings() -> PlatformSettings:
         health_check_minutes=_int("SRE_HEALTH_CHECK_MINUTES", 15),
         health_check_window_minutes=_int("SRE_HEALTH_CHECK_WINDOW_MINUTES", 15),
         health_check_llm=os.getenv("SRE_HEALTH_CHECK_LLM", "false").lower() in ("1", "true", "yes"),
+        slack_webhook_url=os.getenv("SRE_SLACK_WEBHOOK_URL", "").strip(),
+        slack_risk_threshold=float(os.getenv("SRE_SLACK_RISK_THRESHOLD", "75")),
+        public_url=os.getenv("SRE_PUBLIC_URL", "http://172.20.229.26:8090").rstrip("/"),
     )
 
 

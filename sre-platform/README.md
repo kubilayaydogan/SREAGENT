@@ -112,6 +112,15 @@ SRE_TEST_DATABASE_URL=postgresql+psycopg://sre:...@127.0.0.1:55432/sre pytest
 cd sre-platform/frontend && npm ci && npx tsc -b --noEmit && npx vitest run && npm run build
 ```
 
+## Slack bildirimi
+
+Risk score'u `SRE_SLACK_RISK_THRESHOLD` (varsayılan 75, "kritik" band) değerine eşit veya üstünde olan tamamlanmış
+(veya kısmi) RCA'lar Slack'e tek mesaj olarak gider: başlık, risk/severity, mechanism, kaynak ve etkilenen uygulamalar,
+İstanbul saatiyle pencere, RCA özeti ve araştırma linki. Sohbet, manuel, zamanlanmış ve watch araştırmalarının hepsi
+kapsanır. Aynı araştırma bir kez bildirilir; gönderim hatası araştırmayı etkilemez ve araç kaydında (`slack:notify`)
+görünür. Kurulum: Slack'te bir app oluşturup Incoming Webhook ekleyin, URL'yi `sre-platform.env` içindeki
+`SRE_SLACK_WEBHOOK_URL`'ye yazın, `sre-backend` ve `sre-worker`'ı yeniden başlatın.
+
 ## Bilinen sınırlar
 
 - SSE çalıştırma kaydı süreç içidir → backend tek uvicorn worker; yeniden başlatmada canlı akış kesilir (araştırma

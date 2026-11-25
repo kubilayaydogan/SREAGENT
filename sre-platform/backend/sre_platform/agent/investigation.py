@@ -126,6 +126,10 @@ class InvestigationRunner:
                 await self._correlate(inv_id, start, end, emit)
             except Exception:  # noqa: BLE001 — ek kanıt toplanamazsa analiz sonucu geçerli kalır
                 log.exception("evidence correlation başarısız")
+        # Sohbette RCA metni bu adımdan sonra yazılır; bildirim orada (chat.respond) gönderilir.
+        if report and not error and mode != "chat":
+            from ..services.slack_notify import notify_rca
+            await notify_rca(self.rt, inv_id)
         if error:
             await emit("error", {"code": "cancelled" if cancelled else "timeout" if timed_out else "analysis_failed",
                                  "message": error, "investigation_id": str(inv_id)})
