@@ -176,6 +176,8 @@ class ChatOrchestrator:
                     r = await chat_llm.route(q, history, apps=apps, app=ctx.application_id,
                                              focus=wm.router_hint(focus))
                 except LlmUnavailable as e:
+                    from airlab_agent.agent_trace import mark
+                    mark("fallback", {"from": "route_question", "to": "heuristic_route", "reason": str(e)[:500]})
                     await ctx.emit("agent_thinking", {"step": "start", "message":
                                                       f"Soru Claude ile yorumlanamadı; kural tabanlı yorum kullanıldı ({e})."})
             r = r or heuristic_route(q, apps, ctx.application_id)
@@ -382,13 +384,33 @@ class ChatOrchestrator:
         await self._prepare(ctx)
         graph = self._graph(ctx)
         rid = uuid.UUID(ctx.result["user_message_id"])                 # trace id = kullanıcı mesajının id'si
+        tsess = await self._trace_start(ctx, attempt=1)
+        err = None
         try:
             state = await self._invoke(ctx, graph, {"question": question,
                                                     "messages": [{"role": "user", "content": question}]},
-                                       self._config(ctx, run_id=rid))
+                                       self._config(ctx, run_id=rid), tsess)
+        except BaseException as e:
+            err = f"{type(e).__name__}: {e}"
+            raise
         finally:
             await self._link(ctx, rid)
+            if tsess is not None:
+                await tsess.finish("failed" if err else "completed", err)
         return await self._finish(ctx, state)
+
+    async def _trace_start(self, ctx: TurnContext, *, attempt: int):
+        """Agent Trace run'ı: platform run_id = turun kullanıcı mesajı; sürdürülen tur yeni girişim."""
+        from ..services import agent_trace as atrace
+        mid = ctx.result.get("user_message_id")
+        if not mid:
+            return None
+        base = f"chat-{mid}"
+        if attempt > 1:
+            attempt = max(attempt, await atrace.attempt_for(self.rt.sm, base))
+        return await atrace.start(self.rt, run_id=base if attempt == 1 else f"{base}-a{attempt}", kind="chat_turn",
+                                  graph="chat-turn", trigger="chat", conversation_id=ctx.conversation_id,
+                                  user_id=ctx.user_id, thread_id=ctx.thread_id, platform_run_id=mid, attempt=attempt)
 
     async def _prepare(self, ctx: TurnContext) -> None:
         """Tur başı: etkili ayarlardan değişmez yapılandırma; LLM profilleri ve arayüzde seçilen model uygulanır."""
@@ -397,15 +419,31 @@ class ChatOrchestrator:
         srt.apply_llm(self.rt, ctx.rc)
 
     @staticmethod
-    async def _invoke(ctx: TurnContext, graph, inp, config):
+    async def _invoke(ctx: TurnContext, graph, inp, config, tsess=None):
         if ctx.rc is None or ctx.rc.trace:
-            return await graph.ainvoke(inp, config)
+            return await ChatOrchestrator._run_graph(graph, inp, config, tsess)
         from airlab_agent import tracing                # sampling dışı tur: alt LLM çağrıları da trace göndermez
         token = tracing._TRACING_OFF.set(True)
         try:
-            return await graph.ainvoke(inp, config)
+            return await ChatOrchestrator._run_graph(graph, inp, config, tsess)
         finally:
             tracing._TRACING_OFF.reset(token)
+
+    @staticmethod
+    async def _run_graph(graph, inp, config, tsess):
+        """Agent Trace yoksa mevcut ainvoke; varsa updates + debug stream'i kaydedilir, son state checkpoint'ten."""
+        if tsess is None:
+            return await graph.ainvoke(inp, config)
+        from airlab_agent.agent_trace import ACTIVE, STREAM_MODES, with_callback
+        rec = tsess.recorder
+        config = with_callback(dict(config), rec)
+        token = ACTIVE.set(rec)
+        try:
+            async for mode, chunk in graph.astream(inp, config, stream_mode=STREAM_MODES):
+                rec.on_stream(mode, chunk)
+        finally:
+            ACTIVE.reset(token)
+        return (await graph.aget_state(config)).values
 
     async def resume(self, ctx: TurnContext) -> dict | None:
         """Yarıda kalmış (ör. süreç yeniden başlatıldı) turu son checkpoint'ten sürdürür."""
@@ -425,10 +463,18 @@ class ChatOrchestrator:
             attempt = await previous_attempts(s, ctx.result["user_message_id"]) + 1 \
                 if ctx.result.get("user_message_id") else 1
         rid = uuid.uuid4()
+        tsess = await self._trace_start(ctx, attempt=max(2, attempt))
+        err = None
         try:
-            state = await self._invoke(ctx, graph, None, self._config(ctx, run_id=rid, attempt=attempt, resumed=True))
+            state = await self._invoke(ctx, graph, None, self._config(ctx, run_id=rid, attempt=attempt, resumed=True),
+                                       tsess)
+        except BaseException as e:
+            err = f"{type(e).__name__}: {e}"
+            raise
         finally:
             await self._link(ctx, rid, resumed=True)
+            if tsess is not None:
+                await tsess.finish("failed" if err else "completed", err)
         return await self._finish(ctx, state)
 
     async def pending(self, thread_id: str) -> list[str]:

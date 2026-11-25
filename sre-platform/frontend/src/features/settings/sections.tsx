@@ -498,6 +498,7 @@ export const RETENTION_LABEL: Record<string, string> = {
   checkpoint_threads_ttl: "Süresi dolan checkpoint thread'i",
   store_items: "Store öğesi",
   trace_links: "Sohbet turu trace eşlemesi",
+  agent_trace_runs: "Agent Trace kaydı",
 };
 
 function RetentionPreviewCard() {

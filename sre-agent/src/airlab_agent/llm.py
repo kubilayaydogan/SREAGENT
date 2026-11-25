@@ -215,7 +215,8 @@ class Llm:
         with self._lock:
             c = self._clients.get(key)
             if c is None:
-                from langchain_anthropic import ChatAnthropic
+                from .agent_trace import traced_chat_anthropic_cls
+                ChatAnthropic = traced_chat_anthropic_cls()     # Agent Trace: sağlayıcı payload'ı (davranış aynı)
                 # Thinking parametresi gönderilmez (Opus/Sonnet 5.5'te adaptive); derinlik effort ile ayarlanır.
                 # thinking max_tokens'a dahildir. Refusal olursa sunucu tarafı fallback ("default") devreye girer.
                 kw = {"base_url": p["base_url"]} if p["base_url"] else {}

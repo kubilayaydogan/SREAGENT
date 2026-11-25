@@ -676,3 +676,119 @@ export interface LlmObservability {
   errors: LlmTrace[];
   llm_errors: LlmCallError[];
 }
+
+// ---------------------------------------------------------------- Agent Trace
+export type TraceKind = "analysis" | "chat_turn";
+export type TraceCapture = "complete" | "truncated" | "partial" | "failed" | "none";
+export type TraceEventType =
+  | "run_start" | "run_end" | "node_start" | "node_end" | "state_out" | "transition" | "routing" | "stream"
+  | "llm_request" | "llm_provider_request" | "llm_response" | "parser_input" | "parser_output" | "validation_error"
+  | "fallback";
+
+export interface TraceRunRow {
+  trace_id: string | null;
+  run_id: string;
+  kind: TraceKind;
+  trigger: string | null;
+  status: string;
+  started_at: string;
+  duration_ms: number | null;
+  event_count: number;
+  investigation_id: string | null;
+  thread_id: string | null;
+  parent_run_id: string | null;
+  recorded: boolean;
+  problems: number;
+  truncated_count: number;
+}
+
+export interface TraceRun {
+  trace_id: string | null;
+  run_id: string;
+  kind: TraceKind;
+  graph?: string | null;
+  trigger: string | null;
+  status: string;
+  recorded: boolean;
+  investigation_id: string | null;
+  conversation_id?: string | null;
+  thread_id: string | null;
+  parent_run_id?: string | null;
+  platform_run_id?: string | null;
+  attempt?: number;
+  started_at: string;
+  finished_at?: string | null;
+  duration_ms: number | null;
+  event_count?: number;
+  truncated_count?: number;
+  capture_errors?: number;
+  lost_events?: number;
+  error?: string | null;
+  capture: TraceCapture;
+}
+
+export interface TraceEventMeta {
+  event_id: string;
+  sequence: number;
+  ts: string;
+  event_type: TraceEventType;
+  node: string | null;
+  node_exec_id: string | null;
+  step: number | null;
+  attempt: number | null;
+  call_id: string | null;
+  related_call_id: string | null;
+  status: string | null;
+  duration_ms: number | null;
+  truncated: boolean;
+  size_bytes: number;
+  summary?: Record<string, unknown> | null;
+}
+
+export interface TraceEventFull extends Omit<TraceEventMeta, "summary"> {
+  payload: Record<string, unknown>;
+  followup?: { kind: "retry" | "fallback" | "none"; call_id?: string; attempt?: number; to?: string; event_id?: string; label?: string };
+}
+
+export interface TraceDetail {
+  run: TraceRun;
+  events: TraceEventMeta[];
+  children: TraceRun[];
+  parent: TraceRun | null;
+  langsmith_url: string | null;
+}
+
+export interface Snapshot {
+  captured: boolean;
+  truncated: boolean;
+  value: unknown;
+  event_id: string | null;
+}
+
+export interface DiffChange {
+  path: string;
+  change: "added" | "removed" | "changed";
+  old: unknown;
+  new: unknown;
+}
+
+export interface NodeExec {
+  node: string;
+  node_exec_id: string;
+  step: number;
+  attempt: number;
+  status: string;
+  duration_ms: number | null;
+  before: Snapshot;
+  update: Snapshot & { error?: { error_type: string; message: string } | null };
+  after: Snapshot & { combined: boolean; step_node_exec_ids: string[] };
+  diff: { available: boolean; changes: DiffChange[]; reason: string | null };
+  transition_in: { from: string[]; from_exec_ids: string[]; routing: Record<string, unknown> | null; event_id: string } | null;
+  transition_out: { to: string[]; routing: Record<string, { function: string; result: unknown }[]> | null; to_exec_ids: string[]; event_id: string } | null;
+  events: Omit<TraceEventFull, "payload">[];
+}
+
+export interface TraceCall {
+  call_id: string;
+  events: TraceEventFull[];
+}

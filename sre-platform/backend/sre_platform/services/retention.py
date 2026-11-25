@@ -6,6 +6,7 @@ Kategoriler ve varsayılanlar (Settings › Retention):
 * llm_usage — LLM Monitoring süresiyle aynı (`llm_runs_days`).
 * auth_login_failures — 1 gün (throttle penceresi 5 dk; daha eskisinin işlevi yok).
 * trace_links (sohbet turu eşlemeleri) — LLM Monitoring süresiyle aynı; investigation eşlemeleri investigation'la.
+* agent_trace_runs (+ olayları) — Agent Trace kayıtları; LLM Monitoring süresiyle.
 * Sahipsiz checkpoint'ler (varsayılan AÇIK) — thread_id'si hiçbir investigation run_id'sine ya da konuşma
   thread_id'sine karşılık gelmeyen ve son checkpoint'i 1 günden eski thread'ler (investigation retention'la
   silinince ya da konuşma kaldırılınca kalan artıklar).
@@ -44,6 +45,8 @@ ROW_RULES: tuple[tuple[str, str, str, Any], ...] = (
     ("auth_login_failures", "sre.auth_login_failures", "ts < :cut", LOGIN_FAILURE_KEEP),
     # investigation'a bağlı eşlemeler investigation'la (CASCADE) silinir; sohbet turu eşlemeleri LLM süresiyle
     ("trace_links", "sre.trace_links", "created_at < :cut AND investigation_id IS NULL", "llm_runs_days"),
+    # Agent Trace: maskeli prompt/state kopyaları — LLM Monitoring süresiyle; olaylar CASCADE ile silinir
+    ("agent_trace_runs", "sre.agent_trace_runs", "created_at < :cut", "llm_runs_days"),
 )
 
 _THREADS = """SELECT c.thread_id FROM langgraph.checkpoints c GROUP BY c.thread_id

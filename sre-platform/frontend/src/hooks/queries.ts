@@ -3,6 +3,11 @@ import { toast } from "sonner";
 import { ApiError, api } from "@/services/api";
 import { qs } from "@/lib/utils";
 import type {
+  NodeExec,
+  TraceCall,
+  TraceDetail,
+  TraceEventFull,
+  TraceRunRow,
   McpCallDetail,
   McpCallRow,
   McpFacets,
@@ -365,3 +370,49 @@ export const useMcpCall = (id?: string | null) =>
 
 export const useMcpFacets = () =>
   useQuery({ queryKey: ["mcp-facets"], queryFn: () => api.get<McpFacets>("/mcp-calls/facets"), staleTime: 300_000 });
+
+// ---------------------------------------------------------------- Agent Trace (observability:read)
+export interface TraceListParams {
+  kind?: string;
+  status?: string;
+  q?: string;
+  recorded?: string;
+  page?: number;
+  size?: number;
+}
+
+export const useAgentTraces = (p: TraceListParams) =>
+  useQuery({
+    queryKey: ["agent-traces", p],
+    queryFn: () => api.get<Page<TraceRunRow>>(`/agent-traces${qs({ ...p })}`),
+    placeholderData: keepPreviousData,
+  });
+
+const enc = encodeURIComponent;
+
+export const useAgentTrace = (key?: string) =>
+  useQuery({ queryKey: ["agent-trace", key ?? ""], queryFn: () => api.get<TraceDetail>(`/agent-traces/${enc(key!)}`), enabled: !!key });
+
+export const useTraceEvent = (key: string, id?: string | null) =>
+  useQuery({
+    queryKey: ["agent-trace-event", key, id ?? ""],
+    queryFn: () => api.get<TraceEventFull>(`/agent-traces/${enc(key)}/events/${enc(id!)}`),
+    enabled: !!id,
+    staleTime: Infinity,
+  });
+
+export const useNodeExec = (key: string, exec?: string | null, live = false) =>
+  useQuery({
+    queryKey: ["agent-trace-exec", key, exec ?? ""],
+    queryFn: () => api.get<NodeExec>(`/agent-traces/${enc(key)}/node-execs/${enc(exec!)}`),
+    enabled: !!exec,
+    staleTime: live ? 0 : Infinity,
+  });
+
+export const useTraceCall = (key: string, call?: string | null, live = false) =>
+  useQuery({
+    queryKey: ["agent-trace-call", key, call ?? ""],
+    queryFn: () => api.get<TraceCall>(`/agent-traces/${enc(key)}/calls/${enc(call!)}`),
+    enabled: !!call,
+    staleTime: live ? 0 : Infinity,
+  });

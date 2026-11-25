@@ -97,6 +97,16 @@ class InvestigationRunner:
                 raise Cancelled()
 
         agent = rc.agent
+        # Agent Trace: sohbet turunun içindeyse üst run'a bağlanır (ACTIVE = sohbet kaydedicisi)
+        from airlab_agent.agent_trace import ACTIVE
+        from ..services import agent_trace as atrace
+        parent = ACTIVE.get()
+        att = await atrace.attempt_for(self.rt.sm, run_id) if atrace.enabled() else 1
+        tsess = await atrace.start(self.rt, run_id=run_id if att == 1 else f"{run_id}-a{att}", kind="analysis",
+                                   graph="airlab-sre-analysis", trigger=trigger, investigation_id=inv_id,
+                                   conversation_id=conversation_id, thread_id=run_id,
+                                   parent_run_id=parent.run_id if parent else None, platform_run_id=run_id,
+                                   attempt=att)
         use_llm = core_llm is not None
         gw_factory = rc.gateway_factory
         callbacks = (self.rt.callbacks or getattr(core_llm, "callbacks", None)) if rc.trace else []
@@ -104,7 +114,8 @@ class InvestigationRunner:
         kw = dict(llm=core_llm, question=question, mode=mode, notes=notes, run_id=run_id, use_llm=use_llm,
                   baseline=baseline, checkpointer=self.rt.saver, persist_files=False, on_node=on_node,
                   callbacks=callbacks, recursion_limit=rc.recursion_limit, trace_run_id=inv_id,
-                  trace_metadata=trace_meta, trace_tags=trace_tags, window_source=window_source)
+                  trace_metadata=trace_meta, trace_tags=trace_tags, window_source=window_source,
+                  trace_recorder=tsess.recorder if tsess else None)
         args = (agent, lambda: gw_factory(on_event=on_tool), start, end)
         if rc.trace:
             fut = asyncio.ensure_future(asyncio.to_thread(run_analysis, *args, **kw))
@@ -143,6 +154,8 @@ class InvestigationRunner:
             except Exception as e:  # noqa: BLE001
                 error = redact_text(f"{type(e).__name__}: {e}")
                 log.exception("analiz başarısız")
+        if tsess is not None:
+            await tsess.finish("failed" if error else "completed", error)
         # açık kalan araç kayıtlarını kapat
         if rows:
             async with transaction(sm) as s:

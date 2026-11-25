@@ -19,6 +19,7 @@ const Knowledge = lazy(() => import("@/pages/KnowledgePage"));
 const Approvals = lazy(() => import("@/pages/ApprovalsPage"));
 const LlmObservability = lazy(() => import("@/pages/LlmObservabilityPage"));
 const McpCalls = lazy(() => import("@/pages/McpCallsPage"));
+const AgentTrace = lazy(() => import("@/pages/AgentTracePage"));
 const Settings = lazy(() => import("@/pages/SettingsPage"));
 const Account = lazy(() => import("@/pages/AccountPage"));
 
@@ -63,6 +64,7 @@ const router = createBrowserRouter([
       { path: "approvals", element: s(<Approvals />) },
       { path: "llm", element: s(<LlmObservability />) },
       { path: "mcp-calls", element: s(<McpCalls />) },
+      { path: "agent-trace/:key?", element: s(<AgentTrace />) },
       { path: "settings/:section?", element: s(<Settings />) },
       { path: "account", element: s(<Account />) },
       { path: "*", element: <EmptyState title="Sayfa bulunamadı" description="Adres hatalı olabilir." /> },

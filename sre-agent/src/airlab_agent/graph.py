@@ -344,12 +344,14 @@ def run_analysis(settings, gateway_factory, start: datetime, end: datetime, *, l
                  baseline: tuple[datetime, datetime] | None = None, checkpointer=None, persist_files: bool = True,
                  on_node=None, recursion_limit: int = 25, trace_run_id=None,
                  trace_metadata: dict | None = None, trace_tags: list[str] | None = None,
-                 window_source: str = "default") -> dict[str, Any]:
+                 window_source: str = "default", trace_recorder=None) -> dict[str, Any]:
     """Analizi çalıştırır. `checkpointer` verilmezse bellek içi (eval/test); platform PostgresSaver verir.
     `on_node(name, update)` her düğüm bittiğinde çağrılır (ilerleme olayları için).
     Tracing: üstte çalışan bir adım (ör. sohbet turu) varsa analiz onun trace'inin altına yerleşir; yoksa kök trace
     açılır. `trace_run_id` verilirse bu run'ın LangSmith kimliği olur (platformda investigation id → trace linki).
-    `window_source`: aralığın kaynağı (user | user_question | scheduler | watch | default) — plan adımında görünür."""
+    `window_source`: aralığın kaynağı (user | user_question | scheduler | watch | default) — plan adımında görünür.
+    `trace_recorder` (agent_trace.TraceRecorder) verilirse graph `updates` + `debug` modlarıyla stream edilir; node
+    State In / Node Update / State Out ve LLM/parser olayları kaydedilir. `on_node` yine yalnız `updates` alır."""
     run_id = run_id or new_run_id("inc" if mode == "watch-incident" else "rep")
     init = initial_state(start, end, run_id=run_id, mode=mode, question=question, notes=notes, use_llm=use_llm,
                          fixture=fixture, baseline=baseline, window_source=window_source)
@@ -360,9 +362,24 @@ def run_analysis(settings, gateway_factory, start: datetime, end: datetime, *, l
                        tags=["airlab", f"mode:{mode}", *(trace_tags or [])], recursion_limit=recursion_limit)
     if trace_run_id is not None:
         cfg["run_id"] = trace_run_id
+    if trace_recorder is not None:
+        from .agent_trace import with_callback
+        cfg = with_callback(cfg, trace_recorder)
 
     def _go(saver):
         graph = build_graph(settings, gateway_factory, llm, saver, persist_files=persist_files)
+        if trace_recorder is not None:
+            from .agent_trace import ACTIVE, STREAM_MODES
+            token = ACTIVE.set(trace_recorder)
+            try:
+                for mode, chunk in graph.stream(init, cfg, stream_mode=STREAM_MODES):
+                    trace_recorder.on_stream(mode, chunk)
+                    if mode == "updates" and on_node is not None:
+                        for name, update in chunk.items():
+                            on_node(name, update or {})
+            finally:
+                ACTIVE.reset(token)
+            return graph.get_state(cfg).values
         if on_node is None:
             return graph.invoke(init, cfg)
         for chunk in graph.stream(init, cfg, stream_mode="updates"):

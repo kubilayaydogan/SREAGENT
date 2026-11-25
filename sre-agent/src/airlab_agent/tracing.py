@@ -283,10 +283,12 @@ def child_config(callbacks: list | None, run_name: str, **extra) -> dict:
     callback yöneticisini devralır ve çağrı aynı trace'in altına yerleşir. Üst adım yoksa (CLI, tek başına çağrı)
     verilen tracer'larla yeni kök trace açılır."""
     cfg: dict = {"run_name": run_name, **extra}
-    if _TRACING_OFF.get():
-        cfg["callbacks"] = []
-        return cfg
     p = parent_config()
+    if _TRACING_OFF.get():
+        # LangSmith kapalı: yalnız yerel handler'lar (Agent Trace) devralınır
+        from .agent_trace import local_handlers
+        cfg["callbacks"] = local_handlers((p or {}).get("callbacks")) + local_handlers(callbacks or [])
+        return cfg
     if not (p and p.get("callbacks")):
         cfg["callbacks"] = callbacks or []
     return cfg

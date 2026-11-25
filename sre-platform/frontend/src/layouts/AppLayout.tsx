@@ -15,6 +15,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  Network,
   Settings,
   Siren,
   Sun,
@@ -63,6 +64,7 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
     items: [
       { to: "/llm", label: "LLM Monitoring", icon: Gauge, role: "sre" },
       { to: "/mcp-calls", label: "MCP Çağrıları", icon: Plug, role: "sre" },
+      { to: "/agent-trace", label: "Agent Trace", icon: Network, role: "sre" },
       { to: "/settings", label: "Settings", icon: Settings, role: "sre" },
     ],
   },

@@ -1,4 +1,4 @@
-import { ExternalLink, FileText, GitCompare, ListChecks, Plug, Siren } from "lucide-react";
+import { ExternalLink, FileText, GitCompare, ListChecks, Network, Plug, Siren } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { AppTag, ConfidenceBadge, InvestigationStatusBadge, SeverityBadge } from "@/components/badges";
@@ -214,6 +214,11 @@ export default function InvestigationDetailPage() {
               {can("sre") && (
                 <Link to={`/mcp-calls?run_id=${encodeURIComponent(d.run_id)}`} className={buttonVariants({ variant: "outline", size: "sm" })} title={`run_id ${d.run_id}`}>
                   <Plug /> MCP çağrıları
+                </Link>
+              )}
+              {can("sre") && (
+                <Link to={`/agent-trace/${encodeURIComponent(d.run_id)}`} className={buttonVariants({ variant: "outline", size: "sm" })} title={`run_id ${d.run_id}`}>
+                  <Network /> Agent Trace
                 </Link>
               )}
               {can("sre") && done && (
