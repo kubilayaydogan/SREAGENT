@@ -724,6 +724,10 @@ class StoredSecret(Base):
     created_by: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = _created()
     rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # P2.4 yaşam döngüsü metadata'sı: süresi dolan secret çözülmez (fail-closed); rotation süresinin geçmesi yalnız uyarıdır
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rotation_days: Mapped[int | None] = mapped_column(Integer, server_default=text("90"))
+    description: Mapped[str | None] = mapped_column(String(256))
 
 
 class AuditEvent(Base):

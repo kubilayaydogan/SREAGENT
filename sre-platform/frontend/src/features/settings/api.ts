@@ -156,7 +156,20 @@ export interface LlmProfileList {
 
 export interface SecretsList {
   store_available: boolean;
-  stored: { ref: string; name: string; hint: string | null; created_by: string; created_at: string; rotated_at: string | null; used_by: string[] }[];
+  stored: {
+    ref: string;
+    name: string;
+    hint: string | null;
+    created_by: string;
+    created_at: string;
+    rotated_at: string | null;
+    used_by: string[];
+    status: "ok" | "rotation_due" | "expiring" | "expired";
+    expires_at: string | null;
+    rotation_days: number | null;
+    rotation_due_at: string | null;
+    description: string | null;
+  }[];
   env: (SecretInfo & { name: string; used_by: string[] })[];
 }
 
@@ -189,6 +202,7 @@ export interface SecurityOps {
     last_ok: { ts: string; count: number; last_id: number } | null;
     failing: { since: string; error: string } | false | null;
   };
+  secrets?: { expired: string[]; expiring: string[]; rotation_due: string[] };
   alerts: {
     enabled: boolean;
     window_minutes: number;

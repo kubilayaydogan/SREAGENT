@@ -16,6 +16,8 @@ import base64
 import hashlib
 import os
 import re
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,8 +59,55 @@ def hint(value: str) -> str:
     return f"{len(value)} karakter"
 
 
-async def put(s: AsyncSession, name: str, value: str, actor: str) -> tuple[StoredSecret, bool]:
-    """Oluşturur ya da döndürür (rotate). (kayıt, yeni_mi)."""
+EXPIRING_DAYS = 14                 # süre sonuna bu kadar gün kala "expiring" uyarısı
+DEFAULT_ROTATION_DAYS = 90
+_UNSET: Any = object()
+
+
+def lifecycle(row: StoredSecret, now: datetime | None = None) -> dict:
+    """Yaşam döngüsü durumu (değer YOK). Öncelik: expired > expiring > rotation_due > ok."""
+    now = now or datetime.now(timezone.utc)
+    last = row.rotated_at or row.created_at
+    due = last + timedelta(days=row.rotation_days) if row.rotation_days and last else None
+    status = "ok"
+    if due and due <= now:
+        status = "rotation_due"
+    if row.expires_at and row.expires_at - now <= timedelta(days=EXPIRING_DAYS):
+        status = "expiring"
+    if row.expires_at and row.expires_at <= now:
+        status = "expired"
+    return {"status": status, "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+            "rotation_days": row.rotation_days, "rotation_due_at": due.isoformat() if due else None,
+            "last_changed_at": last.isoformat() if last else None, "description": row.description}
+
+
+def _check_meta(expires_at, rotation_days, description) -> None:
+    if expires_at is not _UNSET and expires_at is not None:
+        if expires_at.tzinfo is None:
+            raise SecretError("expires_at saat dilimi içermeli (ör. 2027-01-01T00:00:00Z)")
+        if expires_at <= datetime.now(timezone.utc):
+            raise SecretError("expires_at gelecekte olmalı")
+    if rotation_days is not _UNSET and rotation_days is not None and not 1 <= rotation_days <= 3650:
+        raise SecretError("rotation_days 1–3650 olmalı (boş = rotation politikası yok)")
+    if description is not _UNSET and description is not None and len(description) > 256:
+        raise SecretError("açıklama en çok 256 karakter")
+
+
+def set_meta(row: StoredSecret, *, expires_at=_UNSET, rotation_days=_UNSET, description=_UNSET) -> dict:
+    """Metadata günceller; değişenleri {alan: (eski, yeni)} döner. Gönderilmeyen alan değişmez, None temizler."""
+    _check_meta(expires_at, rotation_days, description)
+    changed = {}
+    for k, v in (("expires_at", expires_at), ("rotation_days", rotation_days), ("description", description)):
+        if v is not _UNSET and getattr(row, k) != v:
+            changed[k] = (getattr(row, k), v)
+            setattr(row, k, v)
+    return changed
+
+
+async def put(s: AsyncSession, name: str, value: str, actor: str, *, expires_at=_UNSET, rotation_days=_UNSET,
+              description=_UNSET) -> tuple[StoredSecret, bool]:
+    """Oluşturur ya da döndürür (rotate). (kayıt, yeni_mi). Süresi dolmuş secret, yeni bir süre sonu verilmeden
+    (ya da açıkça kaldırılmadan) döndürülemez: eski süre sonu yeni değere sessizce taşınmaz."""
     f = _fernet()
     if f is None:
         raise SecretError("SRE_SETTINGS_KEY tanımlı değil (en az 32 karakter); saklanan secret kullanılamaz")
@@ -66,15 +115,21 @@ async def put(s: AsyncSession, name: str, value: str, actor: str) -> tuple[Store
         raise SecretError("secret adı küçük harf, rakam, '_', '.', '-' içermeli (en fazla 64)")
     if not value or len(value) > 8192:
         raise SecretError("secret değeri 1–8192 karakter olmalı")
-    from datetime import datetime, timezone
+    _check_meta(expires_at, rotation_days, description)
     row = await s.get(StoredSecret, name)
     ct = f.encrypt(value.encode()).decode()
     if row is None:
-        row = StoredSecret(name=name, ciphertext=ct, hint=hint(value), created_by=actor)
+        row = StoredSecret(name=name, ciphertext=ct, hint=hint(value), created_by=actor,
+                           created_at=datetime.now(timezone.utc), rotation_days=DEFAULT_ROTATION_DAYS)
+        set_meta(row, expires_at=expires_at, rotation_days=rotation_days, description=description)
         s.add(row)
         await s.flush()
         return row, True
-    row.ciphertext, row.hint, row.rotated_at = ct, hint(value), datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    if expires_at is _UNSET and row.expires_at is not None and row.expires_at <= now:
+        raise SecretError("secret'ın süresi dolmuş: döndürürken yeni bir son kullanma tarihi verin ya da kaldırın")
+    row.ciphertext, row.hint, row.rotated_at = ct, hint(value), now
+    set_meta(row, expires_at=expires_at, rotation_days=rotation_days, description=description)
     await s.flush()
     return row, False
 
@@ -101,6 +156,8 @@ async def resolve(s: AsyncSession | None, ref: str | None) -> str | None:
         row = await s.get(StoredSecret, name)
         if row is None:
             raise SecretError(f"secret:{name} bulunamadı")
+        if row.expires_at is not None and row.expires_at <= datetime.now(timezone.utc):
+            raise SecretError(f"secret:{name} süresi dolmuş ({row.expires_at:%Y-%m-%d}); döndürülmesi gerekiyor")
         try:
             v = f.decrypt(row.ciphertext.encode()).decode()
         except Exception:  # noqa: BLE001 — anahtar değişmiş olabilir; değer asla mesaja girmez

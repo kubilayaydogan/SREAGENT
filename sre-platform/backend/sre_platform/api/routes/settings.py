@@ -74,8 +74,18 @@ class RollbackIn(BaseModel):
     to_revision: int = Field(ge=1)
 
 
-class SecretIn(BaseModel):
+class SecretMetaIn(BaseModel):
+    """Yaşam döngüsü metadata'sı (P2.4). Gönderilmeyen alan değişmez; null temizler."""
     model_config = ConfigDict(extra="forbid")
+    expires_at: datetime | None = None
+    rotation_days: int | None = Field(None, ge=1, le=3650)
+    description: str | None = Field(None, max_length=256)
+
+    def meta(self) -> dict:
+        return {k: getattr(self, k) for k in ("expires_at", "rotation_days", "description") if k in self.model_fields_set}
+
+
+class SecretIn(SecretMetaIn):
     value: str = Field(min_length=1, max_length=8192)
 
 
@@ -249,8 +259,8 @@ async def security(request: Request, _: User = Depends(perm(P.SETTINGS_READ)), s
 
 
 # ------------------------------------------------------------------------------------------------ secret'lar
-@router.get("/secrets")
-async def list_secrets(_: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
+async def secret_usage(s: AsyncSession) -> dict[str, list[str]]:
+    """Referans → kullananlar. Connector'lar, LLM profilleri ve TÜM settings bölümlerindeki `*_ref` alanları."""
     used: dict[str, list[str]] = {}
     for c in (await s.execute(select(Connector))).scalars():
         if c.secret_ref:
@@ -258,13 +268,19 @@ async def list_secrets(_: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession
     for p in (await s.execute(select(LlmProfile))).scalars():
         if p.secret_ref:
             used.setdefault(p.secret_ref, []).append(f"llm:{p.name}")
-    rows = await service.load_rows(s)
-    ref = (rows["notifications"].data if "notifications" in rows else {}).get("slack_webhook_ref")
-    if ref:
-        used.setdefault(ref, []).append("notifications:slack")
+    for sec, row in (await service.load_rows(s)).items():
+        for k, v in (row.data or {}).items():
+            if k.endswith("_ref") and isinstance(v, str) and v:
+                used.setdefault(v, []).append(f"{sec}:{k.removesuffix('_ref')}")
+    return used
+
+
+@router.get("/secrets")
+async def list_secrets(_: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
+    used = await secret_usage(s)
     stored = [{"ref": f"secret:{r.name}", "name": r.name, "kind": "secret", "hint": r.hint, "created_by": r.created_by,
                "created_at": r.created_at.isoformat(), "rotated_at": r.rotated_at.isoformat() if r.rotated_at else None,
-               "used_by": used.get(f"secret:{r.name}", [])}
+               "used_by": used.get(f"secret:{r.name}", []), **secrets.lifecycle(r)}
               for r in (await s.execute(select(StoredSecret).order_by(StoredSecret.name))).scalars()]
     env = [{**secrets.describe(f"env:{n}"), "name": n, "used_by": used.get(f"env:{n}", [])}
            for n in sorted(secrets.env_allowlist())]
@@ -274,10 +290,29 @@ async def list_secrets(_: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession
 @router.put("/secrets/{name}")
 async def put_secret(name: str, body: SecretIn, request: Request, u: User = Depends(perm(P.SECRET_MANAGE)),
                      s: AsyncSession = Depends(db)):
-    row, created = await secrets.put(s, name, body.value, u.username)
+    row, created = await secrets.put(s, name, body.value, u.username, **body.meta())
+    lc = secrets.lifecycle(row)
     await service.audit(s, actor=u.username, action="secret_create" if created else "secret_rotate",
-                        section="security", target=f"secret:{name}", after={"hint": row.hint})
-    return {"ref": f"secret:{name}", "name": name, "hint": row.hint, "created": created}
+                        section="security", target=f"secret:{name}",
+                        after={"hint": row.hint, "expires_at": lc["expires_at"], "rotation_days": row.rotation_days})
+    return {"ref": f"secret:{name}", "name": name, "hint": row.hint, "created": created, **lc}
+
+
+@router.patch("/secrets/{name}")
+async def patch_secret_meta(name: str, body: SecretMetaIn, u: User = Depends(perm(P.SECRET_MANAGE)),
+                            s: AsyncSession = Depends(db)):
+    """Yalnız metadata (süre sonu, rotation politikası, açıklama); değer değişmez. Her değişiklik audit'lenir."""
+    row = await s.get(StoredSecret, name)
+    if row is None:
+        raise HTTPException(404, "secret bulunamadı")
+    changed = secrets.set_meta(row, **body.meta())
+    if changed:
+        def iso(v):
+            return v.isoformat() if isinstance(v, datetime) else v
+        await service.audit(s, actor=u.username, action="secret_metadata", section="security",
+                            target=f"secret:{name}", before={k: iso(a) for k, (a, _) in changed.items()},
+                            after={k: iso(b) for k, (_, b) in changed.items()})
+    return {"ref": f"secret:{name}", "name": name, **secrets.lifecycle(row)}
 
 
 @router.delete("/secrets/{name}", status_code=204)
@@ -286,11 +321,7 @@ async def delete_secret(name: str, u: User = Depends(perm(P.SECRET_MANAGE)), s: 
     if row is None:
         raise HTTPException(404, "secret bulunamadı")
     ref = f"secret:{name}"
-    users = [c.name for c in (await s.execute(select(Connector).where(Connector.secret_ref == ref))).scalars()] + \
-            [p.name for p in (await s.execute(select(LlmProfile).where(LlmProfile.secret_ref == ref))).scalars()]
-    rows = await service.load_rows(s)
-    if (rows["notifications"].data if "notifications" in rows else {}).get("slack_webhook_ref") == ref:
-        users.append("notifications")
+    users = (await secret_usage(s)).get(ref, [])
     if users:
         raise HTTPException(409, f"secret kullanımda: {', '.join(users)}; önce referansları değiştirin")
     await s.delete(row)

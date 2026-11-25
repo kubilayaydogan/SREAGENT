@@ -311,3 +311,120 @@ def test_security_alert_rules_and_cooldown(api_settings, tmp_path, monkeypatch):
         st = (await c.get("/api/settings/security", headers=h)).json()["security_ops"]["alerts"]
         assert next(r for r in st["rules"] if r["rule"] == "authz_denied")["last_fired"]
     with_client(api_settings, tmp_path, fn)
+
+
+# ------------------------------------------------------------------------------------- P2.4 secret yaşam döngüsü
+def _future(days):
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+
+
+def test_secret_lifecycle_metadata_and_expiry(api_settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("SRE_SETTINGS_KEY", "k" * 40)
+
+    async def fn(c, app):
+        import uuid
+        from datetime import datetime, timedelta, timezone
+        from sre_platform.db.models import StoredSecret
+        from sre_platform.settings import secrets
+        h = await login(c)
+        sre = await mkuser(c, h, "sre1", "sre")
+        val = "deger-" + uuid.uuid4().hex
+        r = await c.put("/api/settings/secrets/dt-tok", headers=h,
+                        json={"value": val, "expires_at": _future(60), "description": "Dynatrace platform token"})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["status"] == "ok" and d["rotation_days"] == 90 and d["rotation_due_at"] and val not in r.text
+        # negatif: geçmiş tarih, saat dilimsiz tarih, aralık dışı rotation, sre yetkisiz
+        assert (await c.patch("/api/settings/secrets/dt-tok", headers=h,
+                              json={"expires_at": _future(-1)})).status_code == 422
+        assert (await c.patch("/api/settings/secrets/dt-tok", headers=h,
+                              json={"expires_at": "2099-01-01T00:00:00"})).status_code == 422
+        assert (await c.patch("/api/settings/secrets/dt-tok", headers=h, json={"rotation_days": 0})).status_code == 422
+        assert (await c.patch("/api/settings/secrets/dt-tok", headers=sre, json={"rotation_days": 30})).status_code == 403
+        assert (await c.patch("/api/settings/secrets/nope", headers=h, json={"rotation_days": 30})).status_code == 404
+        # yaklaşan süre sonu → expiring
+        d = (await c.patch("/api/settings/secrets/dt-tok", headers=h, json={"expires_at": _future(5)})).json()
+        assert d["status"] == "expiring" and d["description"] == "Dynatrace platform token"
+        aud = (await c.get("/api/settings/audit", headers=h, params={"action": "secret_metadata"})).json()["items"]
+        assert aud and "expires_at" in aud[0]["after"] and val not in str(aud)
+        # süresi dolmuş → çözülmez (fail-closed), listede expired
+        async with app.state.rt.sm() as s, s.begin():
+            (await s.get(StoredSecret, "dt-tok")).expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        async with app.state.rt.sm() as s:
+            try:
+                await secrets.resolve(s, "secret:dt-tok")
+                raise AssertionError("süresi dolmuş secret çözüldü")
+            except secrets.SecretError as e:
+                assert "süresi dolmuş" in str(e)
+        lst = (await c.get("/api/settings/secrets", headers=h)).json()["stored"]
+        assert lst[0]["status"] == "expired"
+        # eski süre sonu yeni değere sessizce taşınmaz: rotate için yeni tarih ya da açık kaldırma gerekir
+        assert (await c.put("/api/settings/secrets/dt-tok", headers=h, json={"value": val + "2"})).status_code == 422
+        r = await c.put("/api/settings/secrets/dt-tok", headers=h, json={"value": val + "2", "expires_at": None})
+        assert r.status_code == 200 and r.json()["status"] == "ok" and r.json()["expires_at"] is None
+        async with app.state.rt.sm() as s:
+            assert await secrets.resolve(s, "secret:dt-tok") == val + "2"
+        # rotation süresinin geçmesi yalnız uyarı: çözülmeye devam eder
+        async with app.state.rt.sm() as s, s.begin():
+            (await s.get(StoredSecret, "dt-tok")).rotated_at = datetime.now(timezone.utc) - timedelta(days=91)
+        assert (await c.get("/api/settings/secrets", headers=h)).json()["stored"][0]["status"] == "rotation_due"
+        async with app.state.rt.sm() as s:
+            assert await secrets.resolve(s, "secret:dt-tok") == val + "2"
+    with_client(api_settings, tmp_path, fn)
+
+
+def test_secret_usage_covers_all_settings_refs(api_settings, tmp_path, monkeypatch):
+    """P2.3 eksiği: SIEM referansları da 'kullanımda' sayılır; kullanılan secret silinemez."""
+    monkeypatch.setenv("SRE_SETTINGS_KEY", "k" * 40)
+    from sre_platform.settings import netguard
+    monkeypatch.setattr(netguard, "_resolve", lambda host, port: ["93.184.216.34"])
+
+    async def fn(c, app):
+        h = await login(c)
+        assert (await c.put("/api/settings/secrets/siem-url", headers=h,
+                            json={"value": "https://siem.example.com/hook"})).status_code == 200
+        cur = (await c.get("/api/settings/notifications", headers=h)).json()
+        r = await c.patch("/api/settings/notifications", headers=h, json={"revision": cur["revision"], "values": {
+            "slack_enabled": False, "siem_enabled": True, "siem_url_ref": "secret:siem-url"}})
+        assert r.status_code == 200, r.text
+        lst = (await c.get("/api/settings/secrets", headers=h)).json()["stored"]
+        assert lst[0]["used_by"] == ["notifications:siem_url"]
+        r = await c.delete("/api/settings/secrets/siem-url", headers=h)
+        assert r.status_code == 409 and "notifications:siem_url" in r.text
+    with_client(api_settings, tmp_path, fn)
+
+
+def test_secret_hygiene_alert_once_per_day(api_settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("SRE_SETTINGS_KEY", "k" * 40)
+    from sre_platform.settings import netguard
+    monkeypatch.setattr(netguard, "_resolve", lambda host, port: ["93.184.216.34"])
+
+    async def fn(c, app):
+        from datetime import datetime, timedelta, timezone
+        from sre_platform.services import security_ops
+        monkeypatch.setattr("sre_platform.services.slack_notify._post", lambda *a, **k: _noop())
+        h = await login(c)
+        await c.put("/api/settings/secrets/a-tok", headers=h, json={"value": "x" * 20, "expires_at": _future(3)})
+        await c.put("/api/settings/secrets/b-tok", headers=h, json={"value": "y" * 20})
+        rt = app.state.rt
+        assert (await security_ops.run(rt, {}))["alerts"] == []                        # alarmlar kapalı
+        cur = (await c.get("/api/settings/notifications", headers=h)).json()
+        await c.patch("/api/settings/notifications", headers=h, json={"revision": cur["revision"], "values": {
+            "security_alerts_enabled": True}})
+        fired = (await security_ops.run(rt, {}))["alerts"]
+        assert [f["rule"] for f in fired] == ["secret_hygiene"] and "secret:a-tok" in fired[0]["detail"]
+        assert "secret:b-tok" not in fired[0]["detail"]
+        assert (await security_ops.run(rt, {}))["alerts"] == []                        # 24 saat cooldown
+        later = datetime.now(timezone.utc) + timedelta(hours=25)
+        again = await security_ops.evaluate_alerts(rt, (await c.get("/api/settings/notifications", headers=h)).json()[
+            "values"], now=later)
+        assert [f["rule"] for f in again] == ["secret_hygiene"]
+        sec = (await c.get("/api/settings/security", headers=h)).json()["security_ops"]
+        assert sec["secrets"]["expiring"] == ["secret:a-tok"] and sec["secrets"]["expired"] == []
+        assert any(r["rule"] == "secret_hygiene" and r["last_fired"] for r in sec["alerts"]["rules"])
+    with_client(api_settings, tmp_path, fn)
+
+
+async def _noop():
+    return None

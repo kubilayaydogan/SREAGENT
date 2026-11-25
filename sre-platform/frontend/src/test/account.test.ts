@@ -25,12 +25,22 @@ describe("account", () => {
 
 describe("SIEM durumu", () => {
   const base = { enabled: true, signed: false, cursor: 10, lag: 0, started_at: null, last_ok: null, failing: false as const };
-  it("kapalı / açık / hata / gecikme", async () => {
+  it("kapalı / açık / hata / birikme", async () => {
     const { siemState } = await import("@/features/settings/Security");
     expect(siemState({ ...base, enabled: false }).tone).toBe("off");
     expect(siemState(base)).toEqual({ tone: "ok", text: "Açık · bekleyen 0 olay" });
     expect(siemState({ ...base, cursor: null }).text).toMatch(/ilk tur/);
     expect(siemState({ ...base, lag: 5000 }).tone).toBe("warn");
     expect(siemState({ ...base, lag: 3, failing: { since: "x", error: "HTTP 503" } })).toEqual({ tone: "warn", text: "Teslim başarısız (HTTP 503); 3 olay bekliyor" });
+  });
+});
+
+describe("secret süre sonu", () => {
+  it("seçim → API alanı", async () => {
+    const { expiryPayload, LIFECYCLE_LABEL } = await import("@/features/settings/Security");
+    expect(expiryPayload("keep", "")).toEqual({});
+    expect(expiryPayload("none", "")).toEqual({ expires_at: null });
+    expect(expiryPayload("date", "2027-03-01")).toEqual({ expires_at: "2027-03-01T23:59:59Z" });
+    expect(Object.keys(LIFECYCLE_LABEL).sort()).toEqual(["expired", "expiring", "ok", "rotation_due"]);
   });
 });

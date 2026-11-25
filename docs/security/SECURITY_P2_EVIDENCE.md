@@ -1,6 +1,6 @@
 # Güvenlik P2: Kanıt
 
-Durum: P2.8, P2.2 ve P2.3 kodlandı, test edildi ve 2026-11-25'te APP_VM'ye deploy edildi (alembic 0009).
+Durum: P2.8, P2.2, P2.3 ve P2.4 kodlandı, test edildi ve 2026-11-25'te APP_VM'ye deploy edildi (alembic 0010).
 
 ## P2.8 Security & Governance UI
 
@@ -92,9 +92,33 @@ Notlar:
 - R-P2.3b: TLS'siz iç ağda SIEM'e giden trafik, hedef adres `https` olduğu sürece şifrelidir. Platformun kendi arayüzü TLS'sizdir (kullanıcı kararı).
 - R-P2.3c: Alarm kuralları kodda tanımlıdır; arayüzden yalnız threshold ve pencere değişir.
 
+## P2.4 Secret rotation ve süre sonu metadata'sı
+
+Vault yok; metadata `sre.secrets` tablosunda tutulur (migration 0010: `expires_at`, `rotation_days`, `description`). Değerler değişmeden Fernet ile şifreli kalır.
+
+| Kural | Uygulama | Test |
+|---|---|---|
+| Süresi dolan secret çözülmez (fail-closed); connector, LLM ve bildirim çağrıları hata verir | `secrets.resolve` | `test_secret_lifecycle_metadata_and_expiry` |
+| Süresi dolmuş secret, yeni tarih verilmeden ya da süre sonu açıkça kaldırılmadan döndürülemez; eski süre sonu sessizce taşınmaz | `secrets.put` | aynı |
+| Rotation süresinin geçmesi (varsayılan 90 gün; mevcut secret'lara da uygulanır) yalnız uyarıdır, kullanımı engellemez | `secrets.lifecycle` | aynı |
+| Süre sonu gelecekte olmalı ve saat dilimi içermeli; rotation 1–3650 gün; açıklama ≤256 karakter | `_check_meta`, `SecretMetaIn` | aynı (negatif) |
+| Yalnız metadata değişikliği `PATCH /settings/secrets/{name}` (`secret:manage`); öncesi ve sonrası audit'lenir (`secret_metadata`), değer audit'e girmez | `patch_secret_meta` | aynı |
+| Durum öncelik sırası: expired > expiring (≤14 gün) > rotation_due > ok | `lifecycle` | aynı |
+| Secret hijyeni alarmı: süresi dolmuş, yaklaşan ya da rotation süresi geçmiş secret varsa günde en çok bir `security.alert` (`secret_hygiene`); alarmlar açıksa | `security_ops.evaluate_alerts` | `test_secret_hygiene_alert_once_per_day` |
+| **P2.3 düzeltmesi:** "kullanımda" kontrolü tüm settings `*_ref` alanlarını kapsar (SIEM URL ve imza secret'ları dahil); kullanılan secret silinemez | `secret_usage` | `test_secret_usage_covers_all_settings_refs` |
+
+**Arayüz:** Secrets tablosunda durum rozeti, açıklama, süre sonu ve rotation tarihi gösterilir. Ekleme ve döndürme diyaloğunda süre sonu, rotation ve açıklama alanları var. "Politika" diyaloğu yalnız metadata'yı değiştirir. SIEM kartında secret hijyeni özeti yer alır. Ortam değişkeni secret'ları deployment tarafından yönetilir; metadata'ları yoktur.
+
+**Kalan riskler**
+- R-P2.4a: Otomatik rotation yok (Vault ya da sağlayıcı API'si yok). Rotation, değerin elle girilmesiyle yapılır; platform yalnız hatırlatır ve süresi doleni engeller.
+- R-P2.4b: `env:` secret'larının süre sonu ve rotation bilgisi izlenmez.
+- R-P2.4c: Süresi dolan secret çözülmediğinde ayrı bir audit kaydı yazılmaz; günlük hijyen alarmı ve çağıran bileşenin hatası görünür.
+- R-P2.4d: Son kullanım zamanı tutulmaz (okuma yolunda yazma yükü olmaması için).
+
 ## Regresyon
 
 - P2.8 + P2.2 (deploy edilen): backend 126 geçti / 1 atlandı, frontend 41/41.
+- P2.4 sonrası (CI ile aynı koşullar): backend 134 geçti (terminoloji testinin frontend kontrolü dahil; migration testi 0010 dahil), sre-agent 126 geçti; frontend `tsc` temiz, vitest 43/43, `vite build` başarılı.
 - P2.3 sonrası: backend 130 geçti, 1 atlandı (migration testi 0009 ve geri alma kontrolü içeriyor); frontend `tsc` temiz, vitest 42/42, `vite build` başarılı.
 
 ## Canlı doğrulama (2026-11-25)
@@ -108,13 +132,17 @@ Notlar:
 
 **P2.3 canlı doğrulama (2026-11-25):** Rollback image'ları `:pre-p23`. `alembic_version` = 0009. `security-ops` işi etkin (60 sn); ilk koşu SUCCEEDED, sonuç `{"siem": "disabled", "alerts": []}` (varsayılan kapalı). Kimliksiz `/api/settings/security` → 401. Frontend bundle'ında SIEM kartı var.
 
+**P2.4 canlı doğrulama (2026-11-25):** Rollback image'ları `:pre-p24`. `alembic_version` = 0010, servisler healthy. Kimliksiz `GET /api/settings/secrets` ve `PATCH /api/settings/secrets/{name}` → 401. Frontend bundle'ında politika diyaloğu var. Canlıda saklanan secret sayısı 0 (secret'lar env referansıyla geliyor); bu yüzden metadata migration'ı hiçbir satırı değiştirmedi.
+
+**CI notu (2026-11-25):** P2.3 commit'i `9f0b12a` CI'da kırıldı. `test_terminology` frontend metinlerinde "gecikme" kelimesini yakaladı (politika gereği "latency" olmalı). Yerel VM harness'ı backend imajında frontend kaynağı olmadığından bu kontrolü atlıyordu. Düzeltme ifadeleri "rotation süresi geçmiş" ve "bekleyen olay" olarak değiştirdi. Push öncesi doğrulama artık CI ile aynı koşullarda yapılıyor: env dosyası yok, tek kullanımlık test PostgreSQL'i ve frontend kaynağı dahil. Sonuç: backend 134/134, sre-agent 126/126, frontend 43/43. Canlıdaki P2.3 işlevini etkilemiyordu; yalnız metin politikası ihlaliydi.
+
 ## Kalan P2 maddeleri
 
 | Madde | Durum |
 |---|---|
-| P2.2 Service account API anahtarları | Kodlandı ve test edildi (yukarıda) |
+| P2.2 Service account API anahtarları | Deploy edildi (alembic 0008) |
 | P2.3 SIEM outbox ve alarm kuralları (varsayılan kapalı) | Deploy edildi (alembic 0009) |
-| P2.4 Secret rotation/expiry metadata | Sırada |
+| P2.4 Secret rotation/expiry metadata | Deploy edildi (alembic 0010) |
 | P2.7 Retention | Sırada; silme varsayılanları muhafazakâr olacak |
 | P2.1 IdP/SSO | Karar bekliyor (IdP seçilmedi) |
 | P2.5 Yedekleme | Karar bekliyor (hedef konum ve şifreleme anahtarı) |

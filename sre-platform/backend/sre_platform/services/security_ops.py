@@ -9,6 +9,9 @@ SIEM iletimi (outbox = sre.audit_events + cursor):
 * Olaylar audit'e yazılırken zaten redakte edilmiştir (DLP sink "audit"); gönderimde tekrar "export" sink'i uygulanır.
 * Teslim hatası her turda değil, yalnız durum değişiminde audit'lenir (siem.delivery_failed / siem.delivery_recovered).
 
+Secret hijyeni (P2.4): süresi dolmuş / 14 gün içinde dolacak / rotation süresi geçmiş saklanan secret varsa günde en
+çok bir `security.alert` (reason_code=secret_hygiene). Süresi dolmuş secret zaten çözülmez (settings/secrets.py).
+
 Alarm kuralları (kodda tanımlı, eşik ve pencere Settings › Notifications):
 * Pencere içinde eşik aşılırsa `security.alert` (result=alert, reason_code=kural) audit'e yazılır ve Slack webhook
   tanımlıysa Slack'e gönderilir. Aynı kural pencere süresince bir kez alarm üretir (cooldown).
@@ -34,6 +37,7 @@ from ..db.session import transaction
 log = logging.getLogger("sre.security_ops")
 SOURCE = "airlab-sre-platform"
 MAX_BATCHES_PER_TICK = 5
+HYGIENE_COOLDOWN = timedelta(hours=24)        # secret hijyeni alarmı günde en çok bir kez
 ACTOR = "system:security"
 
 # (kural, etiket, eylemler, yalnız başarısız mı, threshold alanı | sabit threshold)
@@ -173,9 +177,31 @@ async def evaluate_alerts(rt, cfg: dict, *, now: datetime | None = None) -> list
             await audit.record(s, actor=ACTOR, action="security.alert", section="security", target=rule,
                                result="alert", reason_code=rule, detail=detail)
             fired.append({"rule": rule, "count": n, "threshold": threshold, "detail": detail})
+        hyg = await secret_hygiene(s)
+        bad = hyg["expired"] + hyg["expiring"] + hyg["rotation_due"]
+        last = await get_state(s, "alert.secret_hygiene")
+        if bad and not (last and datetime.fromisoformat(last) > now - HYGIENE_COOLDOWN):
+            await set_state(s, "alert.secret_hygiene", now.isoformat())
+            parts = [f"{len(hyg[k])} {lb}: {', '.join(hyg[k][:10])}" for k, lb in
+                     (("expired", "süresi dolmuş"), ("expiring", "süresi yaklaşan"), ("rotation_due", "rotation süresi geçmiş"))
+                     if hyg[k]]
+            detail = "Secret hijyeni: " + "; ".join(parts)
+            await audit.record(s, actor=ACTOR, action="security.alert", section="security", target="secret_hygiene",
+                               result="alert", reason_code="secret_hygiene", detail=detail)
+            fired.append({"rule": "secret_hygiene", "count": len(bad), "threshold": 1, "detail": detail})
     for f in fired:
         await _slack(rt, cfg, f)
     return fired
+
+
+async def secret_hygiene(s: AsyncSession) -> dict[str, list[str]]:
+    """Saklanan secret'ların yaşam döngüsü özeti (yalnız adlar; değer yok)."""
+    from ..db.models import StoredSecret
+    from ..settings.secrets import lifecycle
+    out: dict[str, list[str]] = {"expired": [], "expiring": [], "rotation_due": [], "ok": []}
+    for r in (await s.execute(select(StoredSecret).order_by(StoredSecret.name))).scalars():
+        out[lifecycle(r)["status"]].append(f"secret:{r.name}")
+    return out
 
 
 async def _slack(rt, cfg: dict, alert: dict) -> None:
@@ -214,5 +240,8 @@ async def status(s: AsyncSession, cfg: dict) -> dict[str, Any]:
                    "window_minutes": cfg.get("alert_window_minutes"), "slack": bool(cfg.get("slack_webhook_ref")),
                    "rules": [{"rule": r, "label": lb, "actions": list(a),
                               "threshold": int(cfg[t]) if isinstance(t, str) else t,
-                              "last_fired": await get_state(s, f"alert.{r}")} for r, lb, a, _, t in RULES]},
+                              "last_fired": await get_state(s, f"alert.{r}")} for r, lb, a, _, t in RULES]
+                  + [{"rule": "secret_hygiene", "label": "Secret süre sonu / rotation (günde bir)", "actions": [],
+                      "threshold": 1, "last_fired": await get_state(s, "alert.secret_hygiene")}]},
+        "secrets": {k: v for k, v in (await secret_hygiene(s)).items() if k != "ok"},
     }
