@@ -66,7 +66,7 @@ public final class Model {
 
     public record Durations(int baselineSec, int rampSec, int durationSec, int recoverySec, int maxDurationSec) {
         public static Durations defaults() {
-            return new Durations(30, 30, 120, 90, 0);
+            return new Durations(180, 30, 120, 90, 0);  // baseline ≥ 3 dk: Dynatrace 1 dk çözünürlükte agent baseline penceresi çıkabilsin
         }
 
         public int plannedTotal() {

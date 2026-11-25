@@ -22,7 +22,8 @@ export function isTerminal(s: State | string | null | undefined): boolean {
   return !!s && (TERMINAL as string[]).includes(s)
 }
 
-export const DEFAULT_DURATIONS: Durations = { baselineSec: 30, rampSec: 30, durationSec: 120, recoverySec: 90, maxDurationSec: 0 }
+/** baseline 3 dk: Dynatrace 1 dk çözünürlükte agent baseline penceresi en az 2 tam dakika olsun. */
+export const DEFAULT_DURATIONS: Durations = { baselineSec: 180, rampSec: 30, durationSec: 120, recoverySec: 90, maxDurationSec: 0 }
 export const DEFAULT_TRAFFIC: Traffic = {
   enabled: true, apps: [], rpsPerApp: 6, users: 8, readWriteRatio: 0.8, timeoutMs: 3000, retries: 1,
   retryBackoffMs: 100, thinkTimeMs: 50, maxTotalRps: 200, hotRows: false,

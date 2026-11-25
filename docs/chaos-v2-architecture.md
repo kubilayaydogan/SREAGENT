@@ -157,7 +157,7 @@ Yoğunluk seviyeleri şunlardır: LIGHT, MEDIUM, HIGH, CRITICAL ve CUSTOM.
 ```json
 POST /api/v2/experiments
 {"scenarioId":"S17","initiator":"baggage","targetMode":"AUTO","targets":[],"intensity":"HIGH",
- "durations":{"baselineSec":30,"rampSec":30,"durationSec":120,"recoverySec":90,"maxDurationSec":0},
+ "durations":{"baselineSec":180,"rampSec":30,"durationSec":120,"recoverySec":90,"maxDurationSec":0},
  "traffic":{"enabled":true,"rpsPerApp":6,"users":8},"seed":42,"clientRequestId":"ui-abc"}
 ```
 
