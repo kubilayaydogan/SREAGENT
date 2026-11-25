@@ -24,6 +24,39 @@ PERMISSION_RE = re.compile(r"missing oauth scope|missing required scope|missing_
                            r"forbidden|not authorized|unauthori[sz]ed|\b401\b|\b403\b", re.I)
 
 
+# P1.7 sınırları: çağrı anı DQL doğrulaması ve yanıt boyutu (güvenilmeyen sunucu çıktısı belleği tüketemez)
+MAX_DQL_CHARS = 8000
+MAX_RESPONSE_CHARS = 4_000_000
+MAX_RECORDS = 5000
+DQL_COMMANDS = ("fetch", "timeseries")            # katalogdaki sorguların başladığı komutlar (salt okuma)
+_DQL_HEAD = re.compile(r"^\s*(" + "|".join(DQL_COMMANDS) + r")\b")
+_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def validate_dql(dql: Any) -> str | None:
+    """Çağrıdan hemen önce DQL denetimi. Sorun yoksa None, varsa kısa neden (query GÖNDERİLMEZ)."""
+    if not isinstance(dql, str) or not dql.strip():
+        return "boş query"
+    if len(dql) > MAX_DQL_CHARS:
+        return f"query çok uzun ({len(dql)} > {MAX_DQL_CHARS})"
+    if _CTRL.search(dql):
+        return "kontrol karakteri içeriyor"
+    if not _DQL_HEAD.match(dql):
+        return f"izin verilmeyen başlangıç komutu (izinli: {', '.join(DQL_COMMANDS)})"
+    return None
+
+
+def tool_definition_hash(t: Any) -> str:
+    """MCP tool tanımının özeti (ad + açıklama + inputSchema + annotations). Değişiklik = yeniden inceleme."""
+    import json
+    ann = getattr(t, "annotations", None)
+    if hasattr(ann, "model_dump"):
+        ann = ann.model_dump(exclude_none=True)
+    d = {"name": getattr(t, "name", None), "description": getattr(t, "description", None) or "",
+         "inputSchema": getattr(t, "inputSchema", None) or {}, "annotations": ann or None}
+    return hashlib.sha256(json.dumps(d, sort_keys=True, default=str).encode()).hexdigest()
+
+
 class McpUnavailable(RuntimeError):
     """MCP'ye ulaşılamıyor (ağ, auth, sunucu). Analiz kısmi raporla devam eder; başka kaynağa geçilmez."""
 
@@ -58,6 +91,8 @@ def _classify(res: Any) -> tuple[str, list[dict], str | None, str | None, list[s
     sc = getattr(res, "structuredContent", None) or {}
     meta = (sc.get("metadata") or {}).get("grail") or {}
     notes = [str(n.get("message") or n.get("notificationType") or n)[:200] for n in (meta.get("notifications") or [])]
+    if len(text) > MAX_RESPONSE_CHARS:
+        return "ERROR", [], meta.get("queryId"), f"yanıt boyutu sınırı aşıldı ({len(text)} > {MAX_RESPONSE_CHARS})", notes
     if getattr(res, "isError", False):
         status = "PERMISSION" if PERMISSION_RE.search(text) else "ERROR"
         return status, [], None, redact_text(text[:600]), notes
@@ -66,12 +101,17 @@ def _classify(res: Any) -> tuple[str, list[dict], str | None, str | None, list[s
         import json
         marker = "Query result records:"
         records = json.loads(text.split(marker, 1)[1]) if marker in text else []
+    if not isinstance(records, list):
+        return "ERROR", [], meta.get("queryId"), "beklenmeyen yanıt biçimi (records liste değil)", notes
+    if len(records) > MAX_RECORDS:
+        notes = notes + [f"kayıt sınırı: {len(records)} kayıttan ilk {MAX_RECORDS} kullanıldı"]
+        records = records[:MAX_RECORDS]
     return ("OK" if records else "EMPTY"), records, meta.get("queryId"), None, notes
 
 
 class McpGateway:
     def __init__(self, url: str, token: str, *, timeout_s: float = 60, retries: int = 2, max_queries: int = 40,
-                 concurrency: int = 4, on_event=None):
+                 concurrency: int = 4, on_event=None, expected_tool_hash: str | None = None):
         if not url or not token:
             raise McpUnavailable("DT_MCP_URL/DT_ENV ve DT_PLATFORM_TOKEN tanımlı değil")
         self._conn = {SERVER: {"transport": "streamable_http", "url": url, "timeout": timeout_s,
@@ -83,6 +123,8 @@ class McpGateway:
         self.log: list[QueryResult] = []
         # İsteğe bağlı gözlemci: {"phase": "start"|"end", "key", "dql", ...}. Hata atarsa sorgu etkilenmez.
         self.on_event = on_event
+        # Onaylanmış execute-dql tanım özeti: her oturumda sunucunun bildirdiği tanımla karşılaştırılır (rug-pull)
+        self.expected_tool_hash = expected_tool_hash
 
     def _emit(self, ev: dict) -> None:
         if self.on_event is not None:
@@ -119,6 +161,12 @@ class McpGateway:
         return r
 
     async def _one_inner(self, session, key: str, dql: str) -> QueryResult:
+        bad = validate_dql(dql)
+        if bad:
+            r = QueryResult(key, str(dql)[:MAX_DQL_CHARS], "ERROR", error=f"DQL reddedildi: {bad}")
+            self._emit({"phase": "end", "key": key, "dql": r.dql, "status": r.status, "records": 0, "query_id": None,
+                        "elapsed_ms": 0, "error": r.error, "evidence_id": r.evidence_id})
+            return r
         if self.queries_used >= self.max_queries:
             r = QueryResult(key, dql, "SKIPPED_BUDGET", error="query budget doldu")
             self._emit({"phase": "end", "key": key, "dql": dql, "status": r.status, "records": 0, "query_id": None,
@@ -149,12 +197,25 @@ class McpGateway:
 
     async def _many(self, items: list[tuple[str, str]]) -> list[QueryResult]:
         async with self.client.session(SERVER) as session:
+            if self.expected_tool_hash:
+                await self._verify_tool(session)
             sem = asyncio.Semaphore(self.concurrency)
 
             async def run(k, d):
                 async with sem:
                     return await self._one(session, k, d)
             return list(await asyncio.gather(*(run(k, d) for k, d in items)))
+
+    async def _verify_tool(self, session) -> None:
+        res = await asyncio.wait_for(session.list_tools(), self.timeout_s)
+        t = next((x for x in res.tools if x.name == DQL_TOOL), None)
+        got = tool_definition_hash(t) if t is not None else None
+        if got != self.expected_tool_hash:
+            msg = (f"'{DQL_TOOL}' tool tanımı onaylanan sürümden farklı; connector yeniden incelenmeli"
+                   if got else f"sunucu '{DQL_TOOL}' tool'unu artık sunmuyor")
+            self._emit({"phase": "integrity", "tool": DQL_TOOL, "expected": self.expected_tool_hash[:12],
+                        "got": (got or "")[:12], "error": msg})
+            raise McpUnavailable(msg)
 
     def run_many(self, items: list[tuple[str, str]]) -> dict[str, QueryResult]:
         """Sorguları tek MCP oturumunda (sınırlı eşzamanlılıkla) çalıştırır. MCP yoksa McpUnavailable."""

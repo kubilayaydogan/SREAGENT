@@ -49,6 +49,7 @@ class PlatformSettings:
     run_rate_per_minute: int = 6                  # kullanıcı başına dakikada başlatılabilecek agent çalıştırması
     trusted_proxies: tuple[str, ...] = ()         # X-Forwarded-For yalnız bu eşlerden kabul edilir (CIDR)
     api_docs: bool = False                        # /api/docs ve /api/openapi.json (varsayılan kapalı)
+    llm_model_allowlist: tuple[str, ...] = ()     # boş → bilinen Claude 5 modelleri + ortam modelleri (P1.6)
 
     @property
     def libpq_url(self) -> str:
@@ -103,6 +104,7 @@ def load_platform_settings() -> PlatformSettings:
         run_rate_per_minute=_int("SRE_RUN_RATE_PER_MINUTE", 6),
         trusted_proxies=tuple(_list("SRE_TRUSTED_PROXIES")),
         api_docs=os.getenv("SRE_API_DOCS", "false").lower() in ("1", "true", "yes"),
+        llm_model_allowlist=tuple(_list("SRE_LLM_MODEL_ALLOWLIST")),
     )
 
 

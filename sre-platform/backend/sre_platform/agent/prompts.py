@@ -2,10 +2,8 @@
 Dil/terminology kuralı tek yerden gelir (airlab_agent.terminology.with_policy); her system prompt policy ile biter."""
 from __future__ import annotations
 
-import json
-
-from airlab_agent.llm import SYSTEM_EXPLAIN_BASE
-from airlab_agent.redact import redact
+from airlab_agent.llm import SYSTEM_EXPLAIN_BASE, data_json
+from airlab_agent.redact import redact, redact_text
 from airlab_agent.terminology import with_policy
 
 COMMON = """
@@ -44,22 +42,24 @@ SMALLTALK = ("Ben airlab SRE asistanıyım. Uygulamaların durumunu Dynatrace ve
 
 
 def dump(obj) -> str:
-    return json.dumps(redact(obj), ensure_ascii=False, default=str)
+    """Veri bloğu: DLP (llm sink) + `<` JSON kaçışı → telemetri içindeki metin `</analysis_data>` gibi bir etiketle
+    veri bloğunu kapatıp talimat bölgesine taşamaz (P1.9). JSON anlamı değişmez."""
+    return data_json(redact(obj, "llm"))
 
 
 def analysis_human(question: str, payload: dict, history: dict | None) -> str:
-    s = f"Kullanıcı sorusu: {question}\n\n<analysis_data>\n{dump(payload)}\n</analysis_data>\n"
+    s = f"Kullanıcı sorusu: {redact_text(question, 'llm')}\n\n<analysis_data>\n{dump(payload)}\n</analysis_data>\n"
     if history:
         s += f"\n<history_data>\n{dump(history)}\n</history_data>\n"
     return s + "\nBulguları açıkla."
 
 
 def history_human(question: str, memory: dict) -> str:
-    return f"Kullanıcı sorusu: {question}\n\n<memory_data>\n{dump(memory)}\n</memory_data>\n\nYanıtla."
+    return f"Kullanıcı sorusu: {redact_text(question, 'llm')}\n\n<memory_data>\n{dump(memory)}\n</memory_data>\n\nYanıtla."
 
 
 def followup_human(question: str, ctx: dict) -> str:
-    return f"Kullanıcı sorusu: {question}\n\n<context_data>\n{dump(ctx)}\n</context_data>\n\nYanıtla."
+    return f"Kullanıcı sorusu: {redact_text(question, 'llm')}\n\n<context_data>\n{dump(ctx)}\n</context_data>\n\nYanıtla."
 
 
 def analysis_payload(report: dict) -> dict:

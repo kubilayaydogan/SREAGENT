@@ -149,6 +149,8 @@ Gereksinim: [`SECURITY_IMPLEMENTATION.md`](SECURITY_IMPLEMENTATION.md) · Tarih:
 
 ## 4. P1 — yüksek
 
+> **Durum (2026-11-25):** P1.1, P1.2, P1.3, P1.6, P1.7, P1.8, P1.9 kod + test tamam, APP_VM'e deploy edildi; P1.4 ertelendi (karar 2); P1.5 uyumsuz değişiklik — kullanıcı onayı bekliyor. Kanıt, plandan sapmalar ve kalan riskler: `SECURITY_P1_EVIDENCE.md`.
+
 ### P1.1 Merkezi policy katmanı (F8) — AGT-01
 
 - `sre_platform/security/policy.py`: `Decision(ALLOW|DENY|REQUIRE_APPROVAL, reason_code, policy_version)`;
@@ -268,9 +270,9 @@ F5 kararı (X4) ────────▶ P1.3
 |---|---|---|---|
 | 0005_auth_sessions | P0 ✅ | `auth_sessions`, `auth_login_failures` | tabloları siler (herkes yeniden giriş) |
 | 0006_audit_extend | P0 ✅ | audit kolonları + UPDATE/DELETE/TRUNCATE append-only tetikleyicileri | tetikleyiciler + kolonlar kaldırılır, satırlar kalır |
-| 0007_investigation_visibility | P1 (X4-b) | `visibility` kolonu | kolon kaldırılır (herkes görür — bugünkü davranış) |
+| ~~0007_investigation_visibility~~ | P1 (X4-b) | yapılmadı — karar 1 (ekip geneli) | — |
 | 0008_db_roles | P1 | DB rolleri ve GRANT'lar | roller kalır; env eski kullanıcıya döner |
-| 0009_llm_usage / tool_fingerprint | P1 | `llm_usage`, connector `tools_hash` | tablo/kolon kaldırılır |
+| 0007_llm_usage | P1.6 ✅ | `llm_usage` (tool özetleri connector `capabilities` JSON'unda; kolon gerekmedi) | tablo silinir |
 
 Her migration için `test_settings.py`'deki gibi up → down → up testi eklenir; migration'lar staging verisinin
 kopyası üzerinde önce prova edilir.

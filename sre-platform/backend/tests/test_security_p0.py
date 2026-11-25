@@ -209,7 +209,7 @@ def test_resume_respects_agent_kill_switch(api_settings, tmp_path):
             assert r.status_code == 409 and r.json()["error"] == "agent_disabled", (path, r.text)
         rows = await _audit(c, h, action="run.denied")
         assert {r["target"] for r in rows} >= {f"POST /api/conversations/{conv['id']}/resume", "POST /api/agent/chat"}
-        assert all(r["reason_code"] == "policy_agent_settings" and r["actor"] == "admin" for r in rows)
+        assert all(r["reason_code"] == "agent_disabled" and r["actor"] == "admin" for r in rows)   # P1.1 policy kodu
     with_client(api_settings, tmp_path, fn)
 
 
@@ -220,7 +220,7 @@ def test_forbidden_is_audited_and_audit_is_append_only(api_settings, db_url, tmp
         v = await mkuser(c, h, "izleyici", "viewer")
         assert (await c.get("/api/users", headers=v)).status_code == 403
         rows = await _audit(c, h, action="authz.denied")
-        assert rows and rows[0]["actor"] == "izleyici" and rows[0]["reason_code"] == "requires_admin"
+        assert rows and rows[0]["actor"] == "izleyici" and rows[0]["reason_code"] == "missing_user:manage"
         assert rows[0]["target"] == "GET /api/users" and rows[0]["source_ip"]
     with_client(api_settings, tmp_path, fn)
     for stmt in ("update sre.audit_events set actor = 'x'", "delete from sre.audit_events",

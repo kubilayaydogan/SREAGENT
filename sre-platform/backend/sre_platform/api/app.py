@@ -125,8 +125,15 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
         return _err(409, "invalid_transition", str(e))
 
     @app.exception_handler(ValueError)
-    async def _ve(_, e):
-        return _err(422, "invalid_value", str(e))
+    async def _ve(request: Request, e):
+        # P1.9: yalnız UserError mesajı istemciye gider; diğer ValueError'lar iç ayrıntı (yol, SQL, kütüphane
+        # mesajı) taşıyabilir → genel mesaj, ayrıntı redakte edilerek log'a.
+        from airlab_agent.errors import UserError
+        if isinstance(e, UserError):
+            return _err(422, "invalid_value", str(e))
+        log.warning("beklenmeyen ValueError", extra={"path": request.url.path, "err_type": type(e).__name__,
+                                                       "err": str(e)[:500]})
+        return _err(422, "invalid_value", "istek değeri işlenemedi")
 
     from pydantic import ValidationError
 
@@ -146,7 +153,8 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
         from ..security import audit
         await audit.record_separate(request.app.state.rt.sm, actor=_actor(request), action="run.denied", section="agent",
                                     target=f"{request.method} {request.url.path}"[:128], result="denied",
-                                    reason_code="policy_agent_settings", detail=str(e))
+                                    reason_code=e.reason_code, detail=str(e),
+                                    after={"policy_version": getattr(e.decision, "policy_version", None)})
         return _err(409, "agent_disabled", str(e))
 
     def _actor(request: Request) -> str:
@@ -159,8 +167,9 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
 
     @app.exception_handler(IntegrityError)
     async def _ie(_, e):
-        msg = str(getattr(e, "orig", e)).split("\n")[0][:300]
-        return _err(409, "integrity_error", "veri bütünlüğü kuralı ihlal edildi", {"db": msg})
+        # P1.9: DB mesajı (constraint / kolon / değer) istemciye gitmez; yalnız log'a
+        log.warning("integrity error", extra={"err": str(getattr(e, "orig", e)).split("\n")[0][:300]})
+        return _err(409, "integrity_error", "veri bütünlüğü kuralı ihlal edildi")
 
     @app.exception_handler(PoolTimeout)
     async def _pt(_, e):

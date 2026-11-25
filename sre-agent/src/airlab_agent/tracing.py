@@ -28,7 +28,7 @@ def without_tracing(fn, *args, **kwargs):
 
 
 def _hide(d):
-    return redact(d) if isinstance(d, dict) else {"value": redact(d)}
+    return redact(d, "trace") if isinstance(d, dict) else {"value": redact(d, "trace")}
 
 
 def setup_tracing(settings) -> list:

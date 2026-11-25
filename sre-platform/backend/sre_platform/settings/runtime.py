@@ -31,7 +31,12 @@ log = logging.getLogger("sre.settings.runtime")
 
 
 class RunNotAllowed(Exception):
-    """Ayarlar bu tetikleyiciyle yeni koşuya izin vermiyor (agent kapalı / execution mode)."""
+    """Policy bu tetikleyiciyle yeni koşuya izin vermiyor (agent kapalı / execution mode). Kararı taşır."""
+
+    def __init__(self, message: str, decision=None):
+        super().__init__(message)
+        self.decision = decision
+        self.reason_code = getattr(decision, "reason_code", None) or "policy_agent_settings"
 
 
 @dataclass
@@ -68,18 +73,15 @@ def _hash(d: dict) -> str:
     return hashlib.sha256(json.dumps(d, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
-def check_allowed(eff: dict, trigger: str) -> None:
-    """trigger: manual (sohbet / manuel investigation) | scheduled (health check) | incident (watch)."""
-    a = eff["agent"]
-    if not a["enabled"]:
-        raise RunNotAllowed("Agent ayarlardan devre dışı bırakıldı; yeni investigation başlatılamaz")
-    mode = a["execution_mode"]
-    if trigger == "manual" and mode == "scheduled":
-        raise RunNotAllowed("Execution mode 'scheduled': kullanıcı başlatmalı investigation kapalı")
-    if trigger == "scheduled" and mode == "manual":
-        raise RunNotAllowed("Execution mode 'manual': zamanlanmış investigation kapalı")
-    if trigger == "incident" and (mode == "manual" or not a["incident_triggered"]):
-        raise RunNotAllowed("incident-triggered investigation kapalı")
+def check_allowed(eff: dict, trigger: str):
+    """trigger: manual (sohbet / manuel investigation / resume) | scheduled (health check) | incident (watch).
+    Karar merkezi policy'dedir (security/policy.py); ALLOW değilse RunNotAllowed. ALLOW kararını döndürür."""
+    from ..security import policy
+    d = policy.decide("run.start", {"trigger": trigger, "agent": eff["agent"]})
+    policy.log_decision(d, trigger=trigger)
+    if not d.allowed:
+        raise RunNotAllowed(d.message, d)
+    return d
 
 
 async def effective(rt) -> dict:
@@ -97,7 +99,8 @@ async def run_config(rt, *, trigger: str = "manual") -> RunConfig:
         else:                                     # test/özel enjeksiyon: verilen fabrika aynen kullanılır
             gw, gw_info = rt.gateway_factory, {"connector": "injected"}
         llm_eff = eff["llm"]
-        profiles, prof_snap, notes = await llm_profiles.task_profiles(s, llm_eff)
+        profiles, prof_snap, notes = await llm_profiles.task_profiles(s, llm_eff,
+                                                                      allowed=llm_profiles.allowed_models(rt))
     a, o = eff["agent"], eff["observability"]
     has_llm = rt.llm is not None and a["llm_enabled"]
     llm_chat = has_llm and profiles.get("chat", True) is not None
@@ -123,6 +126,10 @@ async def run_config(rt, *, trigger: str = "manual") -> RunConfig:
 
 def apply_llm(rt, rc: RunConfig) -> None:
     """Görev profillerini ve model seçimini paylaşılan istemciye uygular (sonraki çağrılardan itibaren)."""
+    # P1.6: koşu başına LLM bütçesi bu task'ın context'ine bağlanır (LLM kapalı olsa da kayıt tutarlı olsun)
+    from airlab_agent.llm import RUN_BUDGET, RunBudget
+    a = rc.effective["agent"]
+    RUN_BUDGET.set(RunBudget(a.get("llm_max_calls_per_run", 12), a.get("llm_max_tokens_per_run", 400_000)))
     core = getattr(rt.llm, "llm", None) if rt.llm is not None else None
     if core is None:
         return

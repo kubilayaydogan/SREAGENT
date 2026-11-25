@@ -16,7 +16,7 @@ from .tracing import child_config
 from . import report as rpt
 from .attribution import alternatives, detect
 from .features import assess_quality, extract, window_list
-from .llm import LlmUnavailable
+from .llm import RUN_BUDGET, LlmUnavailable
 from .mcp_gateway import McpUnavailable, QueryResult
 from .redact import strip_fields
 from .scoring import score_all
@@ -190,7 +190,12 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
 
     def finalize(state: AgentState) -> dict:
         budget = {**state.get("budget", {}), "elapsed_s": round(time.monotonic() - state["started_monotonic"], 1)}
-        if llm is not None:
+        rb = RUN_BUDGET.get()
+        if rb is not None:                        # koşuya ait sayaç (paylaşılan istemcinin süreç toplamı değil)
+            calls = list(rb.calls)
+            budget.update(llm_calls=len(calls), input_tokens=sum(c["input_tokens"] for c in calls),
+                          output_tokens=sum(c["output_tokens"] for c in calls), llm_budget=rb.summary())
+        elif llm is not None:
             budget.update(llm_calls=llm.usage["calls"], input_tokens=llm.usage["input_tokens"],
                           output_tokens=llm.usage["output_tokens"])
         r = rpt.build({**state, "budget": budget})

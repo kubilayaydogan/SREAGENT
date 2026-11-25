@@ -19,7 +19,9 @@ from ...security import audit, sessions as sec_sessions, throttle
 from ...services.runs import Run
 from ...settings import runtime as settings_runtime
 from ...settings import service as settings_service
-from ..deps import current_user, db, sre
+from ...security.permissions import P
+from ..deps import current_user, db
+from ..deps import require_perm as perm
 from ..schemas import (ChatIn, ConversationIn, ConversationOut, ConversationPatch, InvestigateIn, MessageOut, PageOut,
                        RunOut, page_of)
 
@@ -107,9 +109,10 @@ async def _admit(request: Request, u: User, s: AsyncSession, kind: str) -> None:
                             headers={"Retry-After": "60"})
 
 
-async def _started(request: Request, u: User, run: Run, kind: str, target: str | None) -> None:
+async def _started(request: Request, u: User, run: Run, kind: str, target: str | None, decision=None) -> None:
     await audit.record_separate(request.app.state.rt.sm, actor=u.username, action="run.start", section="agent",
-                                target=f"{kind}:{target}" if target else kind, run_id=run.id)
+                                target=f"{kind}:{target}" if target else kind, run_id=run.id,
+                                after={"policy_version": getattr(decision, "policy_version", None)})
 
 
 def _run_out(run: Run, **kw) -> RunOut:
@@ -117,8 +120,8 @@ def _run_out(run: Run, **kw) -> RunOut:
 
 
 @router.post("/agent/chat", response_model=RunOut, status_code=202)
-async def chat(body: ChatIn, request: Request, u: User = Depends(sre), s: AsyncSession = Depends(db)):
-    settings_runtime.check_allowed(await settings_service.effective(request.app.state.rt, s), "manual")
+async def chat(body: ChatIn, request: Request, u: User = Depends(perm(P.AGENT_RUN)), s: AsyncSession = Depends(db)):
+    decision = settings_runtime.check_allowed(await settings_service.effective(request.app.state.rt, s), "manual")
     await _admit(request, u, s, "chat")
     if body.application_id:
         await applications.get(s, body.application_id)
@@ -140,15 +143,15 @@ async def chat(body: ChatIn, request: Request, u: User = Depends(sre), s: AsyncS
         await ChatOrchestrator(rt).turn(ctx, body.message)
 
     run = request.app.state.runs.start("chat", u.id, go, conversation_id=conv_id)
-    await _started(request, u, run, "chat", str(conv_id))
+    await _started(request, u, run, "chat", str(conv_id), decision)
     return _run_out(run, conversation_id=conv_id)
 
 
 @router.post("/conversations/{conv_id}/resume", response_model=RunOut, status_code=202)
-async def resume(conv_id: uuid.UUID, request: Request, u: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def resume(conv_id: uuid.UUID, request: Request, u: User = Depends(perm(P.AGENT_RUN)), s: AsyncSession = Depends(db)):
     conv = await conversations.get(s, conv_id, u.id)
     # P0.3: resume de yeni bir LLM/MCP çalıştırmasıdır → chat ile aynı policy kapısı (agent devre dışı / mod)
-    settings_runtime.check_allowed(await settings_service.effective(request.app.state.rt, s), "manual")
+    decision = settings_runtime.check_allowed(await settings_service.effective(request.app.state.rt, s), "manual")
     await _admit(request, u, s, "resume")
     _check_limits(request, u, conv.id)
     rt = request.app.state.rt
@@ -161,15 +164,15 @@ async def resume(conv_id: uuid.UUID, request: Request, u: User = Depends(sre), s
         await ChatOrchestrator(rt).resume(ctx)
 
     run = request.app.state.runs.start("chat", u.id, go, conversation_id=conv_id)
-    await _started(request, u, run, "resume", str(conv_id))
+    await _started(request, u, run, "resume", str(conv_id), decision)
     return _run_out(run, conversation_id=conv_id)
 
 
 @router.post("/agent/investigate", response_model=RunOut, status_code=202)
-async def investigate(body: InvestigateIn, request: Request, u: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def investigate(body: InvestigateIn, request: Request, u: User = Depends(perm(P.AGENT_RUN)), s: AsyncSession = Depends(db)):
     _check_limits(request, u)
     rt = request.app.state.rt
-    settings_runtime.check_allowed(await settings_service.effective(rt, s), "manual")
+    decision = settings_runtime.check_allowed(await settings_service.effective(rt, s), "manual")
     await _admit(request, u, s, "investigate")
     if body.application_id:
         await applications.get(s, body.application_id)
@@ -208,7 +211,7 @@ async def investigate(body: InvestigateIn, request: Request, u: User = Depends(s
 
     run = request.app.state.runs.start("investigate", u.id, go)
     run.investigation_id = str(inv_id)
-    await _started(request, u, run, "investigate", str(inv_id))
+    await _started(request, u, run, "investigate", str(inv_id), decision)
     return _run_out(run, investigation_id=inv_id)
 
 

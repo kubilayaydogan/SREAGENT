@@ -147,6 +147,9 @@ class InvestigationRunner:
                 await investigations.complete(s, inv, report)
             else:
                 await investigations.fail(s, inv, error or "rapor üretilmedi", cancelled=cancelled)
+        if mode != "chat":                          # sohbette tur sonunda (chat._finish) tek seferde yazılır
+            from ..security import llm_usage
+            await llm_usage.persist(sm, run_id=run_id, trigger=trace_meta["trigger"], investigation_id=inv_id)
         if report and not error and not cancel.is_set():
             try:
                 await self._correlate(inv_id, start, end, emit, rc)

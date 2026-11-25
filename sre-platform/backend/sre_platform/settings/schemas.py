@@ -80,6 +80,11 @@ class AgentSettings(_Section):
     llm_enabled: bool = Field(True, json_schema_extra=_meta(
         help="LLM reasoning (soru yorumlama, açıklama, sohbet cevabı). Kapalıyken analiz ve risk score deterministik "
              "olarak aynen üretilir; açıklama kural tabanlıdır"))
+    llm_max_calls_per_run: int = Field(12, ge=1, le=60, json_schema_extra=_meta(
+        help="Koşu (sohbet turu / investigation) başına en fazla LLM çağrısı; dolunca kalan adımlar deterministik "
+             "yedeğe düşer ve audit'e yazılır"))
+    llm_max_tokens_per_run: int = Field(400_000, ge=10_000, le=4_000_000, json_schema_extra=_meta(
+        help="Koşu başına LLM token (girdi + çıktı) sınırı; çağrıdan önce denetlenir", unit="token"))
     scheduled_llm: bool = Field(True, json_schema_extra=_meta(
         env="SRE_HEALTH_CHECK_LLM", help="Zamanlanmış health check'te de LLM açıklaması yazılsın"))
     incident_llm: bool = Field(True, json_schema_extra=_meta(
@@ -242,6 +247,7 @@ LABELS = {
     "max_concurrent_runs": "Eşzamanlı investigation", "max_extra_iterations": "Ek evidence turu",
     "recursion_limit": "LangGraph recursion_limit", "max_queries_per_run": "Koşu başına query bütçesi",
     "query_timeout_s": "Query Timeout", "query_retries": "Query retry", "llm_enabled": "LLM kullan",
+    "llm_max_calls_per_run": "Koşu başına LLM çağrısı", "llm_max_tokens_per_run": "Koşu başına LLM token",
     "scheduled_llm": "Zamanlanmış koşularda LLM", "incident_llm": "Incident koşularında LLM",
     "watch_confirm_windows": "Watch onay penceresi", "watch_cooldown_minutes": "Watch cooldown",
     "health_check_enabled": "Health check", "health_check_interval_minutes": "Health check aralığı",

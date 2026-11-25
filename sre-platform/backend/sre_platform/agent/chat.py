@@ -6,6 +6,8 @@ sürdürülebilir. Telemetri analizi mevcut airlab_agent grafiğiyle (Investigat
 """
 from __future__ import annotations
 
+from airlab_agent.errors import UserError
+
 import logging
 import operator
 import threading
@@ -356,7 +358,7 @@ class ChatOrchestrator:
     async def turn(self, ctx: TurnContext, question: str) -> dict:
         question = question.strip()
         if not question:
-            raise ValueError("soru boş")
+            raise UserError("soru boş")
         async with transaction(self.rt.sm) as s:
             m = await conversations.add_message(s, ctx.conversation_id, MessageRole.USER, question)
             ctx.result["user_message_id"] = str(m.id)
@@ -424,6 +426,11 @@ class ChatOrchestrator:
                 s, ctx.conversation_id, MessageRole.ASSISTANT, state.get("answer") or "", meta,
                 investigation_id=uuid.UUID(inv["investigation_id"]) if inv and inv.get("investigation_id") else None)
             mid = str(m.id)
+        from ..security import llm_usage
+        await llm_usage.persist(self.rt.sm, run_id=ctx.result.get("user_message_id") or ctx.thread_id, trigger="chat",
+                                conversation_id=ctx.conversation_id,
+                                investigation_id=uuid.UUID(inv["investigation_id"]) if inv and inv.get("investigation_id")
+                                else None)
         await ctx.emit("suggestions", {"items": state.get("suggestions", [])})
         await ctx.emit("message_saved", {"message_id": mid, "conversation_id": str(ctx.conversation_id)})
         if inv:

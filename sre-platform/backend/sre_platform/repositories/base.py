@@ -1,6 +1,8 @@
 """Ortak repository yardımcıları: sayfalama, beyaz listeli sıralama, tam metin araması, hata tipleri."""
 from __future__ import annotations
 
+from airlab_agent.errors import UserError
+
 from dataclasses import dataclass
 from typing import Any, Generic, TypeVar
 
@@ -41,7 +43,7 @@ def order_by(stmt: Select, sort: str | None, allowed: dict[str, Any], default: s
     desc = key.startswith("-")
     name = key.lstrip("-+")
     if name not in allowed:
-        raise ValueError(f"geçersiz sıralama alanı: {name} (izinli: {', '.join(sorted(allowed))})")
+        raise UserError(f"geçersiz sıralama alanı: {name} (izinli: {', '.join(sorted(allowed))})")
     col = allowed[name]
     return stmt.order_by(col.desc().nulls_last() if desc else col.asc().nulls_last())
 

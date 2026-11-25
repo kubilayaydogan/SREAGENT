@@ -102,6 +102,8 @@ export interface Connector {
   analysis_source: boolean;
   allowed_tools: string[];
   tools: ToolInfo[];
+  /** Onaydan sonra tanımı değişen tool'lar (P1.7). Yeniden onaylanana kadar agent kullanmaz. */
+  needs_review?: string[];
   last_check: LastCheck | null;
   managed: string | null;
   revision: number;

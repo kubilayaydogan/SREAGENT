@@ -14,13 +14,15 @@ arasında adres değişirse; bunun için allowlist'i dar tutun.
 """
 from __future__ import annotations
 
+from airlab_agent.errors import UserError
+
 import ipaddress
 import os
 import socket
 from urllib.parse import urlsplit
 
 
-class UnsafeUrl(ValueError):
+class UnsafeUrl(UserError):
     pass
 
 

@@ -778,6 +778,24 @@ class AuthLoginFailure(Base):
     ts: Mapped[datetime] = _created_clock()
 
 
+class LlmUsage(Base):
+    """Koşu başına LLM çağrı kaydı (P1.6; LangSmith'ten bağımsız). İçerik tutulmaz; denied = sınır nedeniyle yapılmadı."""
+    __tablename__ = "llm_usage"
+    __table_args__ = (Index("ix_llm_usage_ts", text("ts DESC")), Index("ix_llm_usage_run", "run_id"),
+                      {"schema": SCHEMA})
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = _created()
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    trigger: Mapped[str | None] = mapped_column(String(32))
+    investigation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    task: Mapped[str] = mapped_column(String(48), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(128))
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    denied: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+
 class AgentEpisode(Base):
     """Episodic memory: bir investigation'ın 'ne görüldü → ne düşünüldü → ne çıktı' özeti.
 

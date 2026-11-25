@@ -146,7 +146,23 @@ async def by_name(s: AsyncSession, name: str | None) -> LlmProfile | None:
     return (await s.execute(select(LlmProfile).where(LlmProfile.name == name))).scalar_one_or_none()
 
 
-async def task_profiles(s: AsyncSession, llm_eff: dict) -> tuple[dict[str, dict], dict[str, Any], list[str]]:
+KNOWN_MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2")
+
+
+def allowed_models(rt) -> frozenset[str]:
+    """Model allowlist (P1.6): SRE_LLM_MODEL_ALLOWLIST verilmişse yalnız o; yoksa bilinen Claude 5 modelleri +
+    ortamda (CLAUDE_MODEL / CLAUDE_RCA_MODEL) yapılandırılmış modeller."""
+    ps = getattr(rt, "ps", None)
+    explicit = tuple(getattr(ps, "llm_model_allowlist", ()) or ())
+    if explicit:
+        return frozenset(explicit)
+    ag = getattr(rt, "agent", None)
+    return frozenset(KNOWN_MODELS) | {m for m in (getattr(ag, "claude_model", None), getattr(ag, "claude_rca_model", None))
+                                      if m}
+
+
+async def task_profiles(s: AsyncSession, llm_eff: dict, *, allowed: frozenset[str] | None = None
+                        ) -> tuple[dict[str, dict], dict[str, Any], list[str]]:
     """Etkili yönlendirmeden görev profilleri (secret çözülmüş) + snapshot bilgisi + notlar.
     Bütçesi aşılmış ya da devre dışı profil → o görev için `None` (LLM yok)."""
     profiles, snap, notes = {}, {}, []
@@ -160,6 +176,14 @@ async def task_profiles(s: AsyncSession, llm_eff: dict) -> tuple[dict[str, dict]
             notes.append(f"LLM profili '{name}' ({task}) {'yok' if p is None else 'devre dışı'}; bu görevde LLM kullanılmadı")
             profiles[task] = None
             snap[task] = {"profile": name, "disabled": True}
+            continue
+        if allowed is not None and p.model not in allowed:
+            from ..security import audit
+            await audit.record(s, actor="system:agent", action="llm.model_denied", section="llm", target=name,
+                               result="denied", reason_code="model_not_allowlisted", detail=p.model)
+            notes.append(f"LLM profili '{name}' modeli ({p.model}) izinli listede değil; bu görevde LLM kullanılmadı")
+            profiles[task] = None
+            snap[task] = {"profile": name, "model_denied": True}
             continue
         if p.monthly_budget_usd is not None:
             used = await month_cost(s, p.model)

@@ -72,6 +72,20 @@ def require(role: Role):
     return dep
 
 
+def require_perm(perm):
+    """Permission kontrolü (security/permissions.py). Ret 403 + audit `authz.denied` (reason: missing_<perm>)."""
+    from ..security.permissions import has
+
+    async def dep(request: Request, u: User = Depends(current_user)) -> User:
+        if not has(u.role, perm):
+            await _audit_denied(request, actor=u.username, action="authz.denied",
+                                reason=f"missing_{perm.value}"[:48])
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"bu işlem için '{perm.value}' yetkisi gerekli")
+        return u
+    dep.permission = perm          # rota envanteri testi için
+    return dep
+
+
 viewer = current_user
 sre = require(Role.SRE)
 admin = require(Role.ADMIN)

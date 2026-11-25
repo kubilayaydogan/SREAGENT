@@ -29,9 +29,9 @@ def _event(*, actor: str, action: str, section: str, target: str | None = None, 
     cid = correlation_id.get()
     return AuditEvent(
         actor=(actor or "-")[:64], action=action[:48], section=section[:32], target=(target or None) and target[:128],
-        revision=revision, before=redact(before) if before is not None else None,
-        after=redact(after) if after is not None else None, result=result[:16],
-        detail=(redact_text(detail)[:2000] if detail else None),
+        revision=revision, before=redact(before, "audit") if before is not None else None,
+        after=redact(after, "audit") if after is not None else None, result=result[:16],
+        detail=(redact_text(detail, "audit")[:2000] if detail else None),
         actor_type=actor_type or ("system" if actor.startswith("system") else
                                   "anonymous" if actor.startswith("anonymous") else "user"),
         source_ip=source_ip or context.client_ip.get(), correlation_id=None if cid == "-" else cid,

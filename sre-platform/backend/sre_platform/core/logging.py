@@ -22,12 +22,12 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         out = {"ts": datetime.fromtimestamp(record.created, timezone.utc).isoformat(timespec="milliseconds"),
                "level": record.levelname, "logger": record.name, "cid": correlation_id.get(),
-               "msg": redact_text(record.getMessage())}
+               "msg": redact_text(record.getMessage(), "log")}
         extra = {k: v for k, v in record.__dict__.items() if k not in _RESERVED and not k.startswith("_")}
         if extra:
-            out.update(redact(extra))
+            out.update(redact(extra, "log"))
         if record.exc_info:
-            out["exc"] = redact_text(self.formatException(record.exc_info))[-4000:]
+            out["exc"] = redact_text(self.formatException(record.exc_info), "log")[-4000:]
         return json.dumps(out, ensure_ascii=False, default=str)
 
 

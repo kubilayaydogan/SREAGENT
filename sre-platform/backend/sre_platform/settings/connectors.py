@@ -12,6 +12,8 @@
 """
 from __future__ import annotations
 
+from airlab_agent.errors import UserError
+
 import asyncio
 import logging
 import time
@@ -21,6 +23,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airlab_agent.mcp_gateway import tool_definition_hash
 from airlab_agent.redact import redact_text
 
 from ..db.models import Connector
@@ -60,6 +63,8 @@ def out(c: Connector) -> dict[str, Any]:
             "allowed_tools": list(c.allowed_tools or []),
             "allowed_tool_ids": [f"{c.name}/{t}" for t in (c.allowed_tools or [])],
             "tools": caps.get("tools", []), "server": caps.get("server"), "discovered_at": caps.get("discovered_at"),
+            "needs_review": list(caps.get("needs_review") or []),
+            "approved_hashes": {k: str(v)[:12] for k, v in (caps.get("approved_hashes") or {}).items()},
             "last_check": c.last_check or {}, "managed": c.managed, "revision": c.revision,
             "updated_at": c.updated_at.isoformat() if c.updated_at else None}
 
@@ -69,11 +74,42 @@ def validate_tools(c: Connector, tools: list[str]) -> None:
     known = {t["name"]: t for t in (c.capabilities or {}).get("tools", [])}
     unknown = [t for t in tools if t not in known and not (c.provider == "dynatrace" and t == DQL_TOOL)]
     if unknown:
-        raise ValueError(f"keşfedilmemiş tool onaylanamaz: {', '.join(unknown)} (önce keşif çalıştırın)")
+        raise UserError(f"keşfedilmemiş tool onaylanamaz: {', '.join(unknown)} (önce keşif çalıştırın)")
     if c.read_only:
         bad = [t for t in tools if t in known and (known[t].get("destructive") or known[t].get("read_only") is False)]
         if bad:
-            raise ValueError(f"read-only politikada yazma/yıkıcı tool onaylanamaz: {', '.join(bad)}")
+            raise UserError(f"read-only politikada yazma/yıkıcı tool onaylanamaz: {', '.join(bad)}")
+
+
+def approve_hashes(c: Connector, tools: list[str]) -> None:
+    """Yöneticinin tool onayı (allowed_tools kaydı) o anki keşfedilmiş tanım özetlerini onaylar; inceleme bayrağı kalkar."""
+    caps = dict(c.capabilities or {})
+    known = {t["name"]: t.get("hash") for t in caps.get("tools", []) if isinstance(t, dict)}
+    approved = dict(caps.get("approved_hashes") or {})
+    for t in tools:
+        if known.get(t):
+            approved[t] = known[t]
+    caps["approved_hashes"] = {k: v for k, v in approved.items() if k in tools}
+    caps["needs_review"] = [t for t in (caps.get("needs_review") or []) if t not in tools]
+    c.capabilities = caps
+
+
+def _integrity(c: Connector, items: list[dict]) -> tuple[dict, list[str]]:
+    """Onaylı tool'ların tanım özeti değişti mi? İlk kez özet görülen onaylı tool için TOFU (o anki özet onaylanır)."""
+    prev = c.capabilities or {}
+    approved = dict(prev.get("approved_hashes") or {})
+    review = set(prev.get("needs_review") or [])
+    for t in items:
+        name, h = t["name"], t.get("hash")
+        if name not in (c.allowed_tools or []) or not h:
+            continue
+        if name not in approved:
+            approved[name] = h
+        elif approved[name] != h:
+            review.add(name)
+        else:
+            review.discard(name)
+    return approved, sorted(review)
 
 
 # ------------------------------------------------------------------------------------------------ test / keşif
@@ -158,14 +194,22 @@ async def discover(s: AsyncSession, c: Connector) -> dict[str, Any]:
             for t in res.tools[:MAX_TOOLS]:
                 ann = getattr(t, "annotations", None)
                 items.append({"name": str(t.name)[:128], "id": f"{c.name}/{str(t.name)[:128]}",
+                              "hash": tool_definition_hash(t),
                               "description": redact_text(str(t.description or ""))[:300],
                               "read_only": getattr(ann, "readOnlyHint", None) if ann else None,
                               "destructive": getattr(ann, "destructiveHint", None) if ann else None})
             return {"server": {"name": getattr(si, "name", None), "version": getattr(si, "version", None)},
                     "tools": items, "truncated": len(res.tools) > MAX_TOOLS}
         data = await asyncio.wait_for(_session(c, token, tools), c.timeout_s + 10)
-        c.capabilities = {**data, "discovered_at": now_iso(),
+        approved, review = _integrity(c, data["tools"])
+        newly = sorted(set(review) - set((c.capabilities or {}).get("needs_review") or []))
+        c.capabilities = {**data, "discovered_at": now_iso(), "approved_hashes": approved, "needs_review": review,
                           "adapter": "DQL (execute-dql)" if c.provider == "dynatrace" else None}
+        if newly:
+            from ..security import audit
+            await audit.record(s, actor="system:discovery", action="connector.tool_changed", section="connectors",
+                               target=c.name, result="denied", reason_code="tool_definition_changed",
+                               detail=f"onaylı tool tanımı değişti, yeniden inceleme gerekli: {', '.join(newly)}")
         if c.provider == "dynatrace" and DQL_TOOL not in {t["name"] for t in data["tools"]}:
             c.capabilities["warning"] = "execute-dql bulunamadı; bu connector analiz kaynağı olarak çalışamaz"
         await s.flush()
@@ -194,14 +238,20 @@ def unavailable_factory(reason: str):
 
 async def gateway_factory(s: AsyncSession, agent_settings) -> tuple[Any, dict]:
     """Koşu için gateway fabrikası + snapshot bilgisi. Bütçe/zaman aşımı koşunun etkili ayarlarından gelir."""
+    from ..security import audit, policy
     c = await analysis_source(s)
+    d = policy.decide("tool.call", {"connector": policy.connector_view(c), "tool": DQL_TOOL})
+    policy.log_decision(d, connector=c.name if c else None)
     if c is None:
-        return unavailable_factory("analiz veri kaynağı (MCP connector) tanımlı değil"), {"connector": None}
-    info = {"connector": c.name, "connector_revision": c.revision, "provider": c.provider, "tool": f"{c.name}/{DQL_TOOL}"}
-    if not c.enabled:
-        return unavailable_factory(f"MCP connector '{c.name}' devre dışı"), {**info, "available": False}
-    if DQL_TOOL not in (c.allowed_tools or []):
-        return unavailable_factory(f"'{c.name}/{DQL_TOOL}' onaylı tool değil"), {**info, "available": False}
+        return unavailable_factory(d.message), {"connector": None, "policy": d.reason_code}
+    info = {"connector": c.name, "connector_revision": c.revision, "provider": c.provider, "tool": f"{c.name}/{DQL_TOOL}",
+            "policy_version": d.policy_version}
+    if not d.allowed:
+        # Fail-closed: MCP yok → kısmi rapor (sahte veri üretilmez); ret audit'e yazılır
+        await audit.record(s, actor="system:agent", action="tool.denied", section="connectors",
+                           target=f"{c.name}/{DQL_TOOL}", result="denied", reason_code=d.reason_code, detail=d.message,
+                           after={"policy_version": d.policy_version, "outcome": d.outcome.value})
+        return unavailable_factory(d.message), {**info, "available": False, "policy": d.reason_code}
     try:
         token = await secrets.resolve(s, c.secret_ref)
     except secrets.SecretError as e:
@@ -218,10 +268,13 @@ async def gateway_factory(s: AsyncSession, agent_settings) -> tuple[Any, dict]:
     b = agent_settings.cfg["budgets"]
     # Agent ayarı ile connector sınırının küçüğü uygulanır (connector daha sıkı bir sınır koyabilir).
     url, maxq = c.endpoint, b["max_queries_per_run"]
+    expected = ((c.capabilities or {}).get("approved_hashes") or {}).get(DQL_TOOL)
+    info["tool_integrity"] = f"sha256:{expected[:12]}" if expected else "unverified"
     qt = min(int(b["query_timeout_seconds"]), c.timeout_s)
     retries = min(int(b["query_retries"]), c.retries)
     info.update(query_timeout_s=qt, query_retries=retries)
 
     def make(on_event=None):
-        return McpGateway(url, token, timeout_s=qt, retries=retries, max_queries=maxq, on_event=on_event)
+        return McpGateway(url, token, timeout_s=qt, retries=retries, max_queries=maxq, on_event=on_event,
+                          expected_tool_hash=expected)
     return make, {**info, "available": True}

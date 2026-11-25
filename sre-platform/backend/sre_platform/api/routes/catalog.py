@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db.models import IncidentStatus, InvestigationStatus, User, WatchCondition
 from ...repositories import applications, incidents, investigations
-from ..deps import admin, current_user, db, sre
+from ...security.permissions import P
+from ..deps import current_user, db
+from ..deps import require_perm as perm
 from ..schemas import ApplicationOut, IncidentOut, InvestigationOut, RangeKey
 
 router = APIRouter(tags=["applications"])
@@ -151,7 +153,7 @@ async def get_llm_model(request: Request, _: User = Depends(current_user)):
 
 
 @system.put("/system/llm-model")
-async def put_llm_model(request: Request, body: dict, u: User = Depends(admin)):
+async def put_llm_model(request: Request, body: dict, u: User = Depends(perm(P.LLM_MANAGE))):
     from fastapi import HTTPException
     from ...services import model_switch
     rt = request.app.state.rt
@@ -165,7 +167,7 @@ async def put_llm_model(request: Request, body: dict, u: User = Depends(admin)):
 
 @router.get("/observability/llm", tags=["observability"])
 async def llm_observability(request: Request, range: str = Query("24h", pattern="^(24h|7d|30d)$"),
-                            _: User = Depends(sre), s: AsyncSession = Depends(db)):
+                            _: User = Depends(perm(P.OBSERVABILITY_READ)), s: AsyncSession = Depends(db)):
     """LLM izleme: LangSmith'ten worker'ın senkronladığı özetler (sre.llm_runs). İçerik (prompt/cevap) yok."""
     from ...services import langsmith_trace, llm_observability
     out = await llm_observability.summary(s, range)

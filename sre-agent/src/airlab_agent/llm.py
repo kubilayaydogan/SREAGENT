@@ -10,12 +10,14 @@ import hashlib
 import json
 import threading
 import re
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .redact import redact
+from .errors import UserError
+from .redact import redact, redact_text
 from .terminology import find_violations, with_policy
 from .tracing import child_config
 
@@ -24,8 +26,91 @@ class LlmUnavailable(RuntimeError):
     pass
 
 
+class LlmBudgetExceeded(LlmUnavailable):
+    """Koşu başına LLM çağrı / token sınırı doldu. Çağrı YAPILMAZ; düğümler deterministik yedeğe düşer."""
+
+
+class RunBudget:
+    """Koşu (sohbet turu / investigation) başına LLM sınırları ve kullanım kaydı (LangSmith'ten bağımsız).
+
+    Paylaşılan `Llm` istemcisi süreç genelidir; bütçe ise `RUN_BUDGET` contextvar'ı ile koşuya bağlanır
+    (asyncio task'ları ve `asyncio.to_thread` context'i kopyalar → eşzamanlı koşular birbirini etkilemez).
+    Token sınırı çağrıdan ÖNCE denetlenir: tek bir çağrı en fazla kendi max_tokens'ı kadar aşabilir."""
+
+    def __init__(self, max_calls: int, max_tokens: int):
+        self.max_calls, self.max_tokens = int(max_calls), int(max_tokens)
+        self.calls: list[dict] = []          # {task, model, input_tokens, output_tokens}
+        self.denied: list[str] = []          # sınır nedeniyle yapılmayan çağrıların görevi
+        self._lock = threading.Lock()
+
+    @property
+    def tokens(self) -> int:
+        return sum(c["input_tokens"] + c["output_tokens"] for c in self.calls)
+
+    def check(self, task: str) -> None:
+        with self._lock:
+            reason = None
+            if len(self.calls) >= self.max_calls:
+                reason = f"koşu başına LLM çağrı sınırı doldu ({len(self.calls)}/{self.max_calls})"
+            elif self.tokens >= self.max_tokens:
+                reason = f"koşu başına LLM token sınırı doldu ({self.tokens}/{self.max_tokens})"
+            if reason:
+                self.denied.append(task)
+                raise LlmBudgetExceeded(reason)
+
+    def add(self, task: str, model: str | None, msg) -> None:
+        u = getattr(msg, "usage_metadata", None) or {}
+        with self._lock:
+            self.calls.append({"task": task, "model": model, "input_tokens": int(u.get("input_tokens", 0)),
+                               "output_tokens": int(u.get("output_tokens", 0))})
+
+    def summary(self) -> dict:
+        with self._lock:
+            return {"calls": len(self.calls), "tokens": self.tokens, "max_calls": self.max_calls,
+                    "max_tokens": self.max_tokens, "denied": list(self.denied)}
+
+
+RUN_BUDGET: ContextVar[RunBudget | None] = ContextVar("airlab_llm_run_budget", default=None)
+
+
+def budget_check(task: str) -> None:
+    b = RUN_BUDGET.get()
+    if b is not None:
+        b.check(task)
+
+
+def budget_add(task: str, model: str | None, msg) -> None:
+    b = RUN_BUDGET.get()
+    if b is not None:
+        b.add(task, model, msg)
+
+
+def data_json(obj) -> str:
+    """LLM'e giden veri bloğu için JSON. `<` ve `>` JSON unicode kaçışıyla yazılır: güvenilmeyen metin (log, span adı,
+    DB satırı) `</analysis_data>` gibi bir etiketle veri bloğunu kapatıp talimat bölgesine taşamaz (P1.9)."""
+    return json.dumps(obj, ensure_ascii=False, default=str).replace("<", "\\u003c").replace(">", "\\u003e")
+
+
+def bound_llm_output(m):
+    """LLM yapılandırılmış çıktısı güvenilmeyen veridir (P1.9): sayılar ve listeler makul aralığa kırpılır.
+    Sınırlar JSON şemasına konmaz (sağlayıcının structured output şema desteğine bağımlı olmamak için)."""
+    if getattr(m, "minutes", None) is not None:
+        m.minutes = max(1, min(int(m.minutes), 43200))
+    if getattr(m, "since_days", None) is not None:
+        m.since_days = max(1, min(int(m.since_days), 365))
+    if getattr(m, "focus_apps", None):
+        m.focus_apps = [str(a)[:64] for a in m.focus_apps[:10]]
+    for f in ("start_utc", "end_utc"):
+        if getattr(m, f, None):
+            setattr(m, f, str(getattr(m, f))[:40])
+    if getattr(m, "search_terms", None):
+        m.search_terms = str(m.search_terms)[:200]
+    return m
+
+
 class AnalysisRequest(BaseModel):
     """Kullanıcının sorusundan çıkarılan analiz isteği."""
+    model_config = ConfigDict(extra="forbid")
     intent: Literal["analyze", "smalltalk", "report_followup"] = Field(
         description="analyze: telemetri analizi gerekir; report_followup: önceki cevaba dair, yeni veri gerekmez; "
                     "smalltalk: sistemle ilgisiz")
@@ -33,6 +118,10 @@ class AnalysisRequest(BaseModel):
     start_utc: str | None = Field(None, description="Mutlak başlangıç, ISO-8601 UTC (ör. 2026-11-21T14:45:00Z)")
     end_utc: str | None = Field(None, description="Mutlak bitiş, ISO-8601 UTC")
     focus_apps: list[str] = Field(default_factory=list, description="Soruda adı geçen uygulamalar")
+
+    @model_validator(mode="after")
+    def _bounds(self):
+        return bound_llm_output(self)
 
 
 SYSTEM_INTERPRET = """Sen airlab SRE Agent'ının istek ayrıştırıcısısın. Kullanıcının Türkçe sorusunu yapılandırılmış
@@ -159,12 +248,14 @@ class Llm:
         sys = SYSTEM_INTERPRET.format(now=now, apps=", ".join(self.settings.cfg["apps"]))
         msgs = [("system", sys)]
         for h in (history or [])[-6:]:
-            msgs.append((h["role"], h["content"][:1500]))
-        msgs.append(("human", question))
+            msgs.append((h["role"], redact_text(h["content"][:1500], "llm")))
+        msgs.append(("human", redact_text(question, "llm")))
         try:
+            budget_check("interpret_question")
             runnable = self.chat.with_structured_output(AnalysisRequest, include_raw=True, method="json_schema")
             out = runnable.invoke(msgs, config=child_config(self.callbacks, "interpret_question", metadata={"model": self.model_name}))
             self._track(out["raw"])
+            budget_add("interpret_question", self.model_name, out["raw"])
             if out.get("parsed") is None:
                 raise LlmUnavailable(f"yapılandırılmış çıktı ayrıştırılamadı: {out.get('parsing_error')}")
             return out["parsed"]
@@ -174,14 +265,16 @@ class Llm:
             raise LlmUnavailable(f"{type(e).__name__}: {str(e)[:300]}") from None
 
     def explain(self, analysis: dict, question: str | None = None) -> str:
-        payload = json.dumps(redact(analysis), ensure_ascii=False, default=str)
-        human = (f"Kullanıcı sorusu: {question}\n\n" if question else "") + \
+        payload = data_json(redact(analysis, "llm"))
+        human = (f"Kullanıcı sorusu: {redact_text(question, 'llm')}\n\n" if question else "") + \
             f"<analysis_data>\n{payload}\n</analysis_data>\n\nBu bulguları açıkla."
         try:
+            budget_check("explain_findings")
             msg = self.rca_chat.invoke([("system", SYSTEM_EXPLAIN), ("human", human)],
                                    config=child_config(self.callbacks, "explain_findings",
                                                             metadata={"model": self.rca_model_name}))
             self._track(msg)
+            budget_add("explain_findings", self.rca_model_name, msg)
             if (msg.response_metadata or {}).get("stop_reason") == "refusal":
                 raise LlmUnavailable("model yanıtı reddetti (refusal)")
             # Opus 5.5 yanıtı thinking + text bloklarıyla gelir; yalnız text blokları alınır.
@@ -225,5 +318,5 @@ def resolve_window(req: AnalysisRequest, cfg: dict, now: datetime | None = None)
         start = end - timedelta(minutes=w["max_minutes"])
         notes.append(f"Pencere azami {w['max_minutes']} dakikaya kısaltıldı.")
     if end <= start:
-        raise ValueError("geçersiz pencere: bitiş başlangıçtan önce")
+        raise UserError("geçersiz pencere: bitiş başlangıçtan önce")
     return start, end, notes

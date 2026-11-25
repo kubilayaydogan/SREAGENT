@@ -12,9 +12,13 @@ from ...db.models import (ApprovalStatus, IncidentSource, IncidentStatus, Invest
                           User)
 from ...repositories import approvals, incidents, investigations, jobs, knowledge, rca
 from ...repositories.base import Conflict, InvalidTransition
+from airlab_agent.redact import redact_text
+
 from ...security import audit
 from ...services import rca_service
-from ..deps import admin, current_user, db, sre
+from ...security.permissions import P
+from ..deps import current_user, db
+from ..deps import require_perm as perm
 from ..schemas import (ApprovalIn, ApprovalOut, DecisionIn, EvidenceOut, FeedbackIn, FeedbackOut, IncidentEventOut,
                        IncidentIn, IncidentOut, IncidentPatch, InvestigationDetailOut, InvestigationOut, JobOut,
                        JobRunOut, KnownIssueIn, KnownIssueOut, LinkIn, NoteIn, PageOut, RcaDetailOut, RcaGenerateIn,
@@ -121,7 +125,7 @@ async def list_incidents(status_: str | None = Query(None, alias="status"), seve
 
 
 @router.post("/incidents", status_code=201, tags=["incidents"])
-async def create_incident(body: IncidentIn, u: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def create_incident(body: IncidentIn, u: User = Depends(perm(P.INCIDENT_WRITE)), s: AsyncSession = Depends(db)):
     if body.investigation_id:
         await investigations.get(s, body.investigation_id)
     inc = await incidents.create(s, title=body.title, description=body.description, severity=body.severity,
@@ -136,7 +140,7 @@ async def get_incident(inc_id: uuid.UUID, _: User = Depends(current_user), s: As
 
 
 @router.patch("/incidents/{inc_id}", tags=["incidents"])
-async def patch_incident(inc_id: uuid.UUID, body: IncidentPatch, u: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def patch_incident(inc_id: uuid.UUID, body: IncidentPatch, u: User = Depends(perm(P.INCIDENT_WRITE)), s: AsyncSession = Depends(db)):
     inc = await incidents.get(s, inc_id)
     fields = body.model_dump(exclude_unset=True, exclude={"status", "note"})
     if fields:
@@ -149,7 +153,7 @@ async def patch_incident(inc_id: uuid.UUID, body: IncidentPatch, u: User = Depen
 
 
 @router.post("/incidents/{inc_id}/investigations", tags=["incidents"])
-async def link(inc_id: uuid.UUID, body: LinkIn, u: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def link(inc_id: uuid.UUID, body: LinkIn, u: User = Depends(perm(P.INCIDENT_WRITE)), s: AsyncSession = Depends(db)):
     await incidents.get(s, inc_id)
     await investigations.get(s, body.investigation_id)
     await incidents.link_investigation(s, inc_id, body.investigation_id, relation=body.relation, user_id=u.id)
@@ -157,7 +161,7 @@ async def link(inc_id: uuid.UUID, body: LinkIn, u: User = Depends(sre), s: Async
 
 
 @router.post("/incidents/{inc_id}/notes", tags=["incidents"])
-async def note(inc_id: uuid.UUID, body: NoteIn, u: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def note(inc_id: uuid.UUID, body: NoteIn, u: User = Depends(perm(P.INCIDENT_WRITE)), s: AsyncSession = Depends(db)):
     await incidents.get(s, inc_id)
     await incidents.add_note(s, inc_id, body.message, u.id)
     return await _incident_full(s, inc_id)
@@ -183,13 +187,13 @@ async def get_rca(rca_id: uuid.UUID, _: User = Depends(current_user), s: AsyncSe
 async def rca_markdown(rca_id: uuid.UUID, u: User = Depends(current_user), s: AsyncSession = Depends(db)):
     await audit.record(s, actor=u.username, action="export.rca_markdown", section="export", target=str(rca_id))
     r = await rca.get(s, rca_id)
-    return PlainTextResponse(r.markdown, media_type="text/markdown; charset=utf-8",
+    return PlainTextResponse(redact_text(r.markdown or "", "export"), media_type="text/markdown; charset=utf-8",
                              headers={"Content-Disposition": f'attachment; filename="rca-{r.id}.md"'})
 
 
 @router.post("/rca/{inv_id}/generate", response_model=RcaDetailOut, status_code=201, tags=["rca"])
 async def generate_rca(inv_id: uuid.UUID, request: Request, body: RcaGenerateIn | None = None,
-                       _: User = Depends(sre), s: AsyncSession = Depends(db)):
+                       _: User = Depends(perm(P.INCIDENT_WRITE)), s: AsyncSession = Depends(db)):
     body = body or RcaGenerateIn()
     inv = await investigations.get(s, inv_id)
     if body.incident_id:
@@ -238,7 +242,7 @@ async def get_ki(kid: uuid.UUID, _: User = Depends(current_user), s: AsyncSessio
 
 
 @router.post("/known-issues", response_model=KnownIssueOut, status_code=201, tags=["knowledge"])
-async def create_ki(body: KnownIssueIn, u: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def create_ki(body: KnownIssueIn, u: User = Depends(perm(P.INCIDENT_WRITE)), s: AsyncSession = Depends(db)):
     return await knowledge.create_known_issue(s, {**body.model_dump(), "origin": "manual", "created_by": u.id})
 
 
@@ -256,7 +260,7 @@ async def get_rb(rid: uuid.UUID, _: User = Depends(current_user), s: AsyncSessio
 
 
 @router.post("/runbooks", response_model=RunbookOut, status_code=201, tags=["knowledge"])
-async def create_rb(body: RunbookIn, _: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def create_rb(body: RunbookIn, _: User = Depends(perm(P.KNOWLEDGE_MANAGE)), s: AsyncSession = Depends(db)):
     return await knowledge.create_runbook(s, {**body.model_dump(), "origin": "manual"})
 
 
@@ -270,7 +274,7 @@ async def list_approvals(status_: str | None = Query(None, alias="status"), page
 
 
 @router.post("/approvals", response_model=ApprovalOut, status_code=201, tags=["approvals"])
-async def request_approval(body: ApprovalIn, u: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def request_approval(body: ApprovalIn, u: User = Depends(perm(P.APPROVAL_REQUEST)), s: AsyncSession = Depends(db)):
     if body.runbook_id:
         await knowledge.get_runbook(s, body.runbook_id)
     a = await approvals.request(s, action_type=body.action_type, target=body.target,
@@ -283,7 +287,7 @@ async def request_approval(body: ApprovalIn, u: User = Depends(sre), s: AsyncSes
 
 
 @router.post("/approvals/{aid}/decision", response_model=ApprovalOut, tags=["approvals"])
-async def decide(aid: uuid.UUID, body: DecisionIn, request: Request, u: User = Depends(admin),
+async def decide(aid: uuid.UUID, body: DecisionIn, request: Request, u: User = Depends(perm(P.APPROVAL_DECIDE)),
                  s: AsyncSession = Depends(db)):
     try:
         a = await approvals.decide(s, aid, approve=body.approve, decided_by=u.id, comment=body.comment)
@@ -298,7 +302,7 @@ async def decide(aid: uuid.UUID, body: DecisionIn, request: Request, u: User = D
 
 
 @router.post("/approvals/{aid}/cancel", response_model=ApprovalOut, tags=["approvals"])
-async def cancel_approval(aid: uuid.UUID, u: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def cancel_approval(aid: uuid.UUID, u: User = Depends(perm(P.APPROVAL_REQUEST)), s: AsyncSession = Depends(db)):
     a = await approvals.cancel(s, aid, u.id)
     await audit.record(s, actor=u.username, action="approval.cancel", section="approvals", target=str(aid))
     return a
@@ -317,7 +321,7 @@ async def job_runs(limit: int = Query(30, ge=1, le=200), _: User = Depends(curre
 
 
 @router.post("/jobs/{name}/enabled", tags=["jobs"])
-async def set_job(name: str, enabled: bool, _: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def set_job(name: str, enabled: bool, _: User = Depends(perm(P.SETTINGS_WRITE)), s: AsyncSession = Depends(db)):
     await jobs.set_enabled(s, name, enabled)
     return {"name": name, "enabled": enabled}
 

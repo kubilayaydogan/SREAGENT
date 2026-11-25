@@ -15,7 +15,9 @@ from ...core.security import create_token, verify_password
 from ...db.models import AuthSession, User
 from ...repositories import users
 from ...security import audit, context, sessions, throttle
-from ..deps import admin, current_user, db
+from ...security.permissions import P
+from ..deps import current_user, db
+from ..deps import require_perm as perm
 from ..schemas import (LoginIn, PageOut, PasswordChangeIn, SessionOut, TokenOut, UserCreateIn, UserOut, UserUpdateIn,
                        page_of)
 
@@ -110,13 +112,13 @@ async def revoke_session(sid: str, request: Request, u: User = Depends(current_u
 
 # ---------------------------------------------------------------- kullanıcı yönetimi (admin)
 @router.get("/users", response_model=PageOut[UserOut])
-async def list_users(page: int = 1, size: int = 50, sort: str | None = None, _: User = Depends(admin),
+async def list_users(page: int = 1, size: int = 50, sort: str | None = None, _: User = Depends(perm(P.USER_MANAGE)),
                      s: AsyncSession = Depends(db)):
     return page_of(await users.list_(s, page, size, sort), UserOut)
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
-async def create_user(body: UserCreateIn, me_: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def create_user(body: UserCreateIn, me_: User = Depends(perm(P.USER_MANAGE)), s: AsyncSession = Depends(db)):
     u = await users.create(s, body.username, body.display_name, body.role, body.password)
     await audit.record(s, actor=me_.username, action="user.create", section="users", target=u.username,
                        after={"role": u.role.value, "is_active": u.is_active})
@@ -124,13 +126,13 @@ async def create_user(body: UserCreateIn, me_: User = Depends(admin), s: AsyncSe
 
 
 @router.get("/users/{user_id}/sessions", response_model=list[SessionOut])
-async def user_sessions(user_id: uuid.UUID, _: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def user_sessions(user_id: uuid.UUID, _: User = Depends(perm(P.USER_MANAGE)), s: AsyncSession = Depends(db)):
     await users.get(s, user_id)
     return [_session_out(r, None) for r in await sessions.list_active(s, user_id)]
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
-async def update_user(user_id: uuid.UUID, body: UserUpdateIn, me_: User = Depends(admin),
+async def update_user(user_id: uuid.UUID, body: UserUpdateIn, me_: User = Depends(perm(P.USER_MANAGE)),
                       s: AsyncSession = Depends(db)):
     if user_id == me_.id and (body.is_active is False or (body.role and body.role != me_.role)):
         raise HTTPException(status.HTTP_409_CONFLICT, "kendi rolünüzü düşüremez veya hesabınızı kapatamazsınız")

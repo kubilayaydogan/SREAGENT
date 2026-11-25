@@ -26,7 +26,10 @@ from ...settings import llm_profiles as llm_svc
 from ...settings import netguard, risk_preview, runtime, secrets, service
 from ...settings.schemas import (CONNECTOR_PROVIDERS, LLM_PROVIDERS, SECTIONS, ConnectorIn, ConnectorPatch,
                                  LlmProfileIn, LlmProfilePatch)
-from ..deps import admin, current_user, db, sre
+from ...security import permissions
+from ...security.permissions import P
+from ..deps import current_user, db
+from ..deps import require_perm as perm
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -149,7 +152,7 @@ def _status(rt, section: str, values: dict) -> dict:
 
 # ------------------------------------------------------------------------------------------------ genel bakış
 @router.get("")
-async def overview(request: Request, _: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def overview(request: Request, _: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
     rt = _rt(request)
     rows = await service.load_rows(s)
     secs = []
@@ -177,7 +180,7 @@ async def public(request: Request, _: User = Depends(current_user), s: AsyncSess
 @router.get("/audit")
 async def audit_log(section: str | None = None, action: str | None = Query(None, max_length=48),
                     result: str | None = Query(None, max_length=16), page: int = Query(1, ge=1),
-                    size: int = Query(50, ge=1, le=200), _: User = Depends(sre), s: AsyncSession = Depends(db)):
+                    size: int = Query(50, ge=1, le=200), _: User = Depends(perm(P.AUDIT_READ)), s: AsyncSession = Depends(db)):
     q = select(AuditEvent)
     if section:
         q = q.where(AuditEvent.section == section)
@@ -195,7 +198,7 @@ async def audit_log(section: str | None = None, action: str | None = Query(None,
 
 
 @router.get("/security")
-async def security(request: Request, _: User = Depends(sre)):
+async def security(request: Request, _: User = Depends(perm(P.SETTINGS_READ))):
     return {
         "roles": [
             {"role": Role.VIEWER.value, "can": ["Kayıtları görüntüleme", "Görüntü tercihleri"]},
@@ -203,6 +206,8 @@ async def security(request: Request, _: User = Depends(sre)):
                                              "Settings ve audit görüntüleme (salt okunur)"]},
             {"role": Role.ADMIN.value, "can": ["Settings değişikliği, rollback", "Connector / LLM profili / secret yönetimi",
                                                "Bağlantı testi, tool keşfi, run-now", "Checkpoint silme"]}],
+        "permissions": permissions.matrix(),
+        "dlp": __import__("airlab_agent.redact", fromlist=["dlp_policy"]).dlp_policy(),
         "secret_store": {"available": secrets.store_available(),
                          "reason": None if secrets.store_available() else "SRE_SETTINGS_KEY tanımlı değil (≥32 karakter)",
                          "env_allowlist": sorted(secrets.env_allowlist()) + ["SRE_SECRET_*"]},
@@ -216,7 +221,7 @@ async def security(request: Request, _: User = Depends(sre)):
 
 # ------------------------------------------------------------------------------------------------ secret'lar
 @router.get("/secrets")
-async def list_secrets(_: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def list_secrets(_: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
     used: dict[str, list[str]] = {}
     for c in (await s.execute(select(Connector))).scalars():
         if c.secret_ref:
@@ -238,7 +243,7 @@ async def list_secrets(_: User = Depends(sre), s: AsyncSession = Depends(db)):
 
 
 @router.put("/secrets/{name}")
-async def put_secret(name: str, body: SecretIn, request: Request, u: User = Depends(admin),
+async def put_secret(name: str, body: SecretIn, request: Request, u: User = Depends(perm(P.SECRET_MANAGE)),
                      s: AsyncSession = Depends(db)):
     row, created = await secrets.put(s, name, body.value, u.username)
     await service.audit(s, actor=u.username, action="secret_create" if created else "secret_rotate",
@@ -247,7 +252,7 @@ async def put_secret(name: str, body: SecretIn, request: Request, u: User = Depe
 
 
 @router.delete("/secrets/{name}", status_code=204)
-async def delete_secret(name: str, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def delete_secret(name: str, u: User = Depends(perm(P.SECRET_MANAGE)), s: AsyncSession = Depends(db)):
     row = await s.get(StoredSecret, name)
     if row is None:
         raise HTTPException(404, "secret bulunamadı")
@@ -265,7 +270,7 @@ async def delete_secret(name: str, u: User = Depends(admin), s: AsyncSession = D
 
 # ------------------------------------------------------------------------------------------------ connector'lar
 @router.get("/connectors")
-async def list_connectors(_: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def list_connectors(_: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
     rows = (await s.execute(select(Connector).order_by(Connector.name))).scalars()
     return {"items": [conn_svc.out(c) for c in rows],
             "providers": [{"id": k, **v} for k, v in CONNECTOR_PROVIDERS.items()],
@@ -290,7 +295,7 @@ def _conn_snapshot(c: Connector) -> dict:
 
 
 @router.post("/connectors", status_code=201)
-async def create_connector(body: ConnectorIn, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def create_connector(body: ConnectorIn, u: User = Depends(perm(P.CONNECTOR_MANAGE)), s: AsyncSession = Depends(db)):
     await asyncio.to_thread(netguard.check_url, body.endpoint)
     secrets.check_ref(body.secret_ref)
     if (await s.execute(select(Connector.id).where(Connector.name == body.name))).first():
@@ -312,7 +317,7 @@ async def create_connector(body: ConnectorIn, u: User = Depends(admin), s: Async
 
 
 @router.patch("/connectors/{cid}")
-async def patch_connector(cid: uuid.UUID, body: ConnectorPatch, u: User = Depends(admin),
+async def patch_connector(cid: uuid.UUID, body: ConnectorPatch, u: User = Depends(perm(P.CONNECTOR_MANAGE)),
                           s: AsyncSession = Depends(db)):
     c = await _connector(s, cid, lock=True)
     if body.revision != c.revision:
@@ -334,6 +339,8 @@ async def patch_connector(cid: uuid.UUID, body: ConnectorPatch, u: User = Depend
         conn_svc.validate_tools(c, list(merged.allowed_tools))
     for k, v in data.items():
         setattr(c, k, v)
+    if "allowed_tools" in data:                        # P1.7: onay = o anki tool tanım özetlerinin onayı
+        conn_svc.approve_hashes(c, list(data["allowed_tools"]))
     if "endpoint" in data or "secret_ref" in data or "auth_type" in data:
         c.last_check = {**(c.last_check or {}), "stale": True}
     c.revision += 1
@@ -344,7 +351,7 @@ async def patch_connector(cid: uuid.UUID, body: ConnectorPatch, u: User = Depend
 
 
 @router.delete("/connectors/{cid}", status_code=204)
-async def delete_connector(cid: uuid.UUID, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def delete_connector(cid: uuid.UUID, u: User = Depends(perm(P.CONNECTOR_MANAGE)), s: AsyncSession = Depends(db)):
     c = await _connector(s, cid, lock=True)
     if c.analysis_source:
         raise HTTPException(409, "analiz kaynağı silinemez; önce başka bir connector'ı kaynak yapın ya da devre dışı bırakın")
@@ -355,7 +362,7 @@ async def delete_connector(cid: uuid.UUID, u: User = Depends(admin), s: AsyncSes
 
 
 @router.post("/connectors/{cid}/test")
-async def test_connector(cid: uuid.UUID, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def test_connector(cid: uuid.UUID, u: User = Depends(perm(P.CONNECTOR_MANAGE)), s: AsyncSession = Depends(db)):
     _rate_limit(u, f"conn:{cid}")
     c = await _connector(s, cid)
     res = await conn_svc.test(s, c)
@@ -365,7 +372,7 @@ async def test_connector(cid: uuid.UUID, u: User = Depends(admin), s: AsyncSessi
 
 
 @router.post("/connectors/{cid}/discover")
-async def discover_connector(cid: uuid.UUID, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def discover_connector(cid: uuid.UUID, u: User = Depends(perm(P.CONNECTOR_MANAGE)), s: AsyncSession = Depends(db)):
     _rate_limit(u, f"disc:{cid}")
     c = await _connector(s, cid)
     res = await conn_svc.discover(s, c)
@@ -377,7 +384,7 @@ async def discover_connector(cid: uuid.UUID, u: User = Depends(admin), s: AsyncS
 
 # ------------------------------------------------------------------------------------------------ LLM profilleri
 @router.get("/llm-providers")
-async def list_profiles(request: Request, _: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def list_profiles(request: Request, _: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
     out = []
     for p in (await s.execute(select(LlmProfile).order_by(LlmProfile.name))).scalars():
         out.append(llm_svc.out(p, await llm_svc.month_cost(s, p.model)))
@@ -401,8 +408,16 @@ def _prof_snapshot(p: LlmProfile) -> dict:
         {"secret_ref": p.secret_ref}
 
 
+def _check_model(request: Request, model: str | None) -> None:
+    """P1.6 model allowlist (SRE_LLM_MODEL_ALLOWLIST); çalışma anında da task_profiles uygular."""
+    if model is not None and model not in (allowed := llm_svc.allowed_models(_rt(request))):
+        raise HTTPException(422, f"model izinli listede değil: {model} (izinli: {', '.join(sorted(allowed))})")
+
+
 @router.post("/llm-providers", status_code=201)
-async def create_profile(body: LlmProfileIn, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def create_profile(body: LlmProfileIn, request: Request, u: User = Depends(perm(P.LLM_MANAGE)),
+                         s: AsyncSession = Depends(db)):
+    _check_model(request, body.model)
     secrets.check_ref(body.secret_ref)
     if body.base_url:
         await asyncio.to_thread(netguard.check_url, body.base_url)
@@ -422,12 +437,13 @@ async def _routed(request: Request, s: AsyncSession, name: str) -> list[str]:
 
 
 @router.patch("/llm-providers/{pid}")
-async def patch_profile(pid: uuid.UUID, body: LlmProfilePatch, request: Request, u: User = Depends(admin),
+async def patch_profile(pid: uuid.UUID, body: LlmProfilePatch, request: Request, u: User = Depends(perm(P.LLM_MANAGE)),
                         s: AsyncSession = Depends(db)):
     p = await _profile(s, pid, lock=True)
     if body.revision != p.revision:
         raise service.SettingsConflict(p.revision)
     data = body.model_dump(exclude_unset=True, exclude={"revision"})
+    _check_model(request, data.get("model"))
     secrets.check_ref(data.get("secret_ref"))
     if data.get("base_url"):
         await asyncio.to_thread(netguard.check_url, data["base_url"])
@@ -452,7 +468,7 @@ async def patch_profile(pid: uuid.UUID, body: LlmProfilePatch, request: Request,
 
 
 @router.delete("/llm-providers/{pid}", status_code=204)
-async def delete_profile(pid: uuid.UUID, request: Request, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def delete_profile(pid: uuid.UUID, request: Request, u: User = Depends(perm(P.LLM_MANAGE)), s: AsyncSession = Depends(db)):
     p = await _profile(s, pid, lock=True)
     if tasks := await _routed(request, s, p.name):
         raise HTTPException(409, f"varsayılan profil silinemez ({', '.join(tasks)}); önce başka profile yönlendirin")
@@ -463,7 +479,7 @@ async def delete_profile(pid: uuid.UUID, request: Request, u: User = Depends(adm
 
 
 @router.post("/llm-providers/{pid}/test")
-async def test_profile(pid: uuid.UUID, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def test_profile(pid: uuid.UUID, u: User = Depends(perm(P.LLM_MANAGE)), s: AsyncSession = Depends(db)):
     _rate_limit(u, f"llm:{pid}")
     p = await _profile(s, pid)
     res = await llm_svc.test(s, p)
@@ -473,7 +489,7 @@ async def test_profile(pid: uuid.UUID, u: User = Depends(admin), s: AsyncSession
 
 
 @router.get("/llm-providers/{pid}/models")
-async def profile_models(pid: uuid.UUID, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def profile_models(pid: uuid.UUID, u: User = Depends(perm(P.LLM_MANAGE)), s: AsyncSession = Depends(db)):
     _rate_limit(u, f"llm-models:{pid}")
     p = await _profile(s, pid)
     try:
@@ -487,7 +503,7 @@ async def profile_models(pid: uuid.UUID, u: User = Depends(admin), s: AsyncSessi
 
 # ------------------------------------------------------------------------------------------------ test eylemleri
 @router.post("/observability/test")
-async def test_observability(request: Request, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def test_observability(request: Request, u: User = Depends(perm(P.SETTINGS_WRITE)), s: AsyncSession = Depends(db)):
     """LangSmith erişimi: /info uç noktası (gerçek evidence gönderilmez)."""
     _rate_limit(u, "langsmith")
     from airlab_agent.tracing import langsmith_ping
@@ -498,7 +514,7 @@ async def test_observability(request: Request, u: User = Depends(admin), s: Asyn
 
 
 @router.post("/notifications/test")
-async def test_notification(request: Request, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def test_notification(request: Request, u: User = Depends(perm(P.SETTINGS_WRITE)), s: AsyncSession = Depends(db)):
     """Açıkça TEST etiketli Slack mesajı. Evidence/secret içermez."""
     _rate_limit(u, "slack")
     eff = (await service.effective(_rt(request), s))["notifications"]
@@ -522,7 +538,7 @@ async def test_notification(request: Request, u: User = Depends(admin), s: Async
 
 # ------------------------------------------------------------------------------------------------ zamanlama
 @router.get("/scheduling/jobs")
-async def jobs_status(_: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def jobs_status(_: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
     out = []
     for j in (await s.execute(select(ScheduledJob).order_by(ScheduledJob.name))).scalars():
         last = (await s.execute(select(JobRun).where(JobRun.job_id == j.id).order_by(JobRun.started_at.desc())
@@ -538,14 +554,11 @@ async def jobs_status(_: User = Depends(sre), s: AsyncSession = Depends(db)):
 
 
 @router.post("/scheduling/jobs/{name}/run")
-async def run_now(name: str, request: Request, u: User = Depends(admin), s: AsyncSession = Depends(db)):
+async def run_now(name: str, request: Request, u: User = Depends(perm(P.SETTINGS_WRITE)), s: AsyncSession = Depends(db)):
     """Bir sonraki worker turunda çalıştır. Kapalı ya da şu an çalışan iş için 409 (çift koşu yok)."""
     eff = await service.effective(_rt(request), s)
     if name == "health-check":
-        try:
-            runtime.check_allowed(eff, "scheduled")
-        except runtime.RunNotAllowed as e:
-            raise HTTPException(409, str(e)) from None
+        runtime.check_allowed(eff, "scheduled")      # ret → RunNotAllowed → 409 agent_disabled + audit (app._rn)
     res = await s.execute(text("""UPDATE sre.scheduled_jobs SET next_run_at = now(), updated_at = now()
         WHERE name = :n AND enabled AND (locked_until IS NULL OR locked_until < now()) RETURNING id"""), {"n": name})
     if res.first() is None:
@@ -560,7 +573,7 @@ async def run_now(name: str, request: Request, u: User = Depends(admin), s: Asyn
 
 # ------------------------------------------------------------------------------------------------ bellek
 @router.get("/memory")
-async def memory_status(request: Request, _: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def memory_status(request: Request, _: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
     rt = _rt(request)
     counts = (await s.execute(text("""SELECT
         (SELECT count(DISTINCT thread_id) FROM langgraph.checkpoints),
@@ -601,7 +614,7 @@ async def memory_status(request: Request, _: User = Depends(sre), s: AsyncSessio
 
 
 @router.post("/memory/threads/{thread_id}/delete")
-async def delete_thread(thread_id: str, body: ConfirmIn, request: Request, u: User = Depends(admin),
+async def delete_thread(thread_id: str, body: ConfirmIn, request: Request, u: User = Depends(perm(P.MEMORY_DELETE)),
                         s: AsyncSession = Depends(db)):
     """Tek thread'in checkpoint'lerini siler. Onay metni thread kimliğiyle aynı olmalı; aktif koşu silinemez."""
     if body.confirm != thread_id:
@@ -625,7 +638,7 @@ async def delete_thread(thread_id: str, body: ConfirmIn, request: Request, u: Us
 # ------------------------------------------------------------------------------------------------ bölümler
 @router.post("/risk/preview")
 async def risk_preview_ep(request: Request, values: dict[str, Any] = Body(default_factory=dict),
-                          _: User = Depends(sre), s: AsyncSession = Depends(db)):
+                          _: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
     rt = _rt(request)
     cur = (await service.effective(rt, s))["risk"]
     try:
@@ -642,14 +655,14 @@ def _section(section: str) -> str:
 
 
 @router.get("/{section}")
-async def get_section(section: str, request: Request, _: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def get_section(section: str, request: Request, _: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
     rt = _rt(request)
     v = service.view(rt, _section(section), await service.load_rows(s))
     return {**v, "status": _status(rt, section, v["values"])}
 
 
 @router.patch("/{section}")
-async def patch_section(section: str, body: SectionPatch, request: Request, u: User = Depends(admin),
+async def patch_section(section: str, body: SectionPatch, request: Request, u: User = Depends(perm(P.SETTINGS_WRITE)),
                         s: AsyncSession = Depends(db)):
     rt = _rt(request)
     _section(section)
@@ -668,12 +681,12 @@ async def patch_section(section: str, body: SectionPatch, request: Request, u: U
 
 
 @router.get("/{section}/revisions")
-async def section_revisions(section: str, _: User = Depends(sre), s: AsyncSession = Depends(db)):
+async def section_revisions(section: str, _: User = Depends(perm(P.SETTINGS_READ)), s: AsyncSession = Depends(db)):
     return {"items": await service.revisions(s, _section(section))}
 
 
 @router.post("/{section}/rollback")
-async def section_rollback(section: str, body: RollbackIn, request: Request, u: User = Depends(admin),
+async def section_rollback(section: str, body: RollbackIn, request: Request, u: User = Depends(perm(P.SETTINGS_WRITE)),
                            s: AsyncSession = Depends(db)):
     rt = _rt(request)
     _section(section)

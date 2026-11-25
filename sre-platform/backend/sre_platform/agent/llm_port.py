@@ -14,9 +14,10 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from airlab_agent.llm import LlmUnavailable, _log_terminology
+from airlab_agent.llm import LlmUnavailable, _log_terminology, bound_llm_output, budget_add, budget_check
+from airlab_agent.redact import redact_text
 from airlab_agent.terminology import with_policy
 from airlab_agent.tracing import child_config
 
@@ -35,6 +36,7 @@ _SEARCH_DESC = ("Geçmiş tam metin araması için 1-4 anahtar kelime; teknik te
 
 class ChatRoute(BaseModel):
     """Sohbet sorusunun yapılandırılmış yorumu."""
+    model_config = ConfigDict(extra="forbid")
     intent: Literal["analyze", "history", "compare", "followup", "smalltalk"] = Field(
         description="analyze: güncel telemetri analizi gerekir (ör. 'neden yavaşladı', 'son 30 dk bağlantı sorunu var mı'); "
                     "history: yalnız geçmiş kayıtlar (önceki araştırma/incident/RCA/runbook/bilinen sorun) sorulur; "
@@ -50,6 +52,10 @@ class ChatRoute(BaseModel):
     mechanism: Literal["row_lock", "pool_saturation", "global_connection_pressure", "db_cpu", "app_vm_cpu",
                        "app_container_cpu", "network_path_latency", "independent_load"] | None = Field(None, description=_MECH_DESC)
     search_terms: str | None = Field(None, description=_SEARCH_DESC)
+
+    @model_validator(mode="after")
+    def _bounds(self):
+        return bound_llm_output(self)
 
 
 ROUTE_SYSTEM = """Sen airlab SRE platformunun istek yönlendiricisisin. Kullanıcının Türkçe sorusunu yapılandırılmış
@@ -90,13 +96,15 @@ class ClaudePort:
                                   apps=", ".join(apps), app=app or "yok")
         if focus:
             sys += ROUTE_FOCUS.format(focus=focus)
-        msgs = [("system", sys)] + [(h["role"] if h["role"] != "user" else "human", h["content"][:1500])
-                                    for h in history[-6:]] + [("human", question)]
+        msgs = [("system", sys)] + [(h["role"] if h["role"] != "user" else "human", redact_text(h["content"][:1500], "llm"))
+                                    for h in history[-6:]] + [("human", redact_text(question, "llm"))]
         try:
+            budget_check("route_question")
             r = self.llm.chat.with_structured_output(ChatRoute, include_raw=True, method="json_schema")
             out = await r.ainvoke(msgs, config=child_config(self.llm.callbacks, "route_question",
                                                             metadata={"model": self.model_name}))
             self.llm._track(out["raw"])
+            budget_add("route_question", self.model_name, out["raw"])
             if out.get("parsed") is None:
                 raise LlmUnavailable("yönlendirme çıktısı ayrıştırılamadı")
             return out["parsed"]
@@ -110,6 +118,7 @@ class ClaudePort:
         system = with_policy(system)
         chat = getattr(self.llm, "rca_chat", self.llm.chat) if rca else self.llm.chat
         try:
+            budget_check("answer")
             last = None
             async for chunk in chat.astream([("system", system), ("human", human)],
                                                      config=child_config(self.llm.callbacks, "answer",
@@ -127,8 +136,11 @@ class ClaudePort:
                 if (getattr(last, "response_metadata", None) or {}).get("stop_reason") == "refusal":
                     raise LlmUnavailable("model yanıtı reddetti (refusal)")
                 self.llm._track(last)
+                budget_add("answer", self.rca_model_name if rca else self.model_name, last)
                 _log_terminology(last.text if isinstance(getattr(last, "text", None), str) else str(last.content),
                                  "answer_stream")
+        except LlmUnavailable:
+            raise
         except Exception as e:  # noqa: BLE001
             raise LlmUnavailable(f"{type(e).__name__}: {str(e)[:300]}") from None
 

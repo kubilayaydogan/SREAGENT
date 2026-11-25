@@ -7,6 +7,8 @@ Eski sürümün `kv.llm_model` kaydı açılışta bir kez Settings'e taşınır
 """
 from __future__ import annotations
 
+from airlab_agent.errors import UserError
+
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +52,7 @@ async def refresh(rt) -> str | None:
 
 async def select(rt, model: str, *, username: str) -> dict:
     if model not in MODELS:
-        raise ValueError(f"desteklenmeyen model: {model}")
+        raise UserError(f"desteklenmeyen model: {model}")
     from ..settings import service
     async with transaction(rt.sm) as s:
         _, row = await _section(rt, s)

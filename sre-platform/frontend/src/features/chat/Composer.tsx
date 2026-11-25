@@ -106,7 +106,8 @@ export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app
           )}
         </div>
         <p className="mt-1.5 text-2xs text-muted">
-          Agent yalnız okuma yapar (Dynatrace MCP query'leri). Sonuçlar correlation temelli hipotezdir; kritik aksiyonlar onay akışından geçer.
+          Agent yalnız okuma yapar (Dynatrace MCP query'leri). Sonuçlar correlation temelli hipotezdir; kritik aksiyonlar onay akışından geçer.{" "}
+          Sorunuz ve oluşan analiz (investigation) ekipteki tüm kullanıcılara görünür; sohbet mesajları yalnız size aittir.
         </p>
       </div>
     </div>

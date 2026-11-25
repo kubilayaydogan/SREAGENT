@@ -39,7 +39,7 @@ def to_mrkdwn(md: str) -> str:
 
 
 def _summary(text: str) -> str:
-    t = to_mrkdwn(redact_text(text or "").strip())
+    t = to_mrkdwn(redact_text(text or "", "notify").strip())
     if len(t) <= MAX_TEXT:
         return t
     cut = t.rfind("\n\n", 0, MAX_TEXT)
@@ -132,7 +132,7 @@ async def notify_rca(rt, inv_id: uuid.UUID) -> bool:
         try:
             await _post(url, payload)
         except Exception as e:  # noqa: BLE001
-            error = redact_text(str(e)).replace(url, "<webhook>")
+            error = redact_text(str(e), "notify").replace(url, "<webhook>")
             from ..settings.netguard import UnsafeUrl
             if isinstance(e, UnsafeUrl):
                 from ..security import audit

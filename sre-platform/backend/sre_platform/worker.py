@@ -65,8 +65,8 @@ async def health_check(rt, params: dict) -> dict[str, Any]:
     except srt.RunNotAllowed as e:
         from .security import audit
         await audit.record_separate(rt.sm, actor="system:scheduler", action="run.denied", section="agent",
-                                    target="health_check", result="denied", reason_code="policy_agent_settings",
-                                    detail=str(e))
+                                    target="health_check", result="denied", reason_code=e.reason_code,
+                                    detail=str(e), after={"policy_version": getattr(e.decision, "policy_version", None)})
         return {"skipped": str(e)}
     lag = rt.agent.cfg["windows"]["ingest_lag_seconds"]
     end = (datetime.now(timezone.utc) - timedelta(seconds=lag)).replace(second=0, microsecond=0)

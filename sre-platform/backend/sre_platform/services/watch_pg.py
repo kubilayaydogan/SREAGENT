@@ -133,7 +133,14 @@ class PlatformWatcher(Watcher):
                            title: str, notes: list[str], use_llm: bool, app: str | None):
         from ..settings import runtime as srt
         eff = await srt.effective(self.rt)
-        srt.check_allowed(eff, "incident")        # kapalıysa RunNotAllowed: incident kaydı kalır, analiz yapılmaz
+        try:
+            srt.check_allowed(eff, "incident")    # kapalıysa RunNotAllowed: incident kaydı kalır, analiz yapılmaz
+        except RunNotAllowed as e:
+            from ..security import audit
+            await audit.record_separate(self.rt.sm, actor="system:watch", action="run.denied", section="agent",
+                                        target=f"incident:{inc_id}", result="denied", reason_code=e.reason_code,
+                                        detail=str(e), after={"policy_version": getattr(e.decision, "policy_version", None)})
+            raise
         if mode == "watch-incident":
             use_llm = bool(eff["agent"]["incident_llm"])
         async with transaction(self.rt.sm) as s:

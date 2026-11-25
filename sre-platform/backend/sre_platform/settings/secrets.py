@@ -10,6 +10,8 @@ Değerler hiçbir API cevabına, loga, audit'e veya trace'e yazılmaz; çözüle
 """
 from __future__ import annotations
 
+from airlab_agent.errors import UserError
+
 import base64
 import hashlib
 import os
@@ -25,7 +27,7 @@ KNOWN_ENV = ("DT_PLATFORM_TOKEN", "ANTHROPIC_API_KEY", "LANGSMITH_API_KEY", "SRE
 SECRET_ENV_RE = re.compile(r"^SRE_SECRET_[A-Z0-9_]{1,56}$")
 
 
-class SecretError(ValueError):
+class SecretError(UserError):
     pass
 
 

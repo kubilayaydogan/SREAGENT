@@ -1,6 +1,8 @@
 """Parola özeti (scrypt, standart kütüphane) ve JWT erişim belirteci."""
 from __future__ import annotations
 
+from airlab_agent.errors import UserError
+
 import base64
 import hashlib
 import hmac
@@ -15,7 +17,7 @@ ALGO = "HS256"
 
 def hash_password(password: str) -> str:
     if len(password) < 10:
-        raise ValueError("parola en az 10 karakter olmalı")
+        raise UserError("parola en az 10 karakter olmalı")
     salt = secrets.token_bytes(16)
     dk = hashlib.scrypt(password.encode(), salt=salt, n=_N, r=_R, p=_P, dklen=_LEN)
     b = lambda x: base64.b64encode(x).decode()  # noqa: E731

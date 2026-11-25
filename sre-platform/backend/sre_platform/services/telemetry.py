@@ -10,6 +10,8 @@ Sağlık durumu deterministiktir:
 """
 from __future__ import annotations
 
+from airlab_agent.errors import UserError
+
 import asyncio
 import time
 from dataclasses import dataclass
@@ -37,7 +39,7 @@ class Span:
 
 def make_span(range_key: str, lag_s: int, now: datetime | None = None) -> Span:
     if range_key not in RANGES:
-        raise ValueError(f"geçersiz aralık: {range_key} (izinli: {', '.join(RANGES)})")
+        raise UserError(f"geçersiz aralık: {range_key} (izinli: {', '.join(RANGES)})")
     minutes, iv = RANGES[range_key]
     now = now or datetime.now(timezone.utc)
     end = (now - timedelta(seconds=lag_s)).replace(second=0, microsecond=0)

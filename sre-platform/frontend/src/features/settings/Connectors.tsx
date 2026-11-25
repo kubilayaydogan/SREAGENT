@@ -209,6 +209,9 @@ function ToolsDialog({ c, onClose }: { c: Connector; onClose: () => void }) {
                   </td>
                   <td className="font-mono text-xs">
                     {c.name}/{t.name}
+                    {c.needs_review?.includes(t.name) && (
+                      <div className="font-sans text-2xs text-st-critical-ink">tanım onaydan sonra değişti — inceleyip yeniden onaylayın</div>
+                    )}
                   </td>
                   <td className="text-xs">{t.destructive ? "destructive" : t.read_only ? "read-only" : t.read_only === false ? "yazma" : "belirtilmemiş"}</td>
                   <td className="max-w-md text-xs text-ink-2">{t.description}</td>
@@ -291,6 +294,9 @@ export function ConnectorsSection() {
                       <button type="button" className="text-accent hover:underline" onClick={() => setTools(c)}>
                         {c.allowed_tools.length} onaylı / {c.tools.length} keşfedilen
                       </button>
+                      {!!c.needs_review?.length && (
+                        <div className="text-2xs text-st-critical-ink">{c.needs_review.length} tool yeniden inceleme bekliyor (kullanılmıyor)</div>
+                      )}
                     </td>
                     <td>
                       <CheckStatus check={c.last_check} />
