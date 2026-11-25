@@ -1,0 +1,11 @@
+# graphify: grafa girmeyecek yollar (.gitignore ayrıca uygulanır). Secret ve büyük üretilmiş içerik hariç tutulur.
+deploy/out/
+deploy/evidence/
+**/*.env
+**/.env*
+**/node_modules/
+**/.venv/
+**/dist/
+**/target/
+data/
+graphify-out/

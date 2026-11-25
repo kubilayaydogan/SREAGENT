@@ -17,3 +17,6 @@ db-vm/db-vm.env
 deploy/out/
 app-vm/agent.env
 app-vm/sre-platform.env
+
+# graphify bilgi grafı (yerelde üretilir; graphify update . ile yenilenir)
+graphify-out/
