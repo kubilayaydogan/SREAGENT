@@ -74,11 +74,14 @@ export const useLlmModel = () =>
 export function useSetLlmModel() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (model: string) => api.put<LlmModelState>("/system/llm-model", { model }),
+    mutationFn: (model: string | null) => api.put<LlmModelState>("/system/llm-model", { model }),
     onSuccess: (d) => {
       qc.setQueryData(keys.llmModel, d);
       qc.invalidateQueries({ queryKey: keys.info });
-      toast.success(`Model değişti: ${d.options.find((o) => o.id === d.model)?.label ?? d.model}`);
+      const name = d.options.find((o) => o.id === d.model)?.label ?? d.model;
+      toast.success(d.selected === null ? `Model seçimi kaldırıldı: ${name} (profil / ortam)` : `Model değişti: ${name}`, {
+        description: "Yeni çalıştırmalardan itibaren geçerli; süren çalıştırma etkilenmez.",
+      });
     },
     onError: (e) => errorToast(e, "Model değiştirilemedi"),
   });

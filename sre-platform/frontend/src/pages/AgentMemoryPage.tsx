@@ -1,6 +1,7 @@
 /** Agent Memory: memory kayıtlarını, retrieval pipeline'ını, checkpoint'leri ve memory olaylarını tek yerde gösterir.
  *  Değerler backend'in ölçtüğü gerçek verilerdir; ölçülmeyen değer "—" gösterilir. Embedding / vector search
  *  kurulmadığı için Semantic ve Hybrid stratejileri devre dışıdır. */
+import { ConceptHelp } from "@/components/ConceptHelp";
 import { Archive, Check, Database, Download, ExternalLink, Plus, RotateCcw, ShieldCheck, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -146,7 +147,8 @@ export default function AgentMemoryPage() {
     <Page wide>
       <PageHeader
         title="Agent Memory"
-        description="Agent'ın working, short-term ve long-term memory'si; retrieval pipeline'ı, checkpoint'ler, memory olayları ve governance"
+        description="Agent'ın önceki konuşma ve çalıştırmalardan ne hatırladığı ve bu bilgiyi ne zaman kullandığı"
+        meta={<ConceptHelp k="memory" />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Select aria-label="Agent" value={agent} onChange={(e) => set("agent", e.target.value)} className="w-52">

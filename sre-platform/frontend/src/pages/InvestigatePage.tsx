@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, Loader2, PanelLeft, RotateCcw, Search, WifiOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { Markdown } from "@/components/Markdown";
@@ -12,7 +12,8 @@ import { ConversationSidebar } from "@/features/chat/ConversationSidebar";
 import { FocusBar } from "@/features/chat/FocusBar";
 import { InvestigationCard } from "@/features/chat/InvestigationCard";
 import { SYSTEM_AGENT_ID, useAgents } from "@/features/agentbuilder/api";
-import { errorToast, useConversation, useMessages } from "@/hooks/queries";
+import { errorToast, useConversation, useLlmModel, useMessages } from "@/hooks/queries";
+import { sourceLabel } from "@/lib/runconfig";
 import type { RunState } from "@/hooks/runReducer";
 import { useAgentRun } from "@/hooks/useAgentRun";
 import { api } from "@/services/api";
@@ -21,6 +22,7 @@ import { cn, fmtTime } from "@/lib/utils";
 import type { Message, RunOut } from "@/types/api";
 
 const EXAMPLES = [
+  "PostgreSQL Lock Wait'leri uygulama latency'siyle aynı anda arttı mı?",
   "Reservation uygulaması neden yavaşladı?",
   "Son 30 dakikada PostgreSQL bağlantı sorunları var mı?",
   "Bu incident daha önce yaşandı mı?",
@@ -72,9 +74,75 @@ function Turn({ role, children, meta }: { role: "user" | "assistant"; children: 
   );
 }
 
-const SOURCE_LABEL: Record<string, string> = { llm: "Claude", deterministic: "deterministik (LLM yok)", memory: "kayıtlar" };
+const SOURCE_LABEL: Record<string, string> = { llm: "Claude", deterministic: "deterministik (LLM yok)", memory: "kayıtlar", guardrail: "güvenlik policy'si" };
 
-function SavedMessage({ m, onPick, busy, last }: { m: Message; onPick: (s: string) => void; busy: boolean; last: boolean }) {
+/** Yanıtın altındaki "bu yanıt nasıl üretildi" satırı: model + seçim kaynağı ve çalıştırma kayıtlarına bağlantılar. */
+function RunLinks({ md, canOpen }: { md: Message["metadata"]; canOpen: boolean }) {
+  const inv = md.investigation;
+  const m = inv ? (md.llm?.rca ?? md.llm?.chat) : md.llm?.chat;
+  const usedLlm = (md.answer_source ?? "").startsWith("Claude");
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      {m && usedLlm && m.model && (
+        <span title="Neden bu model? Seçim kaynağı çalıştırma başında kaydedilir.">
+          model: <span className="font-mono">{m.model}</span> · kaynak: {sourceLabel(m)}
+        </span>
+      )}
+      {inv?.investigation_id && (
+        <Link className="text-accent-text hover:underline" to={`/activity/${inv.investigation_id}`}>
+          Adımları aç
+        </Link>
+      )}
+      {inv?.investigation_id && (
+        <Link className="text-accent-text hover:underline" to={`/investigations/${inv.investigation_id}?tab=evidence`}>
+          Evidence'ı aç
+        </Link>
+      )}
+      {canOpen && inv?.investigation_id && (
+        <Link className="text-accent-text hover:underline" to={`/investigations/${inv.investigation_id}?tab=tools`}>
+          MCP çağrılarını aç
+        </Link>
+      )}
+      {canOpen && md.run_id && (
+        <Link className="text-accent-text hover:underline" to={`/agent-trace/${encodeURIComponent(md.run_id)}`} title="Bu turun node'ları, state değişiklikleri ve LLM çağrıları">
+          Agent Trace
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/** İlk kullanım: bir sorunun yanıta nasıl dönüştüğü. Her adım, çalıştırma bittikten sonra açılabilen gerçek kayda karşılık gelir. */
+function HowItWorks() {
+  const steps: [string, string][] = [
+    ["Soru", "Agent soruyu yorumlar: hangi servis, hangi zaman aralığı."],
+    ["Veri toplama", "Dynatrace'ten MCP çağrılarıyla ölçüm okur. Her çağrı “MCP çağrıları”nda kayıtlıdır."],
+    ["Evidence", "Okunan veriden ölçülen bulgular çıkarılır; her bulgunun bir evidence kimliği vardır."],
+    ["Risk score", "Skor kuralla (deterministik) hesaplanır; dil modeli skoru değiştiremez."],
+    ["Yorum", "Model bulguları açıklar. Yorum, ölçüm değildir: dayandığı evidence yanıtta belirtilir."],
+  ];
+  return (
+    <details className="mt-3 border-t border-line pt-2">
+      <summary className="cursor-pointer text-xs font-medium text-ink-2 hover:text-ink">Agent bir soruyu nasıl yanıtlar?</summary>
+      <ol className="mt-2 space-y-1.5">
+        {steps.map(([t, d], i) => (
+          <li key={t} className="flex gap-2 text-xs">
+            <span className="w-4 shrink-0 text-right text-muted tabular-nums">{i + 1}.</span>
+            <span>
+              <span className="font-medium text-ink">{t}.</span> <span className="text-ink-2">{d}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-2 text-2xs text-muted">
+        Yanıt geldikten sonra altındaki “Adımları aç”, “Evidence'ı aç” ve “MCP çağrılarını aç” bağlantılarıyla bu çalıştırmanın kendi kayıtlarına gidebilirsiniz. Dynatrace verisi yoksa sonuç “veri yok” olarak
+        gösterilir; örnek veri kullanılmaz.
+      </p>
+    </details>
+  );
+}
+
+function SavedMessage({ m, onPick, busy, last, canOpen }: { m: Message; onPick: (s: string) => void; busy: boolean; last: boolean; canOpen: boolean }) {
   if (m.role === "user")
     return (
       <Turn role="user" meta={fmtTime(m.created_at)}>
@@ -90,6 +158,7 @@ function SavedMessage({ m, onPick, busy, last }: { m: Message; onPick: (s: strin
           {fmtTime(m.created_at)}
           {md.answer_source && ` · yanıt: ${SOURCE_LABEL[md.answer_source] ?? md.answer_source}`}
           {md.memory_counts && Object.values(md.memory_counts).some(Boolean) && ` · geçmiş kayıt: ${Object.entries(md.memory_counts).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(", ")}`}
+          <RunLinks md={md} canOpen={canOpen} />
         </>
       }
     >
@@ -261,6 +330,8 @@ export default function InvestigatePage() {
   const convAgent = conversationId ? (conv.data?.agent_id ?? (conv.data ? SYSTEM_AGENT_ID : null)) : null;
   const current = convAgent ?? (pick || defaultAgent);
   const currentAgent = choices.find((a) => a.id === current);
+  const llmState = useLlmModel();
+  const sysModel = current === SYSTEM_AGENT_ID ? llmState.data?.effective?.chat : undefined;
 
   function changeAgent(v: string) {
     if (conversationId && v !== convAgent) {
@@ -296,6 +367,10 @@ export default function InvestigatePage() {
     ) : currentAgent && currentAgent.kind === "custom" ? (
       <p className="mt-1 text-2xs text-muted">
         Agent: <b>{currentAgent.name}</b> {currentAgent.published_version_label} · {currentAgent.model?.model ?? ""}
+      </p>
+    ) : sysModel?.model ? (
+      <p className="mt-1 text-2xs text-muted" title="Gömülü SRE Agent için öncelik: üst bardaki model seçimi > LLM profili > ortam değişkeni">
+        Model: <span className="font-mono">{sysModel.model}</span> · kaynak: {sourceLabel(sysModel)}
       </p>
     ) : null;
 
@@ -344,10 +419,11 @@ export default function InvestigatePage() {
                   </div>
                 </div>
                 {canRun && <Suggestions title="Örnek sorular" items={EXAMPLES} onPick={(s) => send(s, null)} />}
+                <HowItWorks />
               </div>
             )}
             {items.map((m) => (
-              <SavedMessage key={m.id} m={m} onPick={(s) => send(s, null)} busy={busy || !canRun} last={m.id === lastAssistant?.id && !busy && !pendingUser} />
+              <SavedMessage key={m.id} m={m} onPick={(s) => send(s, null)} busy={busy || !canRun} last={m.id === lastAssistant?.id && !busy && !pendingUser} canOpen={canRun} />
             ))}
             {pendingUser && items[items.length - 1]?.content !== pendingUser && <Turn role="user">{pendingUser}</Turn>}
             {run.state.phase !== "idle" && <LiveAnswer s={run.state} />}

@@ -49,6 +49,7 @@ class RunConfig:
     llm_rca: bool
     profiles: dict[str, dict | None]
     model_override: str | None
+    llm_effective: dict
     trace: bool
     snapshot: dict
     effective: dict
@@ -100,8 +101,9 @@ async def run_config(rt, *, trigger: str = "manual") -> RunConfig:
         else:                                     # test/özel enjeksiyon: verilen fabrika aynen kullanılır
             gw, gw_info = rt.gateway_factory, {"connector": "injected"}
         llm_eff = eff["llm"]
-        profiles, prof_snap, notes = await llm_profiles.task_profiles(s, llm_eff,
-                                                                      allowed=llm_profiles.allowed_models(rt))
+        allowed = llm_profiles.allowed_models(rt)
+        profiles, prof_snap, notes = await llm_profiles.task_profiles(s, llm_eff, allowed=allowed)
+        override = await _checked_override(s, llm_eff.get("model_override"), allowed, notes)
         from ..middleware import service as mw_service
         mw_snap = await mw_service.snapshot(s)
     from airlab_agent import middleware as _mw
@@ -126,10 +128,111 @@ async def run_config(rt, *, trigger: str = "manual") -> RunConfig:
                        for n, c in mw_snap.items()},
     }
     snapshot["hash"] = _hash({k: v for k, v in snapshot.items() if k != "trigger"})
+    # Etkili model + seçim kaynağı (hash'e girmez: aynı girdilerden türetilir, eski koşularla hash karşılaştırılabilir kalır)
+    llm_effective = effective_models(rt, has_llm=has_llm, profiles=profiles, prof_snap=prof_snap, override=override,
+                                     llm_enabled=bool(a["llm_enabled"]))
+    snapshot["llm"]["effective"] = llm_effective
+    if llm_eff.get("model_override") and not override:
+        snapshot["llm"]["model_override_ignored"] = "model_not_allowlisted"
     return RunConfig(agent=agent, timeout_s=int(a["run_timeout_s"]), recursion_limit=int(a["recursion_limit"]),
                      gateway_factory=gw, llm_chat=llm_chat, llm_rca=llm_rca,
-                     profiles={k: v for k, v in profiles.items() if v}, model_override=llm_eff.get("model_override"),
-                     trace=trace, snapshot=snapshot, effective=eff, notes=notes, middleware=mw_snap)
+                     profiles={k: v for k, v in profiles.items() if v}, model_override=override,
+                     llm_effective=llm_effective, trace=trace, snapshot=snapshot, effective=eff, notes=notes, middleware=mw_snap)
+
+
+async def _checked_override(s, override: str | None, allowed: frozenset[str], notes: list[str]) -> str | None:
+    """Üst bardaki model seçimi de model allowlist'ine tabidir (LLM profilleriyle aynı kural). İzinli değilse seçim
+    yok sayılır: görev profili / ortam modeli geçerli olur, karar nota ve audit'e yazılır."""
+    from ..services.model_switch import MODELS
+    if not override or override not in MODELS:
+        return None
+    if override in allowed:
+        return override
+    from ..security import audit
+    await audit.record(s, actor="system:agent", action="llm.model_denied", section="llm", target="model_override",
+                       result="denied", reason_code="model_not_allowlisted", detail=override)
+    notes.append(f"Üst bardaki model seçimi ({override}) izinli model listesinde değil; LLM profili / ortam modeli "
+                 f"kullanıldı")
+    return None
+
+
+def effective_models(rt, *, has_llm: bool, profiles: dict, prof_snap: dict, override: str | None,
+                     llm_enabled: bool) -> dict:
+    """Görev başına (chat, rca) bu koşuda geçerli model ve seçimin kaynağı. Öncelik: üst bar seçimi (override) >
+    görev LLM profili > ortam (CLAUDE_MODEL / CLAUDE_RCA_MODEL). `model: None` = bu görevde LLM yok (+ `reason`)."""
+    env = {"chat": getattr(rt.agent, "claude_model", None), "rca": getattr(rt.agent, "claude_rca_model", None)}
+    out = {}
+    for task in ("chat", "rca"):
+        snap = prof_snap.get(task) or {}
+        if rt.llm is None:
+            out[task] = {"model": None, "source": "none", "reason": "llm_not_configured"}
+        elif not llm_enabled:
+            out[task] = {"model": None, "source": "none", "reason": "llm_disabled"}
+        elif task in profiles and profiles[task] is None:
+            why = next((k for k in ("disabled", "model_denied", "budget_exhausted", "secret_error", "egress_denied")
+                        if snap.get(k)), "profile_unavailable")
+            out[task] = {"model": None, "source": "none", "reason": f"profile_{why}" if not why.startswith("profile")
+                         else why, "profile": snap.get("profile")}
+        elif override:
+            out[task] = {"model": override, "source": "override", "profile": snap.get("profile")}
+        elif snap.get("model"):
+            out[task] = {"model": snap["model"], "source": "profile", "profile": snap.get("profile")}
+        else:
+            out[task] = {"model": env[task], "source": "env"}
+    return out
+
+
+async def preview_models(rt, s: AsyncSession) -> dict:
+    """Bir sonraki gömülü agent koşusunda geçerli olacak modeller (üst bar ve Settings görünümü için). Secret
+    çözülmez, audit yazılmaz; yalnız kayıtlı seçim, profil durumu ve allowlist okunur."""
+    eff = await service.effective(rt, s)
+    llm_eff, allowed = eff["llm"], llm_profiles.allowed_models(rt)
+    from ..services.model_switch import MODELS
+    override = llm_eff.get("model_override") or None
+    selected = override if override in MODELS and override in allowed else None
+    profiles, snap = {}, {}
+    for task in llm_profiles.TASKS:
+        name = llm_eff.get(f"{task}_profile")
+        if not name:
+            continue
+        p = await llm_profiles.by_name(s, name)
+        if p is None or not p.enabled:
+            profiles[task], snap[task] = None, {"profile": name, "disabled": True}
+        elif p.model not in allowed:
+            profiles[task], snap[task] = None, {"profile": name, "model_denied": True}
+        else:
+            profiles[task], snap[task] = {"model": p.model}, {"profile": name, "model": p.model}
+    out = effective_models(rt, has_llm=rt.llm is not None, profiles=profiles, prof_snap=snap, override=selected,
+                           llm_enabled=bool(eff["agent"]["llm_enabled"]))
+    return {**out, "selected": selected, "ignored": override if override and not selected else None}
+
+
+RUN_LLM_REASON = {"manual": "run_choice", "scheduled": "scheduled_llm_off", "watch-incident": "incident_llm_off",
+                  "watch-recovery": "incident_llm_off"}
+
+
+def llm_run(rc: RunConfig, *, mode: str, requested: bool, used: bool) -> dict:
+    """Koşunun analiz açıklaması (explain) için LLM kullanıp kullanmadığı ve kullanmadıysa nedeni. Sohbet turunda
+    açıklama yanıt adımında (respond) üretilir: `stage: answer`."""
+    e = rc.llm_effective.get("rca") or {}
+    if mode == "chat":
+        return {"stage": "answer", "planned": bool(e.get("model")), "model": e.get("model"), "source": e.get("source"),
+                **({"reason": e["reason"]} if e.get("reason") else {})}
+    if used:
+        return {"stage": "explain", "used": True, "model": e.get("model"), "source": e.get("source")}
+    return {"stage": "explain", "used": False, "model": None,
+            "reason": e.get("reason") or (RUN_LLM_REASON.get(mode, "not_requested") if not requested else "unavailable")}
+
+
+def models_view(llm_effective: dict | None, tasks=("chat",)) -> list[dict]:
+    """Run kaydı (agent_runs.models) için: bu koşuda geçerli model + seçim kaynağı. LLM'siz görev listeye girmez."""
+    out = []
+    for t in tasks:
+        e = (llm_effective or {}).get(t) or {}
+        if e.get("model"):
+            out.append({"node_id": t, "provider": "anthropic", "model": e["model"], "profile": e.get("profile"),
+                        "source": e.get("source")})
+    return out
 
 
 def apply_llm(rt, rc: RunConfig) -> None:

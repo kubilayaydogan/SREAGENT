@@ -177,9 +177,10 @@ async def chat(body: ChatIn, request: Request, u: User = Depends(perm(P.AGENT_RU
                                                trigger="chat", user_id=uid, conversation_id=conv_id,
                                                investigation_id=inv.get("investigation_id"), status=status_,
                                                error=err, started_at=started,
-                                               models=[{"node_id": "chat-turn", "provider": "anthropic",
-                                                        "model": getattr(rt.llm, "model_name", None),
-                                                        "source": "platform"}] if rt.llm is not None else [])
+                                               # tur başında dondurulan yapılandırmadan: gerçek model + kaynağı
+                                               models=settings_runtime.models_view(
+                                                   ctx.rc.llm_effective if ctx.rc else None,
+                                                   ("chat", "rca") if inv.get("investigation_id") else ("chat",)))
 
     run = request.app.state.runs.start("chat", u.id, go, conversation_id=conv_id)
     await _started(request, u, run, "chat", str(conv_id), decision)

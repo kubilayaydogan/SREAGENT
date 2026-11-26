@@ -14,9 +14,9 @@ import { errorToast, useInvestigation, useInvestigations, useTools } from "@/hoo
 import { useAgentRun } from "@/hooks/useAgentRun";
 import { api } from "@/services/api";
 import { useAuth } from "@/services/auth";
-import { mechanismLabel } from "@/lib/steps";
+import { mechanismLabel, STEPS } from "@/lib/steps";
 import { cn, fmtDuration, fmtRelative, fmtTime } from "@/lib/utils";
-import type { RunOut } from "@/types/api";
+import type { RunOut, ToolExecution } from "@/types/api";
 
 function ManualInvestigation() {
   const nav = useNavigate();
@@ -109,8 +109,66 @@ function ManualInvestigation() {
   );
 }
 
+/** Adım özeti: agent bu adımda ne yaptı, kaç çağrı yaptı, ne döndü, hangi evidence oluştu. Tool execution
+ *  kayıtlarından üretilir; kaydı olmayan adım listede yer almaz. */
+function StepSummary({ rows, onEvidence }: { rows: ToolExecution[]; onEvidence: (key: string) => void }) {
+  const groups = STEPS.map((st) => ({ st, items: rows.filter((r) => r.step === st.id) })).filter((g) => g.items.length);
+  if (!groups.length) return <EmptyState title="Bu çalıştırmada adım kaydı yok" description="Çalıştırma veri toplama adımına ulaşmadan bitmiş olabilir." />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Adım</th>
+            <th>Agent ne yaptı?</th>
+            <th className="num">Çağrı</th>
+            <th>Ne döndü?</th>
+            <th>Oluşan evidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map(({ st, items }) => {
+            const failed = items.filter((r) => r.execution_status === "FAILED");
+            const records = items.reduce((a, r) => a + (r.record_count ?? 0), 0);
+            const counted = items.some((r) => r.record_count != null);
+            const ev = [...new Set(items.map((r) => r.evidence_key).filter(Boolean) as string[])];
+            return (
+              <tr key={st.id}>
+                <td className="text-xs whitespace-nowrap text-ink">{st.label}</td>
+                <td className="text-xs text-ink-2">{st.hint}</td>
+                <td className="num">{items.length}</td>
+                <td className="text-xs">
+                  {counted ? `${records} kayıt` : <span className="text-muted">kayıt sayısı yok</span>}
+                  {failed.length > 0 && (
+                    <span className="ml-1.5 text-st-critical-ink" title={failed.map((r) => r.error_message).filter(Boolean).join(" · ")}>
+                      {failed.length} çağrı başarısız: bu veri sonuca girmedi
+                    </span>
+                  )}
+                </td>
+                <td className="font-mono text-2xs">
+                  {ev.length
+                    ? ev.slice(0, 6).map((k) => (
+                        <button key={k} type="button" className="mr-2 text-accent-text hover:underline" onClick={() => onEvidence(k)}>
+                          {k}
+                        </button>
+                      ))
+                    : <span className="font-sans text-xs text-muted">—</span>}
+                  {ev.length > 6 && <span className="text-muted">+{ev.length - 6}</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function InvestigationActivity({ id }: { id: string }) {
   const inv = useInvestigation(id);
+  const nav = useNavigate();
+  const { can } = useAuth();
+  const openEvidence = (k: string) => nav(`/investigations/${id}?tab=evidence&ev=${encodeURIComponent(k)}`);
   const live = inv.data?.status === "RUNNING" || inv.data?.status === "PENDING";
   const tools = useTools(id, live);
   if (inv.error) return <ErrorState error={inv.error} onRetry={() => inv.refetch()} />;
@@ -168,13 +226,34 @@ function InvestigationActivity({ id }: { id: string }) {
                 Olası mechanism: <b className="font-medium text-ink">{mechanismLabel(inv.data.primary_mechanism)}</b>
               </p>
             )}
-            {inv.data?.error && <p className="font-mono text-xs text-st-critical-ink">{inv.data.error}</p>}
+            {inv.data?.error && (
+              <details className="text-xs">
+                <summary className={cn("cursor-pointer", inv.data.status === "COMPLETED" || inv.data.status === "PARTIAL" ? "text-ink-2" : "text-st-critical-ink")}>
+                  {inv.data.status === "COMPLETED" || inv.data.status === "PARTIAL" ? "Bir adım beklendiği gibi çalışmadı; sonuç eldeki veriyle üretildi." : "Çalıştırma tamamlanamadı."} Teknik ayrıntı
+                </summary>
+                <p className="mt-1 font-mono break-words text-ink-2">{inv.data.error}</p>
+              </details>
+            )}
           </div>
         </CardBody>
       </Card>
       <Card>
+        <CardHeader
+          title="Adım adım: agent ne yaptı?"
+          description="Her satır bu çalıştırmanın kayıtlarından üretilir. Evidence kimliğine tıklayınca rapordaki evidence açılır."
+          actions={
+            can("sre") && inv.data ? (
+              <Link to={`/agent-trace/${encodeURIComponent(inv.data.run_id)}`} className="text-xs text-accent-text hover:underline" title="Her node'un girdi / çıktı state'i ve değişen alanlar">
+                State değişikliklerini aç (Agent Trace)
+              </Link>
+            ) : undefined
+          }
+        />
+        {tools.isLoading ? <Skeleton className="m-3 h-40" /> : <StepSummary rows={tools.data ?? []} onEvidence={openEvidence} />}
+      </Card>
+      <Card>
         <CardHeader title="Tool executions" description="Her satır bir Dynatrace MCP çağrısı (execute-dql) veya iç adım" />
-        {tools.isLoading ? <Skeleton className="m-3 h-40" /> : <ToolTable rows={tools.data ?? []} />}
+        {tools.isLoading ? <Skeleton className="m-3 h-40" /> : <ToolTable rows={tools.data ?? []} runId={can("sre") ? inv.data?.run_id : undefined} onEvidence={openEvidence} />}
       </Card>
     </div>
   );

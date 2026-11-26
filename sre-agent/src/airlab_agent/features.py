@@ -150,8 +150,11 @@ def extract(results: dict[str, Any], ws: list[Window], cfg: dict) -> dict[str, d
                     f["lock_wait_max_s"] = max(f.get("lock_wait_max_s", 0.0), _agg(v["wmax"], "max") or 0.0)
                     lw_seen.setdefault(wn, set()).add(wapp)
 
+    # "Gerçek 0" yalnız query'nin kendisi yanıt verdiyse geçerlidir. Query başarısızsa (ERROR, TIMEOUT, PERMISSION…)
+    # kayıt yokluğu ölçüm değildir: değer None kalır, skor kapsamından düşer.
+    lw_answered = _qr(results, "lock_waiters")["status"] in ("OK", "EMPTY")
     for wn, fw in F.items():
-        ok = (fw["db"].get("collector_points") or 0) > 0
+        ok = (fw["db"].get("collector_points") or 0) > 0 and lw_answered
         for app in apps:                       # collector çalışıyorsa bekleme serisi olmayan uygulama = gerçek 0
             f = _app(fw, app)
             if "lock_waiters_avg" not in f:
@@ -165,8 +168,9 @@ def extract(results: dict[str, Any], ws: list[Window], cfg: dict) -> dict[str, d
                 {k: rec.get(k) for k in ("waiter_app", "blocker_app", "wait_type", "waiter_op", "blocker_op",
                                          "blocker_state", "blocker_wait")} | {"n": num(rec.get("n")) or 0,
                                                               "wait_max_s": num(rec.get("wait_max"))})
+    edges_answered = _qr(results, "edges")["status"] in ("OK", "EMPTY")
     for wn, fw in F.items():
-        ok = (fw["db"].get("collector_points") or 0) > 0
+        ok = (fw["db"].get("collector_points") or 0) > 0 and edges_answered
         e = fw["db"].get("edges", [])
         fw["db"]["edges_total"] = sum(x["n"] for x in e) if (e or ok) else None
 

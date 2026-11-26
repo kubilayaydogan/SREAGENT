@@ -258,9 +258,8 @@ def observe(layer: str, *, decision: str, stage: str, reason: str | None = None,
 # ================================================================================================= hook'lar
 def node_start(name: str) -> None:
     run = RUN.get()
-    if run is not None:
-        run.reserve("node_executions", f"node:{name}")
-    check("node_start", {"node": name}, node=name)
+    seq = run.reserve("node_executions", f"node:{name}") if run is not None else None
+    check("node_start", {"node": name, "_seq": seq, "_view": {"node": name}}, node=name)
 
 
 def node_end(name: str) -> None:
@@ -298,10 +297,9 @@ def _est_tokens(msgs: list) -> int:
 def llm_request(call, envelope_id: str | None = None) -> None:
     """before_model: call.request['messages'] gerekirse sanitize edilir."""
     run = RUN.get()
-    if run is not None:
-        run.reserve("llm_calls")
+    seq = run.reserve("llm_calls") if run is not None else None
     msgs = call.request.get("messages")
-    payload = {"messages": msgs if isinstance(msgs, list) else [], "est_tokens": _est_tokens(msgs or []),
+    payload = {"messages": msgs if isinstance(msgs, list) else [], "est_tokens": _est_tokens(msgs or []), "_seq": seq,
                "_view": {"task": call.task, "messages": len(msgs or []), "est_tokens": _est_tokens(msgs or [])}}
     out = check("llm_request", payload, model=call.target, llm_call_id=envelope_id, parent_span_id=envelope_id)
     if out.changed and isinstance(msgs, list):
@@ -325,9 +323,8 @@ def mcp_request(*, server: str, tool: str, args: dict, dql: str | None = None, c
                 view: dict | None = None, write_capable: bool = False, annotations: dict | None = None) -> Outcome:
     run = RUN.get()
     key = hashlib.sha1(json.dumps([server, tool, args], sort_keys=True, default=str).encode()).hexdigest()[:16]
-    if run is not None:
-        run.reserve("tool_calls", f"call:{key}")
-    payload = {"args": args, "dql": dql, "call_key": key, "write_capable": write_capable,
+    seq = run.reserve("tool_calls", f"call:{key}") if run is not None else None
+    payload = {"args": args, "dql": dql, "call_key": key, "write_capable": write_capable, "_seq": seq,
                "server_annotations": annotations or {}, "tenant_id": None, "_view": view or {"tool": tool}}
     return check(("tool_request", "mcp_request"), payload, mcp_server=server, tool=tool,
                  tool_args=view or None, mcp_call_id=call_id, parent_span_id=call_id)

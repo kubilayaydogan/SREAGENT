@@ -160,7 +160,8 @@ async def put_llm_model(request: Request, body: dict, u: User = Depends(perm(P.L
     if rt.llm is None:
         raise HTTPException(409, "LLM kapalı (ANTHROPIC_API_KEY yok); model seçilemez")
     try:
-        return await model_switch.select(rt, str(body.get("model", "")), username=u.username)
+        m = body.get("model")
+        return await model_switch.select(rt, str(m) if m else None, username=u.username)
     except ValueError as e:
         raise HTTPException(422, str(e)) from None
 

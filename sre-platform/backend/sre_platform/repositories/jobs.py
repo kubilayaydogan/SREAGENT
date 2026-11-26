@@ -52,6 +52,18 @@ async def claim(s: AsyncSession, worker: str, lease_seconds: int, n: int = 1) ->
                                  .execution_options(populate_existing=True))).scalars())
 
 
+async def renew(s: AsyncSession, job_id: uuid.UUID, worker: str, lease_seconds: int) -> bool:
+    """Kirayı işin başlama anından itibaren yeniler. Kira başka worker'a geçtiyse False döner: iş çalıştırılmaz.
+
+    Bir turda birden çok iş kiralanıp sırayla çalıştırılır; öndeki iş uzun sürerse sıradakinin kirası başlamadan
+    dolabilir ve başka worker aynı işi alabilir. Bu kontrol aynı işin iki kez çalışmasını önler."""
+    res = await s.execute(text("""UPDATE sre.scheduled_jobs
+                                     SET locked_until = now() + make_interval(secs => :lease)
+                                   WHERE id = :id AND locked_by = :worker"""),
+                          {"lease": lease_seconds, "id": job_id, "worker": worker})
+    return bool(res.rowcount)
+
+
 async def start_run(s: AsyncSession, job_id: uuid.UUID, worker: str) -> JobRun:
     r = JobRun(job_id=job_id, worker_id=worker, status=JobStatus.RUNNING)
     s.add(r)

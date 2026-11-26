@@ -919,12 +919,18 @@ class ExecutionLimits(Evaluator):
             return Finding(False, "koşu bağlamı yok")
         th = {}
         c = state.counters
-        if ctx.stage == "node_start" and c.get("node_executions", 0) > p.max_node_executions:
-            th["max_node_executions"] = {"limit": p.max_node_executions, "actual": c["node_executions"]}
-        if ctx.stage in ("mcp_request", "tool_request") and c.get("tool_calls", 0) > p.max_tool_calls:
-            th["max_tool_calls"] = {"limit": p.max_tool_calls, "actual": c["tool_calls"]}
-        if ctx.stage == "llm_request" and c.get("llm_calls", 0) > p.max_llm_calls:
-            th["max_llm_calls"] = {"limit": p.max_llm_calls, "actual": c["llm_calls"]}
+        # Bu çağrının kendi sıra numarası (reserve anında atomik verilir). Paylaşılan sayacın o anki değeri okunsaydı
+        # paralel çağrılar birbirinin artışını görür ve sınırın altındaki çağrı da engellenirdi.
+        seq = (payload or {}).get("_seq") if isinstance(payload, dict) else None
+
+        def n(counter: str) -> int:
+            return int(seq) if seq is not None else int(c.get(counter, 0))
+        if ctx.stage == "node_start" and n("node_executions") > p.max_node_executions:
+            th["max_node_executions"] = {"limit": p.max_node_executions, "actual": n("node_executions")}
+        if ctx.stage in ("mcp_request", "tool_request") and n("tool_calls") > p.max_tool_calls:
+            th["max_tool_calls"] = {"limit": p.max_tool_calls, "actual": n("tool_calls")}
+        if ctx.stage == "llm_request" and n("llm_calls") > p.max_llm_calls:
+            th["max_llm_calls"] = {"limit": p.max_llm_calls, "actual": n("llm_calls")}
         el = state.elapsed_s()
         if el > p.max_duration_s:
             th["max_duration_s"] = {"limit": p.max_duration_s, "actual": int(el)}

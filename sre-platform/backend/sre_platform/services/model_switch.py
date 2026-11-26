@@ -44,24 +44,38 @@ async def refresh(rt) -> str | None:
     except Exception:  # noqa: BLE001
         log.exception("model seçimi okunamadı; mevcut model korunuyor")
         return core.model_name
-    if model not in MODELS:
+    if model not in MODELS or model not in _allowed(rt):     # izinli olmayan seçim uygulanmaz (koşudaki kuralla aynı)
         model = None
     core.set_model(model)
     return model
 
 
-async def select(rt, model: str, *, username: str) -> dict:
-    if model not in MODELS:
+def _allowed(rt) -> frozenset[str]:
+    from ..settings import llm_profiles
+    return llm_profiles.allowed_models(rt)
+
+
+async def select(rt, model: str | None, *, username: str) -> dict:
+    """Üst bar seçimi. `None` / boş = seçimi kaldır (görev LLM profili ya da ortam modeli geçerli olur)."""
+    model = model or None
+    if model is not None and model not in MODELS:
         raise UserError(f"desteklenmeyen model: {model}")
+    if model is not None and model not in _allowed(rt):
+        raise UserError(f"{model} izinli model listesinde değil (SRE_LLM_MODEL_ALLOWLIST)")
     from ..settings import service
     async with transaction(rt.sm) as s:
         _, row = await _section(rt, s)
-        await service.update(rt, s, "llm", revision=row.revision if row else 0, values={"model_override": model},
-                             actor=username, note="üst bar model seçimi", action="model_select")
+        if model is None:
+            if row is not None and "model_override" in (row.data or {}):
+                await service.update(rt, s, "llm", revision=row.revision, reset=["model_override"], actor=username,
+                                     note="üst bar model seçimi kaldırıldı", action="model_select")
+        else:
+            await service.update(rt, s, "llm", revision=row.revision if row else 0, values={"model_override": model},
+                                 actor=username, note="üst bar model seçimi", action="model_select")
     core = _core(rt)
     if core is not None and hasattr(core, "set_model"):
         core.set_model(model)
-    log.info("LLM modeli değiştirildi: %s (%s)", model, username)
+    log.info("LLM modeli değiştirildi: %s (%s)", model or "seçim yok", username)
     return await state(rt)
 
 
@@ -70,9 +84,15 @@ async def state(rt) -> dict:
     core = _core(rt)
     async with transaction(rt.sm) as s:
         _, row = await _section(rt, s)
-    return {"enabled": core is not None, "model": core.model_name if core else None,
-            "rca_model": getattr(core, "rca_model_name", None) if core else None,
-            "options": [{"id": k, "label": v} for k, v in MODELS.items()],
+    from ..settings import runtime as srt
+    async with transaction(rt.sm) as s:
+        eff = await srt.preview_models(rt, s)
+    allowed = _allowed(rt)
+    # model / rca_model: bir sonraki gömülü SRE Agent koşusunda geçerli olacak değer (kaynağıyla `effective` içinde).
+    return {"enabled": core is not None, "model": eff["chat"]["model"] or (core.model_name if core else None),
+            "rca_model": eff["rca"]["model"] or (getattr(core, "rca_model_name", None) if core else None),
+            "selected": eff["selected"], "effective": {"chat": eff["chat"], "rca": eff["rca"]},
+            "options": [{"id": k, "label": v} for k, v in MODELS.items() if k in allowed],
             "changed_by": row.updated_by if row else None,
             "changed_at": row.updated_at.isoformat() if row and row.updated_at else None}
 

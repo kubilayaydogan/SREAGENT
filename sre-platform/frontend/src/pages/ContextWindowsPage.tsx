@@ -1,3 +1,4 @@
+import { ConceptHelp } from "@/components/ConceptHelp";
 import { AlertTriangle, CheckCircle2, CircleSlash, ExternalLink, RotateCcw, XCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -109,7 +110,8 @@ export default function ContextWindowsPage() {
     <Page>
       <PageHeader
         title="Context Windows"
-        description="Her gerçek LLM çağrısında context window kullanımı: model kapasitesi, ayrılan çıktı bütçesi, sağlayıcının bildirdiği token'lar ve girdi dağılımı"
+        description="Her LLM çağrısında modelin okuma alanının ne kadarının dolduğu ve neyle dolduğu"
+        meta={<ConceptHelp k="context" />}
         actions={<RangeTabs value={range} onChange={(v) => set("range", v)} options={RANGE_OPTS} />}
       />
       <MetricStrip className="mb-4 grid-cols-2 md:grid-cols-5">

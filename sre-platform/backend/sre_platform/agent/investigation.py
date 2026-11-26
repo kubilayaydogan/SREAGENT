@@ -102,6 +102,7 @@ class InvestigationRunner:
             rc = await srt.run_config(self.rt, trigger=getattr(trig, "value", str(trig)))
             srt.apply_llm(self.rt, rc)                  # görev profilleri + arayüzde seçilen model
         notes = list(notes or []) + rc.notes
+        llm_requested = core_llm is not None
         if core_llm is not None and not rc.llm_rca:
             core_llm = None
             if not rc.effective["agent"]["llm_enabled"]:
@@ -109,7 +110,10 @@ class InvestigationRunner:
         async with transaction(sm) as s:
             inv = await investigations.get(s, inv_id)
             await investigations.mark_running(s, inv)
-            inv.config_snapshot = rc.snapshot
+            # Koşuya özel LLM kullanımı (çalıştırmaya özel seçim / zamanlama ayarı / Settings) snapshot'a yazılır
+            snap = {**rc.snapshot, "llm": {**rc.snapshot["llm"], "run": srt.llm_run(
+                rc, mode=mode, requested=llm_requested, used=core_llm is not None)}}
+            inv.config_snapshot = snap
             run_id, start, end = inv.run_id, inv.window_start, inv.window_end
             trigger = getattr(inv.trigger, "value", str(inv.trigger))
             from ..services.langsmith_trace import previous_attempts

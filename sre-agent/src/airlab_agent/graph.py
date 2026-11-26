@@ -87,6 +87,10 @@ def _summary(fw: dict) -> dict:
             "containers": fw["containers"]}
 
 
+# Query yanıt vermedi: sonuç "veri yok" değil, "okunamadı" demektir.
+FAILED_SIGNAL = {"ERROR", "PERMISSION", "UNAVAILABLE", "TIMEOUT", "SKIPPED_BUDGET"}
+
+
 def _outcomes(results: dict) -> dict:
     return dict(Counter(OUTCOME.get(r["status"], str(r["status"]).lower()) for r in results.values()))
 
@@ -140,8 +144,9 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
         d = {"iteration": it, "keys": keys}
         if not keys:
             return {**d, "next": "explain", "decision": "skip", "reason": "ek evidence gerektiren mechanism yok"}
-        if st["status"] == "partial":
-            return {**d, "next": "explain", "decision": "skip", "reason": "veri kısmi; ek query yapılmadı"}
+        q = st.get("quality") or {}
+        if st.get("mcp_failure") or (q and all(x["status"] != "OK" for x in q.values())):
+            return {**d, "next": "explain", "decision": "skip", "reason": "kullanılabilir veri yok; ek query yapılmadı"}
         if it >= b["max_iterations"]:
             return {**d, "next": "explain", "decision": "skip", "reason": f"iterasyon sınırı ({b['max_iterations']})"}
         if over_time(st):
@@ -206,7 +211,11 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
         scores = score_all(F["window"], F["baseline"], cfg)
         ev_ids = {k: r.get("evidence_id") for k, r in results.items() if r["status"] == "OK"}
         attr = detect(F["window"], F["baseline"], cfg, ev_ids)
-        status = "partial" if all(q["status"] != "OK" for q in quality.values()) or state.get("errors") else "complete"
+        # Yanıt vermeyen query (hata, timeout, yetki, bütçe) eksik veridir: rapor "partial" olur. EMPTY / STALE
+        # yanıt alınmış sonuçtur; tek başına raporu kısmi yapmaz.
+        failed = sorted(k for k, q in quality.items() if q["status"] in FAILED_SIGNAL)
+        status = ("partial" if all(q["status"] != "OK" for q in quality.values()) or state.get("errors") or failed
+                  else "complete")
         ov = scores.get("overall") or {}
         summary = {
             "evidence_ids": sorted({v for v in ev_ids.values() if v}),
@@ -215,8 +224,8 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
             "components": {a: {k: v for k, v in (x.get("components") or {}).items()
                                if isinstance(v, (int, float)) and not isinstance(v, bool)}
                            for a, x in (scores.get("apps") or {}).items()},
-            "mechanisms": [m["id"] for m in attr["mechanisms"]], "status": status}
-        decision = decide_extra({**state, "attribution": attr, "status": status})
+            "mechanisms": [m["id"] for m in attr["mechanisms"]], "status": status, "failed_signals": failed}
+        decision = decide_extra({**state, "attribution": attr, "status": status, "quality": quality})
         return {"quality": quality, "scores": scores, "attribution": attr,
                 "alternatives": alternatives(attr, quality), "status": status,
                 "features_summary": {"baseline": _summary(F["baseline"]), "window": _summary(F["window"])},
@@ -329,7 +338,7 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
         q = state.get("quality") or {}
         if q and all(x["status"] != "OK" and not x.get("true_zero") for x in q.values()):
             reasons.append("no_usable_signal")
-        bad = sorted({e["status"] for e in state.get("evidence", [])} & {"ERROR", "PERMISSION", "SKIPPED_BUDGET"})
+        bad = sorted({e["status"] for e in state.get("evidence", [])} & FAILED_SIGNAL)
         reasons += [f"signals_{x.lower()}" for x in bad]
         if r.get("status") == "partial" and not reasons:
             reasons.append("errors")

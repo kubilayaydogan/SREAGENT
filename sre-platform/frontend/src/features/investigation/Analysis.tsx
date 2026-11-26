@@ -43,6 +43,21 @@ function Section({ id, title, children, aside }: { id: string; title: string; ch
   );
 }
 
+/** İçerik türü etiketi: ölçülen bulgu, kuralla hesaplanan değer ve model yorumu arayüzde ayrı görünür. */
+function Kind({ k, extra }: { k: "measured" | "computed" | "interpretation"; extra?: ReactNode }) {
+  const t = {
+    measured: ["Ölçülen bulgu", "Dynatrace'ten okunan veriden çıkarılır; her satır bir evidence kaydına bağlıdır."],
+    computed: ["Kuralla hesaplanır", "Deterministik hesap: aynı veriyle her zaman aynı sonuç. Dil modeli bu değeri değiştiremez."],
+    interpretation: ["Agent yorumu", "Bulguların açıklamasıdır; ölçüm değildir. Dayandığı evidence metinde belirtilir, belirsizlik Confidence bölümündedir."],
+  }[k];
+  return (
+    <span className="text-2xs text-muted" title={t[1]}>
+      {t[0]}
+      {extra}
+    </span>
+  );
+}
+
 function Muted({ children }: { children: ReactNode }) {
   return <p className="text-[13px] text-muted">{children}</p>;
 }
@@ -583,10 +598,10 @@ export function Analysis({ inv, onEvidence }: { inv: InvestigationDetail; onEvid
   const evIndex = useMemo(() => new Map((inv.report?.evidence ?? []).map((e) => [e.id, e])), [inv.report?.evidence]);
   return (
     <div className="rounded-lg border border-line bg-surface">
-      <Section id="summary" title="Executive Summary" aside={inv.explanation_source && <span className="text-2xs text-muted">kaynak: {inv.explanation_source}</span>}>
+      <Section id="summary" title="Executive Summary" aside={<Kind k="interpretation" extra={inv.explanation_source ? ` · yazan: ${inv.explanation_source}` : undefined} />}>
         <ExecutiveSummary inv={inv} />
       </Section>
-      <Section id="root-cause" title="Root Cause">
+      <Section id="root-cause" title="Root Cause" aside={<Kind k="interpretation" extra=" · hipotez" />}>
         <RootCause inv={inv} evIndex={evIndex} onEvidence={onEvidence} />
       </Section>
       <Section id="confidence" title="Confidence">
@@ -595,10 +610,10 @@ export function Analysis({ inv, onEvidence }: { inv: InvestigationDetail; onEvid
       <Section id="impacted" title="Impacted Services">
         <Impacted inv={inv} />
       </Section>
-      <Section id="risk" title="Risk Score">
+      <Section id="risk" title="Risk Score" aside={<Kind k="computed" />}>
         <RiskSection inv={inv} />
       </Section>
-      <Section id="evidence" title="Supporting Evidence">
+      <Section id="evidence" title="Supporting Evidence" aside={<Kind k="measured" />}>
         <SupportingEvidence inv={inv} evIndex={evIndex} onEvidence={onEvidence} />
       </Section>
       <Section id="timeline" title="Incident Timeline">

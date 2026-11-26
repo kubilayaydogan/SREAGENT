@@ -109,6 +109,8 @@ async def _check(rt, s: AsyncSession, section: str, model) -> None:
         from ...services.model_switch import MODELS
         if model.model_override and model.model_override not in MODELS:
             raise service.SettingsInvalid(f"model_override desteklenmiyor: {model.model_override}")
+        if model.model_override and model.model_override not in llm_svc.allowed_models(rt):
+            raise service.SettingsInvalid(f"model_override izinli model listesinde değil: {model.model_override}")
     if section == "observability" and model.langsmith_enabled and not rt.agent.langsmith_key:
         raise service.SettingsInvalid("LangSmith açılamaz: LANGSMITH_API_KEY deployment ortamında tanımlı değil")
     if section == "notifications" and model.slack_enabled:

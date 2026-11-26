@@ -1,3 +1,4 @@
+import { ConceptHelp } from "@/components/ConceptHelp";
 import { ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -69,7 +70,8 @@ export default function McpCallsPage() {
     <Page>
       <PageHeader
         title="MCP Çağrıları"
-        description="Agent'ın MCP sunucularına gönderdiği tools/call istekleri, aldığı yanıtın özeti ve ait olduğu Agent çalışması"
+        description="Agent'ın veri okumak için gönderdiği her istek, aldığı yanıtın özeti ve ait olduğu çalıştırma"
+        meta={<ConceptHelp k="mcp" />}
       />
       <Card>
         <FilterBar

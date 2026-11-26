@@ -2,6 +2,7 @@
  *  Tüm güvenlik kararları backend'de deterministik verilir; bu sayfa yalnız gösterir ve yetkili istek gönderir.
  *  Mandatory policy'ler arayüzde lock ikonu ile işaretlenir ve zayıflatılamaz (backend de reddeder).
  *  Ölçülmeyen değer "—" yazar; FP/FN oranı yalnız etiketli veriden gelir. */
+import { ConceptHelp } from "@/components/ConceptHelp";
 import { AlertTriangle, Ban, CheckCircle2, Copy, History, Lock, Play, Power, ShieldAlert, ShieldCheck, Undo2 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
@@ -135,7 +136,8 @@ export default function GuardrailsPage() {
     <Page wide>
       <PageHeader
         title="Guardrails"
-        description="Agent girdisi, model context'i, tool / MCP çağrıları, memory ve çıktı için deterministik güvenlik policy'leri. Kararı kural motoru verir; LLM güvenlik kararı vermez."
+        description="Agent'ın girdisini, tool çağrılarını ve yanıtını denetleyen güvenlik kuralları. Kararı sabit kurallar verir; dil modeli vermez."
+        meta={<ConceptHelp k="guardrails" />}
         actions={
           (tab === "overview" || tab === "logs" || tab === "analytics") && <RangeTabs<GrRange> value={range} onChange={(v) => set("range", v)} options={RANGES} />
         }

@@ -188,6 +188,8 @@ export interface Message {
     investigation?: InvestigationSummary | null;
     answer_source?: string;
     memory_counts?: Record<string, number> | null;
+    run_id?: string;
+    llm?: { chat?: EffectiveModel; rca?: EffectiveModel };
   };
   investigation_id: string | null;
   created_at: string;
@@ -311,8 +313,33 @@ export interface ConfigSnapshot {
   revisions: Record<string, number>;
   agent: Record<string, unknown>;
   connector: Record<string, unknown>;
-  llm: { enabled: boolean; chat: Record<string, unknown> | null; rca: Record<string, unknown> | null; model_override: string | null };
+  llm: {
+    enabled: boolean;
+    chat: Record<string, unknown> | null;
+    rca: Record<string, unknown> | null;
+    model_override: string | null;
+    /** Bu kosuda gorev basina gecerli model + secim kaynagi (eski kayitlarda yok). */
+    effective?: { chat?: EffectiveModel; rca?: EffectiveModel };
+    run?: LlmRunInfo;
+    model_override_ignored?: string;
+  };
   tracing: { langsmith: boolean; sampling_rate: number };
+}
+
+export interface EffectiveModel {
+  model: string | null;
+  source: "override" | "profile" | "env" | "none" | string;
+  profile?: string | null;
+  reason?: string;
+}
+
+export interface LlmRunInfo {
+  stage: "explain" | "answer";
+  used?: boolean;
+  planned?: boolean;
+  model: string | null;
+  source?: string;
+  reason?: string;
 }
 
 export interface InvestigationDetail extends Investigation {
@@ -560,6 +587,9 @@ export interface LlmModelState {
   options: { id: string; label: string }[];
   changed_by: string | null;
   changed_at: string | null;
+  /** Ust bardaki kayitli secim (yoksa null: gorev profili / ortam gecerli). */
+  selected?: string | null;
+  effective?: { chat: EffectiveModel; rca: EffectiveModel };
 }
 
 export interface SystemInfo {

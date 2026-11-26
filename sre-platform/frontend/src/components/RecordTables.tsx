@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
+import { Link } from "react-router";
 import { EmptyState } from "@/components/ui/states";
 import { Segmented } from "@/components/ui/primitives";
 import { SIGNAL_LABEL, STEPS } from "@/lib/steps";
@@ -37,7 +38,14 @@ export function callTraceUrl(t: ToolExecution, template?: string | null): string
 }
 
 /** Tool execution geçmişi: adım, sinyal, durum, kayıt, süre, evidence; satır açılınca DQL ve hata. */
-export function ToolTable({ rows, callUrlTemplate }: { rows: ToolExecution[]; callUrlTemplate?: string | null }) {
+export function ToolTable({ rows, callUrlTemplate, runId, onEvidence }: {
+  rows: ToolExecution[];
+  callUrlTemplate?: string | null;
+  /** verilirse MCP satırları MCP Çağrıları sayfasındaki kayda bağlanır */
+  runId?: string;
+  /** verilirse evidence anahtarı Evidence sekmesindeki satırı açar */
+  onEvidence?: (key: string) => void;
+}) {
   const [open, setOpen] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "failed">("all");
   const failed = rows.filter((r) => r.execution_status === "FAILED").length;
@@ -88,7 +96,19 @@ export function ToolTable({ rows, callUrlTemplate }: { rows: ToolExecution[]; ca
                     <td className="num">{t.record_count ?? "—"}</td>
                     <td className="num">{fmtDuration(t.duration_ms)}</td>
                     <td className="font-mono text-2xs text-muted">
-                      {t.evidence_key && <div>{t.evidence_key}</div>}
+                      {t.evidence_key &&
+                        (onEvidence ? (
+                          <button type="button" className="block text-accent-text hover:underline" onClick={() => onEvidence(t.evidence_key!)} title="Bu çağrının ürettiği evidence'ı aç">
+                            {t.evidence_key}
+                          </button>
+                        ) : (
+                          <div>{t.evidence_key}</div>
+                        ))}
+                      {runId && t.tool_name === "execute-dql" && (
+                        <Link to={`/mcp-calls?run_id=${encodeURIComponent(runId)}&call=${t.id}`} className="block text-accent-text hover:underline">
+                          MCP çağrısını aç
+                        </Link>
+                      )}
                       {t.dynatrace_query_id && <div title="Dynatrace queryId">q:{t.dynatrace_query_id}</div>}
                       {!t.evidence_key && !t.dynatrace_query_id && !spanUrl && "—"}
                       {spanUrl && (
@@ -129,7 +149,12 @@ export function DqlBlock({ dql }: { dql: string }) {
 const DATA_OK = new Set(["OK", "EMPTY", null, undefined, ""]);
 
 /** Evidence listesi. Satır açılınca ham içerik ve referanslar; `highlight` ile analizden gelen evidence vurgulanır. */
-export function EvidenceTable({ rows, highlight }: { rows: Evidence[]; highlight?: string | null }) {
+export function EvidenceTable({ rows, highlight, callHref }: {
+  rows: Evidence[];
+  highlight?: string | null;
+  /** evidence anahtarı → onu üreten MCP çağrısının adresi (kayıt yoksa null) */
+  callHref?: (evidenceKey: string) => string | null;
+}) {
   const [open, setOpen] = useState<string | null>(highlight ?? null);
   const [filter, setFilter] = useState<"all" | "issues">("all");
   const issues = useMemo(() => rows.filter((r) => !DATA_OK.has(r.data_status)), [rows]);
@@ -182,7 +207,7 @@ export function EvidenceTable({ rows, highlight }: { rows: Evidence[]; highlight
                     <tr>
                       <td />
                       <td colSpan={5} className="!bg-surface-2">
-                        <EvidenceDetail e={e} />
+                        <EvidenceDetail e={e} callHref={callHref?.(e.evidence_key)} hasCalls={!!callHref} />
                       </td>
                     </tr>
                   )}
@@ -196,7 +221,7 @@ export function EvidenceTable({ rows, highlight }: { rows: Evidence[]; highlight
   );
 }
 
-function EvidenceDetail({ e }: { e: Evidence }) {
+function EvidenceDetail({ e, callHref, hasCalls }: { e: Evidence; callHref?: string | null; hasCalls?: boolean }) {
   const refs: [string, string | null][] = [
     ["Tür", e.evidence_type],
     ["Kaynak", e.source],
@@ -219,6 +244,14 @@ function EvidenceDetail({ e }: { e: Evidence }) {
             </div>
           ))}
       </dl>
+      {hasCalls &&
+        (callHref ? (
+          <Link to={callHref} className="inline-block text-xs text-accent-text hover:underline">
+            Bu veriyi getiren MCP çağrısını aç
+          </Link>
+        ) : (
+          <p className="text-2xs text-muted">Bu evidence için MCP çağrı kaydı bulunamadı (türetilmiş evidence ya da eski kayıt).</p>
+        ))}
       {e.query_reference && <DqlBlock dql={e.query_reference} />}
       {Object.keys(e.metadata ?? {}).length > 0 && (
         <details className="text-2xs">

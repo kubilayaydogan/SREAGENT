@@ -1,6 +1,7 @@
 /** Agent Builder: özel agent'ları görsel workflow olarak oluştur, test et, yayımla; Soru-Cevap ve schedule'larda kullan.
  *  Liste (gömülü SRE Agent sistem agent'ı olarak) · Editör (palet / canvas / ayarlar) · Çalıştırmalar.
  *  Yetki backend'de doğrulanır; buradaki rol kontrolleri yalnız arayüzü sadeleştirir. */
+import { MODEL_SOURCE_LABEL, sourceLabel } from "@/lib/runconfig";
 import { Archive, CheckCircle2, Circle, Copy, Download, ExternalLink, FileUp, FlaskConical, Lock, Pencil, Plus, RotateCcw, Save, ShieldCheck, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
@@ -438,18 +439,31 @@ function RunsView({ agents, agentId }: { agents: AgentSummary[]; agentId?: strin
                     )}
                   </td>
                   <td className="text-xs">
-                    {r.models.length
-                      ? [...new Set(r.models.map((m) => m.model).filter(Boolean))].map((m) => (
-                          <div key={m} className="font-mono">
-                            {m}
-                          </div>
-                        ))
-                      : "—"}
+                    {r.models.length ? (
+                      [...new Map(r.models.filter((m) => m.model).map((m) => [m.model, m])).values()].map((m) => (
+                        <div key={m.model} title={`Seçim kaynağı: ${sourceLabel({ source: m.source ?? "", profile: m.profile })}`}>
+                          <span className="font-mono">{m.model}</span>
+                          {m.source && <span className="text-2xs text-muted"> · {MODEL_SOURCE_LABEL[m.source] ?? m.source}</span>}
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-muted" title="Bu çalıştırmada dil modeli çağrılmadı (deterministik akış ya da LLM kapalı)">
+                        LLM kullanılmadı
+                      </span>
+                    )}
                   </td>
                   <td className="num text-xs">{r.usage?.input_tokens != null ? `${fmtNum(r.usage.input_tokens)} / ${fmtNum(r.usage.output_tokens ?? 0)}` : "—"}</td>
                   <td className="num text-xs">{fmtDuration(r.duration_ms)}</td>
                   <td className="num text-xs text-muted">{fmtTime(r.started_at)}</td>
                   <td className="whitespace-nowrap text-xs">
+                    {r.investigation_id && (
+                      <>
+                        <Link className="text-accent-text hover:underline" to={`/investigations/${r.investigation_id}`}>
+                          Sonuç
+                        </Link>
+                        {" · "}
+                      </>
+                    )}
                     <Link className="text-accent-text hover:underline" to={r.links.agent_trace}>
                       Trace
                     </Link>

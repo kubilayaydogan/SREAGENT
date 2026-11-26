@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { AppTag, ConfidenceBadge, InvestigationStatusBadge, SeverityBadge } from "@/components/badges";
 import { EvidenceTable, ToolTable } from "@/components/RecordTables";
 import { RiskBar, RiskValue } from "@/components/risk";
+import { RunConfigCard } from "@/components/RunConfigCard";
 import { Button, buttonVariants, Card, Field, Skeleton } from "@/components/ui/primitives";
 import { TabPanel, Tabs } from "@/components/ui/overlay";
 import { EmptyState, ErrorState, Notice, Page, PageHeader } from "@/components/ui/states";
@@ -16,9 +17,11 @@ import { mechanismLabel } from "@/lib/steps";
 import { fmtDuration, fmtPct, fmtRelative, fmtTime, shortId } from "@/lib/utils";
 import type { InvestigationDetail, Trigger } from "@/types/api";
 
+const FAILED_SIGNAL = new Set(["ERROR", "PERMISSION", "UNAVAILABLE", "TIMEOUT", "SKIPPED_BUDGET"]);
+
 const TRIGGER_LABEL: Record<Trigger, string> = { chat: "AI Investigation", manual: "Manuel", scheduled: "Health check", watch: "Watch", import: "İçe aktarım" };
 
-function Facts({ inv }: { inv: InvestigationDetail }) {
+function Facts({ inv, canSettings }: { inv: InvestigationDetail; canSettings: boolean }) {
   const score = toNum(inv.risk_score);
   return (
     <div className="space-y-3">
@@ -66,20 +69,9 @@ function Facts({ inv }: { inv: InvestigationDetail }) {
               {inv.run_id}
             </span>
           </Field>
-          {inv.config_snapshot && (
-            <Field label="Config">
-              <span
-                className="font-mono text-2xs"
-                title={`Settings revizyonları: ${Object.entries(inv.config_snapshot.revisions)
-                  .map(([k, v]) => `${k} r${v}`)
-                  .join(", ")} · LangSmith ${inv.config_snapshot.tracing.langsmith ? "izlendi" : "izlenmedi"}`}
-              >
-                {inv.config_snapshot.hash}
-              </span>
-            </Field>
-          )}
         </dl>
       </Card>
+      <RunConfigCard inv={inv} canOpenSettings={canSettings} />
       <nav aria-label="bölümler" className="hidden px-1 lg:block">
         <div className="mb-1 text-xs font-medium text-muted">Bölümler</div>
         <ul className="space-y-px text-xs">
@@ -160,7 +152,7 @@ export default function InvestigationDetailPage() {
   };
   const inv = useInvestigation(id);
   const ev = useEvidence(tab === "evidence" ? id : undefined);
-  const tools = useTools(tab === "tools" ? id : undefined);
+  const tools = useTools(tab === "tools" || tab === "evidence" ? id : undefined);
   const trace = useTraceUrl(inv.data && ["COMPLETED", "PARTIAL", "FAILED"].includes(inv.data.status) ? id : undefined);
   const rcas = useRcas({ investigation_id: id, size: 20 });
   const gen = useGenerateRca();
@@ -173,7 +165,15 @@ export default function InvestigationDetailPage() {
   if (inv.error) return <ErrorState className="mt-10" error={inv.error} onRetry={() => inv.refetch()} />;
   const d = inv.data;
   const done = d && (d.status === "COMPLETED" || d.status === "PARTIAL");
+  // Yanıt vermeyen query'ler (EMPTY / STALE yanıt alınmış sonuçtur; burada sayılmaz)
+  const failedSignals = (d?.report?.evidence ?? []).filter((e) => FAILED_SIGNAL.has(e.status)).map((e) => e.signal);
   const nEv = ev.data?.length ?? d?.report?.evidence?.length; // kayıtlı evidence (detay kayıtları dahil) yüklüyse onu say
+
+  // evidence → onu üreten MCP çağrısı (tool execution kaydı = MCP çağrı kaydı)
+  const callHref = (evidenceKey: string) => {
+    const t = (Array.isArray(tools.data) ? tools.data : []).find((x) => x.evidence_key === evidenceKey && x.tool_name === "execute-dql");
+    return t && d ? `/mcp-calls?run_id=${encodeURIComponent(d.run_id)}&call=${t.id}` : null;
+  };
 
   return (
     <Page>
@@ -247,14 +247,28 @@ export default function InvestigationDetailPage() {
       />
       {d?.status === "PARTIAL" && (
         <Notice tone="warning" className="mb-3">
-          Kısmi veri: bazı Dynatrace query'leri başarısız oldu veya veri dönmedi. Sonuçlar eksik evidence ile üretildi — ayrıntı Data Quality bölümünde.
+          Kısmi veri: {failedSignals.length > 0 ? `${failedSignals.length} Dynatrace query'si yanıt vermedi (${failedSignals.slice(0, 4).join(", ")}${failedSignals.length > 4 ? ` +${failedSignals.length - 4}` : ""}).` : "Dynatrace verisinin bir bölümü okunamadı."}{" "}
+          Okunamayan veri 0 sayılmaz: risk score kalan veriyle hesaplandı, coverage buna göre düştü. Ayrıntı Data Quality bölümünde.
         </Notice>
       )}
-      {d?.error && (
-        <Notice tone="critical" className="mb-3">
-          <span className="font-mono">{d.error}</span>
-        </Notice>
-      )}
+      {d?.error &&
+        (done ? (
+          <Notice tone="warning" className="mb-3">
+            Çalıştırma tamamlandı, ancak bir adım beklendiği gibi çalışmadı. Sonuç eldeki veriyle üretildi.
+            <details className="mt-1">
+              <summary className="cursor-pointer text-xs">Teknik ayrıntı</summary>
+              <p className="mt-1 font-mono text-xs break-words">{d.error}</p>
+            </details>
+          </Notice>
+        ) : (
+          <Notice tone="critical" className="mb-3">
+            {d.status === "CANCELLED" ? "Çalıştırma iptal edildi; sonuç üretilmedi." : "Çalıştırma tamamlanamadı; sonuç üretilmedi. Yeniden çalıştırabilirsiniz."}
+            <details className="mt-1">
+              <summary className="cursor-pointer text-xs">Teknik ayrıntı</summary>
+              <p className="mt-1 font-mono text-xs break-words">{d.error}</p>
+            </details>
+          </Notice>
+        ))}
       <Tabs
         value={tab}
         onValueChange={(t) => setTab(t)}
@@ -271,7 +285,7 @@ export default function InvestigationDetailPage() {
             <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_17rem]">
               <Analysis inv={d} onEvidence={(k) => setTab("evidence", { ev: k })} />
               <div className="lg:sticky lg:top-3">
-                <Facts inv={d} />
+                <Facts inv={d} canSettings={can("sre")} />
               </div>
             </div>
           ) : (
@@ -279,10 +293,10 @@ export default function InvestigationDetailPage() {
           )}
         </TabPanel>
         <TabPanel value="evidence">
-          <Card>{ev.isLoading ? <Skeleton className="m-3 h-40" /> : ev.error ? <ErrorState error={ev.error} /> : <EvidenceTable rows={ev.data ?? []} highlight={evKey} />}</Card>
+          <Card>{ev.isLoading ? <Skeleton className="m-3 h-40" /> : ev.error ? <ErrorState error={ev.error} /> : <EvidenceTable rows={ev.data ?? []} highlight={evKey} callHref={can("sre") && d ? callHref : undefined} />}</Card>
         </TabPanel>
         <TabPanel value="tools">
-          <Card>{tools.isLoading ? <Skeleton className="m-3 h-40" /> : tools.error ? <ErrorState error={tools.error} /> : <ToolTable rows={tools.data ?? []} callUrlTemplate={trace.data?.call_url_template} />}</Card>
+          <Card>{tools.isLoading ? <Skeleton className="m-3 h-40" /> : tools.error ? <ErrorState error={tools.error} /> : <ToolTable rows={tools.data ?? []} callUrlTemplate={trace.data?.call_url_template} runId={can("sre") ? d?.run_id : undefined} onEvidence={(k) => setTab("evidence", { ev: k })} />}</Card>
         </TabPanel>
         <TabPanel value="similar">
           <Card>{d && <Similar inv={d} />}</Card>

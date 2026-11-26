@@ -73,9 +73,11 @@ async def health_check(rt, params: dict) -> dict[str, Any]:
                                        schedule_name="health-check", error=f"{type(e).__name__}: {e}")
         raise
     if not out.get("skipped"):
-        await agents.record_system_run(rt.sm, run_id=f"hc-job-{started:%Y%m%d%H%M%S}", mode="scheduled",
-                                       trigger="schedule", status="completed", started_at=started,
-                                       schedule_name="health-check", investigation_id=out.get("investigation_id"))
+        # run_id = investigation run_id: Agent Trace / MCP çağrıları / Context Windows bağlantıları aynı kimliği kullanır
+        await agents.record_system_run(rt.sm, run_id=out.pop("run_id", None) or f"hc-job-{started:%Y%m%d%H%M%S}",
+                                       mode="scheduled", trigger="schedule", status="completed", started_at=started,
+                                       schedule_name="health-check", investigation_id=out.get("investigation_id"),
+                                       models=out.pop("models", None))
     return out
 
 
@@ -143,6 +145,11 @@ async def _system_health_check(rt, params: dict) -> dict[str, Any]:
         await rt.memory.remember_investigation(done, user_id=None, conversation_id=None)
     out: dict[str, Any] = {"investigation_id": str(done.id), "status": done.status.value,
                            "severity": done.severity.value, "mechanism": done.primary_mechanism}
+    llm_snap = (done.config_snapshot or {}).get("llm") or {}
+    if done.status != InvestigationStatus.FAILED:
+        out["run_id"] = done.run_id
+        out["models"] = srt.models_view(llm_snap.get("effective"), ("rca",)) if (llm_snap.get("run") or {}).get("used") \
+            else []
     if done.status == InvestigationStatus.FAILED:          # iş geçmişinde başarısız görünsün (araştırma kaydı da FAILED)
         raise RuntimeError(f"sağlık kontrolü analizi başarısız (araştırma {done.id}): {done.error or '?'}"[:1500])
     # Yüksek/kritik ve mekanizması belli bulgu → incident (aynı mekanizma için tek açık kayıt). Watch açık bir
@@ -246,10 +253,14 @@ async def run_due(rt, worker_id: str, handlers: dict, *, lease_s: int) -> list[d
         todo = [(j.id, j.name, j.job_type, {**dict(j.params or {}), "_job_name": j.name}) for j in claimed]
     for job_id, name, jtype, params in todo:
         fn = handlers.get(jtype)
-        token = correlation_id.set(new_correlation_id())
         async with transaction(rt.sm) as s:
+            if not await jobs.renew(s, job_id, worker_id, lease_s):
+                log.warning("iş atlandı: kira başka worker'a geçti", extra={"job": name})
+                done.append({"job": name, "ok": True, "result": {"skipped": "lease_lost"}, "error": None})
+                continue
             run = await jobs.start_run(s, job_id, worker_id)
             run_id = run.id
+        token = correlation_id.set(new_correlation_id())
         t0 = time.monotonic()
         ok, result, err = True, {}, None
         try:
@@ -266,6 +277,15 @@ async def run_due(rt, worker_id: str, handlers: dict, *, lease_s: int) -> list[d
         correlation_id.reset(token)
         done.append({"job": name, "ok": ok, "result": result, "error": err})
     return done
+
+
+async def reconcile(rt, *, lease_s: int) -> dict[str, int]:
+    """Süre sınırını aşmış 'çalışıyor' kayıtlarını (investigation, iş, agent çalıştırması) kapatır."""
+    from .services.reconcile import close_interrupted
+    from .settings import runtime as srt
+    timeout = int((await srt.effective(rt))["agent"]["run_timeout_s"])
+    async with transaction(rt.sm) as s:
+        return await close_interrupted(s, run_timeout_s=timeout, lease_s=lease_s)
 
 
 async def main(ps: PlatformSettings, *, once: bool = False, runtime=None) -> int:
@@ -287,9 +307,13 @@ async def main(ps: PlatformSettings, *, once: bool = False, runtime=None) -> int
         except (NotImplementedError, RuntimeError):
             pass
     log.info("sre-worker başladı", extra={"worker": wid, "lease_s": lease})
+    last_reconcile = 0.0
     try:
         while not STOP.is_set():
             try:
+                if time.monotonic() - last_reconcile >= 60:     # yarıda kalan çalıştırmalar "çalışıyor" görünmesin
+                    last_reconcile = time.monotonic()
+                    await reconcile(rt, lease_s=lease)
                 await run_due(rt, wid, handlers, lease_s=lease)
                 _heartbeat()
             except Exception:  # noqa: BLE001 — DB kesintisi vb.: bekle ve tekrar dene

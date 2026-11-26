@@ -79,6 +79,45 @@ def test_mcp_outage_gives_partial_report_without_fallback(settings):
     assert r["mechanisms"] == []
 
 
+def _with_failed(scenario, failed: dict[str, str]):
+    """Senaryo verisi + belirtilen signal'ler yanıt vermemiş (kayıt yok, hata durumu)."""
+    ws = windows()
+    base, win, extra = SCENARIOS[scenario]()
+    res = build(base, win, ws, **extra)
+    for k, status in failed.items():
+        res[k] = QueryResult(k, res[k].dql if k in res else "", status, [], None, "simulated failure")
+    return FakeGateway(res)
+
+
+@pytest.mark.parametrize("status", ["ERROR", "TIMEOUT", "PERMISSION"])
+def test_failed_lock_query_is_missing_data_not_true_zero(settings, status):
+    """Collector sağlıklı olsa da Lock query'si yanıt vermediyse değer 0 sayılmaz: bileşen eksik, rapor kısmi."""
+    st, _ = _run(settings, scenario="normal", gw=_with_failed("normal", {"lock_waiters": status, "edges": status}))
+    r = _report(st)
+    assert r["status"] == "partial"
+    for app, a in r["risk"]["apps"].items():
+        assert a["components"]["lock"] is None, app
+        assert "lock" in a["missing"], app
+    assert any(g.startswith("lock_waiters: " + status) for g in r["data_gaps"])
+
+
+def test_empty_lock_query_with_healthy_collector_is_true_zero(settings):
+    """Yanıt alınmış boş sonuç ölçümdür: collector o pencerede yazdıysa Lock değeri gerçek 0'dır, rapor tamdır."""
+    st, _ = _run(settings, scenario="normal")
+    r = _report(st)
+    assert r["status"] == "complete"
+    assert all(a["components"]["lock"] == 0 for a in r["risk"]["apps"].values())
+
+
+def test_one_failed_signal_keeps_other_findings_and_extra_evidence(settings):
+    """Tek signal başarısızsa rapor kısmi olur; ama kalan veriyle bulunan mechanism ve ek evidence korunur."""
+    st, gw = _run(settings, gw=_with_failed("row_lock", {"jvm_gc": "TIMEOUT"}))
+    r = _report(st)
+    assert r["status"] == "partial"
+    assert "row_lock" in [m["id"] for m in r["mechanisms"]]
+    assert any("edges_detail" in c for c in gw.calls[1:])
+
+
 def test_claude_outage_falls_back_to_deterministic(settings):
     st, _ = _run(settings, llm=FakeLlm(fail=True))
     r = _report(st)

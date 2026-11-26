@@ -1,5 +1,6 @@
 /* Agent Trace: bir agent çalıştırmasının LangGraph node / state / stream, LLM ve Pydantic olayları.
    Liste → /agent-trace ; detay → /agent-trace/:key (?ev=<event_id>&f=<kategori>). Payload'lar sunucuda maskelenmiştir. */
+import { ConceptHelp } from "@/components/ConceptHelp";
 import { ArrowRight, ExternalLink, Radio } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -101,7 +102,7 @@ function TraceList() {
   const active = FILTER_KEYS.filter((k) => g(k)).length;
   return (
     <Page>
-      <PageHeader title="Agent Trace" description="Agent çalıştırmalarının node, state, stream, LLM ve Pydantic olayları (maskeli kopya)" />
+      <PageHeader title="Agent Trace" description="Her çalıştırmanın adım adım kaydı: hangi adım çalıştı, ne girdi, ne çıktı (hassas veri maskelenir)" meta={<ConceptHelp k="trace" />} />
       <Card>
         <FilterBar active={active} onClear={() => clear(FILTER_KEYS)} right={data && <span className="text-xs text-muted tabular-nums">{data.total} çalıştırma</span>}>
           <Input aria-label="run_id ara" placeholder="run_id" value={g("q")} onChange={(e) => set("q", e.target.value.trim())} className="w-56 font-mono" />

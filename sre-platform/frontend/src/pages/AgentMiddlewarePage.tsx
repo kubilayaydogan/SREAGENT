@@ -2,6 +2,7 @@
  *  Üç kavram ayrı gösterilir: tanım (kod, salt okunur) · yapılandırma (versiyonlu, audit'li) · execution kaydı.
  *  Agent özel LangGraph StateGraph kullanır (create_agent yok); hook'lar gerçek çağrı yollarına adapter ile bağlıdır.
  *  Kaydedilmeyen alan "yakalanmadı", desteklenmeyen alan "desteklenmiyor" yazar; örnek veri gösterilmez. */
+import { ConceptHelp } from "@/components/ConceptHelp";
 import { ArrowDown, ArrowUp, ExternalLink, FlaskConical, Lock, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -130,7 +131,8 @@ export default function AgentMiddlewarePage() {
     <Page wide>
       <PageHeader
         title="Agent Middleware"
-        description="Kodda kayıtlı middleware'lerin yapılandırması, LLM ve MCP çağrılarındaki kararları, overhead'i ve run içindeki gerçek yürütme sırası"
+        description="Her LLM ve MCP çağrısının önünde ve arkasında çalışan denetim adımları ve verdikleri kararlar"
+        meta={<ConceptHelp k="middleware" />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <RangeTabs<MwRange> value={range} onChange={(v) => set("range", v)} options={RANGES} />

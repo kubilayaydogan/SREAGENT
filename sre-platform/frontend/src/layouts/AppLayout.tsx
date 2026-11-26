@@ -34,6 +34,7 @@ import { useLlmModel, useSetLlmModel, useSystemInfo } from "@/hooks/queries";
 import { useAuth } from "@/services/auth";
 import { useTheme, type ThemePref } from "@/lib/theme";
 import { cn, setDisplayPrefs } from "@/lib/utils";
+import { MODEL_SOURCE_LABEL } from "@/lib/runconfig";
 import { usePublicPrefs } from "@/features/settings/api";
 import type { Role } from "@/types/api";
 
@@ -130,17 +131,24 @@ function ModelSwitch({ fallback }: { fallback: string | null }) {
   const set = useSetLlmModel();
   const current = data?.model ?? fallback;
   const label = data?.options.find((o) => o.id === current)?.label ?? current ?? "";
-  const who = data?.changed_by ? `Son değiştiren: ${data.changed_by}${data.changed_at ? " · " + new Date(data.changed_at).toLocaleString("tr-TR") : ""}` : "";
+  const eff = data?.effective?.chat;
+  // Seçim yoksa görev LLM profili ya da ortam modeli geçerlidir; seçici bunu ayrı bir seçenek olarak gösterir.
+  const auto = `Otomatik: ${label || "—"}${eff && eff.source !== "override" ? ` (${MODEL_SOURCE_LABEL[eff.source] ?? eff.source})` : ""}`;
+  const who =
+    "Gömülü SRE Agent'ın modeli. Özel agent'lar Agent Builder'daki kendi model ayarını kullanır. Değişiklik bir sonraki çalıştırmadan itibaren geçerlidir." +
+    (data?.changed_by ? ` Son değiştiren: ${data.changed_by}${data.changed_at ? " · " + new Date(data.changed_at).toLocaleString("tr-TR") : ""}` : "");
   if (user?.role !== "admin" || !data)
     return (
       <span className="text-ink-2" title={who}>
         LLM {label}
       </span>
     );
+  const selected = data.selected === undefined ? (current ?? "") : (data.selected ?? "");
   return (
     <label className="flex items-center gap-1.5" title={who}>
       <span className="text-muted">LLM</span>
-      <Select aria-label="Claude modeli" className="h-6 w-auto py-0 text-xs" value={current ?? ""} disabled={set.isPending} onChange={(e) => set.mutate(e.target.value)}>
+      <Select aria-label="Claude modeli" className="h-6 w-auto py-0 text-xs" value={selected} disabled={set.isPending} onChange={(e) => set.mutate(e.target.value || null)}>
+        {data.selected !== undefined && <option value="">{auto}</option>}
         {data.options.map((o) => (
           <option key={o.id} value={o.id}>
             {o.label}

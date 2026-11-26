@@ -19,6 +19,7 @@ from typing import Annotated, Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from airlab_agent.graph import new_run_id
+from airlab_agent.graph import FAILED_SIGNAL
 from airlab_agent.llm import AnalysisRequest, LlmUnavailable, resolve_window
 from airlab_agent.report import deterministic_explanation
 
@@ -192,7 +193,15 @@ def data_banner(report: dict | None) -> str:
     cov = (report.get("data_coverage") or {}).get("ratio")
     parts = []
     if report.get("status") == "partial" or errs:
-        parts.append("Dynatrace verisi eksik; sonuç KISMİ." + (" " + " ".join(e[:200] for e in errs[:2]) if errs else ""))
+        # Yanıt vermeyen query'ler adıyla yazılır: kullanıcı hangi verinin eksik olduğunu ve bunun 0 sayılmadığını görür.
+        failed = sorted({e.get("signal") for e in report.get("evidence") or []
+                         if e.get("status") in FAILED_SIGNAL and e.get("signal")})
+        miss = ""
+        if failed:
+            miss = (f" Okunamayan signal ({len(failed)}): {', '.join(failed[:4])}"
+                    + (f" (+{len(failed) - 4})" if len(failed) > 4 else "") + ". Okunamayan veri 0 sayılmaz.")
+        parts.append("Dynatrace verisi eksik; sonuç KISMİ." + miss
+                     + (" " + " ".join(e[:200] for e in errs[:2]) if errs else ""))
     if cov is not None and cov < 0.6:
         parts.append(f"Data coverage düşük (%{cov * 100:.0f}); risk score güvenilir değil veya hesaplanmadı.")
     return ("> **Uyarı:** " + " ".join(parts) + "\n\n") if parts else ""
@@ -371,6 +380,7 @@ class ChatOrchestrator:
             else:
                 fallback = prompts.SMALLTALK
             answer, source = "", "deterministik"
+            llm_failed = False
             if banner:
                 await ctx.emit("token", {"text": banner})
             rca = intent in ("analyze", "compare")           # RCA cevabı → RCA modeli/profili
@@ -395,11 +405,15 @@ class ChatOrchestrator:
                 except LlmUnavailable as e:
                     await ctx.emit("agent_thinking", {"step": "rca", "message":
                                                       f"Claude erişilemedi; deterministik özet kullanıldı ({e})."})
+                    llm_failed = True
+                    if answer:      # yarım kalan LLM metni ekranda kalmaz; deterministik yanıt onun yerine geçer
+                        await ctx.emit("answer_replaced", {"text": banner, "reason": "llm_unavailable"})
                     answer = ""
             if answer.strip():
                 answer, source = await _guard_answer(ctx, answer, source, report, fallback, banner)
             if not answer.strip():
-                answer, source = fallback, "deterministik" + (" (Claude devre dışı)" if llm_ is None else "")
+                why = " (Claude devre dışı)" if llm_ is None else " (Claude erişilemedi)" if llm_failed else ""
+                answer, source = fallback, "deterministik" + why
                 await ctx.emit("token", {"text": answer})
             answer = banner + answer
             if inv and inv.get("investigation_id"):
@@ -647,6 +661,12 @@ class ChatOrchestrator:
         meta = {"intent": state["route"]["intent"], "route": state["route"], "answer_source": state.get("answer_source"),
                 "suggestions": state.get("suggestions", []), "investigation": inv,
                 "memory_counts": (state.get("memory") or {}).get("counts")}
+        # Bu turun kimligi ve tur basinda dondurulan model secimi (UI: "hangi model, neden" + run baglantilari)
+        mid_user = ctx.result.get("user_message_id")
+        if mid_user:
+            meta["run_id"] = f"chat-{mid_user}"
+        if ctx.rc is not None:
+            meta["llm"] = {k: v for k, v in ctx.rc.llm_effective.items() if k == "chat" or inv}
         async with transaction(self.rt.sm) as s:
             m = await conversations.add_message(
                 s, ctx.conversation_id, MessageRole.ASSISTANT, state.get("answer") or "", meta,

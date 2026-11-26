@@ -293,3 +293,57 @@ def test_telemetry_compute_math_and_status():
     assert out["db"]["last_ratio"] == 0.4 and out["db"]["max_ratio"] == 0.4 and len(ck["series"]) == 15
     assert out["status_counts"] == {"degraded": 2, "unknown": 1, "down": 1}
     _ = timedelta
+
+
+class _HalfStream(FakePort):
+    """LLM yanıtı akarken kesilir (ilk parçalar istemciye gitmiş olur)."""
+
+    async def astream(self, system, human, *, rca=False, task="answer"):
+        from airlab_agent.llm import LlmUnavailable
+        yield "YARIM "
+        yield "METIN "
+        raise LlmUnavailable("simulated mid-stream")
+
+
+def _gw_with_failed(failed: dict):
+    from scenarios import SCENARIOS
+    from synth import build
+    from test_agent_memory import EmittingGateway
+    base, win, extra = SCENARIOS["row_lock"]()
+    results = build(base, win, WS, **extra)
+    for k, status in failed.items():
+        results[k] = QueryResult(k, results[k].dql, status, [], None, "simulated failure")
+
+    def make(on_event=None):
+        return EmittingGateway(results, on_event=on_event)
+    return make
+
+
+def test_failed_query_and_llm_outage_are_reported_as_such(api_settings, tmp_path):
+    """Yanıt vermeyen query "0" ya da "başarılı" görünmez; yarıda kesilen LLM yanıtı ekranda ve kayıtta kalmaz."""
+    async def fn(c, app):
+        h = await login(c)
+        sre = await mkuser(c, h, "nobetci2", "sre")
+        r = await c.post("/api/agent/chat", headers=sre, json={"message": "Checkin neden yavaşladı?", "time_range": TR})
+        assert r.status_code == 202, r.text
+        run_ = r.json()
+        evs = sse((await c.get(run_["stream_url"], headers=sre)).text)
+        types = [e["type"] for e in evs]
+        assert types[-1] == "done"
+        # yarım metin gönderildikten sonra istemciye "yerine geç" olayı gider
+        i_half = next(i for i, e in enumerate(evs) if e["type"] == "token" and "YARIM" in str(e["data"].get("text")))
+        i_rep = next(i for i, e in enumerate(evs) if e["type"] == "answer_replaced")
+        assert i_rep > i_half and evs[i_rep]["data"]["reason"] == "llm_unavailable"
+        msgs = (await c.get(f"/api/conversations/{run_['conversation_id']}/messages", headers=sre)).json()
+        m = msgs["items"][1]
+        assert "YARIM" not in m["content"]
+        assert m["metadata"]["answer_source"] == "deterministik (Claude erişilemedi)"
+        assert "Okunamayan signal (1): jvm_gc" in m["content"] and "0 sayılmaz" in m["content"]
+        inv = (await c.get(f"/api/investigations/{m['investigation_id']}", headers=sre)).json()
+        assert inv["status"] == "PARTIAL" and inv["primary_mechanism"] == "row_lock"
+        tools = (await c.get(f"/api/investigations/{m['investigation_id']}/tools", headers=sre)).json()
+        t = next(t for t in tools if t["signal"] == "jvm_gc")
+        assert t["execution_status"] == "FAILED" and t["result_status"] == "TIMEOUT"
+        ok = next(t for t in tools if t["signal"] == "http")
+        assert ok["execution_status"] == "SUCCEEDED"
+    with_client(api_settings, tmp_path, fn, gw=_gw_with_failed({"jvm_gc": "TIMEOUT"}), llm=_HalfStream())
