@@ -7,6 +7,7 @@ import {
   Handle,
   MarkerType,
   MiniMap,
+  Panel,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -22,10 +23,12 @@ import {
   applyNodeChanges,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { AlertTriangle, Brain, Braces, Flag, GitBranch, Play, Plug, Sparkles, XCircle } from "lucide-react";
-import { useCallback, useMemo, type DragEvent } from "react";
+import { AlertTriangle, Brain, Braces, CircleHelp, Flag, GitBranch, Link2Off, Play, Plug, Sparkles, X, XCircle } from "lucide-react";
+import { useCallback, useMemo, useState, type DragEvent } from "react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { NODE_TR, type Issue, type ResolvedModel, type WfEdge, type WfNode } from "./api";
+import { NODE_TR, type Definition, type Issue, type ResolvedModel, type WfEdge, type WfNode } from "./api";
+import { connectionProblem, structureHints, type Hint } from "./guide";
 
 export const NODE_ICON: Record<string, typeof Play> = {
   start: Play,
@@ -40,6 +43,7 @@ export const NODE_ICON: Record<string, typeof Play> = {
 export interface NodeData extends Record<string, unknown> {
   node: WfNode;
   issues: Issue[];
+  hints: Hint[];
   model: ResolvedModel | null;
   run?: { status: string; duration_ms?: number | null } | null;
   readOnly: boolean;
@@ -67,7 +71,7 @@ function summary(n: WfNode): string {
 }
 
 function AgentNode({ data, selected }: NodeProps<FlowNode>) {
-  const { node: n, issues, model, run } = data;
+  const { node: n, issues, hints, model, run } = data;
   const Icon = NODE_ICON[n.type] ?? Sparkles;
   const errors = issues.filter((i) => i.severity === "error");
   const warns = issues.filter((i) => i.severity === "warning");
@@ -82,7 +86,7 @@ function AgentNode({ data, selected }: NodeProps<FlowNode>) {
       )}
       title={issues.map((i) => `${i.severity === "error" ? "Hata" : "Uyarı"}: ${i.message}`).join("\n") || undefined}
     >
-      {n.type !== "start" && <Handle type="target" position={Position.Left} className="!size-2.5 !bg-ink-2" />}
+      {n.type !== "start" && <Handle type="target" position={Position.Left} title="Giriş: önceki adımın çıkışını buraya bırakın" className="!size-3 !bg-ink-2" />}
       <div className="flex items-center gap-1.5 border-b border-line px-2 py-1.5">
         <Icon className="size-3.5 shrink-0 text-accent-text" aria-hidden />
         <span className="truncate text-xs font-semibold text-ink">{n.label || NODE_TR[n.type] || n.type}</span>
@@ -110,6 +114,13 @@ function AgentNode({ data, selected }: NodeProps<FlowNode>) {
             <span className="line-clamp-2">{errors[0].message}{errors.length > 1 && ` (+${errors.length - 1})`}</span>
           </div>
         )}
+        {!errors.length &&
+          hints.map((h) => (
+            <div key={h.kind} className="flex items-start gap-1 text-2xs text-st-warning-ink">
+              <Link2Off className="mt-px size-3 shrink-0" aria-hidden />
+              <span>{h.message}</span>
+            </div>
+          ))}
         {!errors.length && warns.length > 0 && (
           <div className="flex items-start gap-1 text-2xs text-st-warning-ink">
             <AlertTriangle className="mt-px size-3 shrink-0" aria-hidden />
@@ -119,13 +130,13 @@ function AgentNode({ data, selected }: NodeProps<FlowNode>) {
       </div>
       {isCond ? (
         <>
-          <Handle id="true" type="source" position={Position.Right} style={{ top: "35%" }} className="!size-2.5 !bg-st-good" />
-          <Handle id="false" type="source" position={Position.Right} style={{ top: "70%" }} className="!size-2.5 !bg-st-critical" />
+          <Handle id="true" type="source" position={Position.Right} style={{ top: "35%" }} title="Koşul doğruysa bu yoldan devam eder" className="!size-3 !bg-st-good" />
+          <Handle id="false" type="source" position={Position.Right} style={{ top: "70%" }} title="Koşul yanlışsa bu yoldan devam eder" className="!size-3 !bg-st-critical" />
           <span className="pointer-events-none absolute -right-9 top-[28%] text-2xs text-st-good-ink">true</span>
           <span className="pointer-events-none absolute -right-9 top-[63%] text-2xs text-st-critical-ink">false</span>
         </>
       ) : (
-        n.type !== "result" && <Handle type="source" position={Position.Right} className="!size-2.5 !bg-ink-2" />
+        n.type !== "result" && <Handle type="source" position={Position.Right} title="Çıkış: sürükleyip bir sonraki adımın girişine bırakın" className="!size-3 !bg-ink-2" />
       )}
     </div>
   );
@@ -168,6 +179,8 @@ function Inner(p: CanvasProps) {
     return m;
   }, [p.issues]);
 
+  const hints = useMemo(() => structureHints({ workflow: { nodes: p.nodes, edges: p.edges } } as Definition), [p.nodes, p.edges]);
+  const [help, setHelp] = useState(() => localStorage.getItem("ab.canvasHelp") !== "0");
   const flowNodes: FlowNode[] = useMemo(
     () =>
       p.nodes.map((n) => ({
@@ -176,9 +189,9 @@ function Inner(p: CanvasProps) {
         position: n.position ?? { x: 0, y: 0 },
         selected: p.selected === n.id,
         deletable: !p.readOnly,
-        data: { node: n, issues: byNode[n.id] ?? [], model: p.models[n.id] ?? null, run: p.runState?.[n.id] ?? null, readOnly: p.readOnly },
+        data: { node: n, issues: byNode[n.id] ?? [], hints: p.readOnly ? [] : (hints[n.id] ?? []), model: p.models[n.id] ?? null, run: p.runState?.[n.id] ?? null, readOnly: p.readOnly },
       })),
-    [p.nodes, p.selected, p.readOnly, byNode, p.models, p.runState],
+    [p.nodes, p.selected, p.readOnly, byNode, p.models, p.runState, hints],
   );
   const flowEdges = useMemo(() => p.edges.map(toFlowEdge), [p.edges]);
 
@@ -214,6 +227,16 @@ function Inner(p: CanvasProps) {
     (c: Connection) => {
       if (p.readOnly || !c.source || !c.target) return;
       const branch = c.sourceHandle === "true" || c.sourceHandle === "false" ? c.sourceHandle : null;
+      // Neden bağlanamadığını açıkla (sessizce reddetme); aynı çıkıştaki eski bağlantı yeni hedefle değişir
+      const rest0 = p.edges.filter((e) => !(e.source === c.source && (e.branch ?? null) === branch));
+      const problem = connectionProblem({ workflow: { nodes: p.nodes, edges: rest0 } } as Definition, c.source, c.target, branch);
+      if (problem) {
+        toast.warning("Bu bağlantı yapılamaz", { description: problem });
+        return;
+      }
+      const replaced = p.edges.find((e) => e.source === c.source && (e.branch ?? null) === branch);
+      if (replaced && replaced.target !== c.target)
+        toast.info("Bağlantı değiştirildi", { description: "Bir çıkıştan tek bağlantı çıkar; önceki bağlantı yenisiyle değişti." });
       const id = `e_${c.source}_${branch ? `${branch}_` : ""}${c.target}`.slice(0, 80);
       if (p.edges.some((e) => e.id === id)) return;
       // aynı çıkıştan ikinci bağlantı: eskisi yenisiyle değişir (her node tek çıkış; koşul dal başına tek)
@@ -254,6 +277,34 @@ function Inner(p: CanvasProps) {
         <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
         <Controls showInteractive={false} />
         <MiniMap pannable zoomable className="!bg-surface" />
+        <Panel position="top-left">
+          {help && !p.readOnly ? (
+            <div className="max-w-80 rounded-md border border-line-strong bg-surface p-2.5 text-2xs text-ink-2 shadow-sm" role="note" aria-label="canvas yardımı">
+              <div className="mb-1 flex items-center gap-1 font-semibold text-ink">
+                <CircleHelp className="size-3.5 text-accent-text" /> Nasıl kullanılır?
+                <button className="ml-auto text-muted hover:text-ink" aria-label="yardımı gizle" onClick={() => (setHelp(false), localStorage.setItem("ab.canvasHelp", "0"))}>
+                  <X className="size-3.5" />
+                </button>
+              </div>
+              <ol className="list-decimal space-y-0.5 pl-4">
+                <li>Soldaki paletten bir adımı sürükleyin ya da tıklayın.</li>
+                <li>
+                  Bir node'un <b>sağındaki</b> noktadan (çıkış) sürükleyip sonraki node'un <b>solundaki</b> noktaya (giriş) bırakın.
+                </li>
+                <li>Akış soldan sağa gider: Başlangıç → (veri topla) → (karar ver) → LLM → Sonuç.</li>
+                <li>Bir node'a tıklayınca ne işe yaradığını ve sonrasına ne bağlanacağını sağ panelde görürsünüz.</li>
+                <li>Silmek için seçip Delete; turuncu yazı eksik bağlantıyı, kırmızı çerçeve hatayı gösterir.</li>
+              </ol>
+            </div>
+          ) : (
+            !p.readOnly && (
+              <button className="rounded-md border border-line bg-surface px-2 py-1 text-2xs text-muted shadow-sm hover:text-ink" onClick={() => (setHelp(true), localStorage.setItem("ab.canvasHelp", "1"))}>
+                <CircleHelp className="mr-1 inline size-3" />
+                Yardım
+              </button>
+            )
+          )}
+        </Panel>
       </ReactFlow>
     </div>
   );

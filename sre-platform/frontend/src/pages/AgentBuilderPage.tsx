@@ -1,7 +1,7 @@
 /** Agent Builder: özel agent'ları görsel workflow olarak oluştur, test et, yayımla; Soru-Cevap ve schedule'larda kullan.
  *  Liste (gömülü SRE Agent sistem agent'ı olarak) · Editör (palet / canvas / ayarlar) · Çalıştırmalar.
  *  Yetki backend'de doğrulanır; buradaki rol kontrolleri yalnız arayüzü sadeleştirir. */
-import { Archive, Copy, Download, ExternalLink, FileUp, FlaskConical, Lock, Pencil, Plus, RotateCcw, Save, ShieldCheck, Upload } from "lucide-react";
+import { Archive, CheckCircle2, Circle, Copy, Download, ExternalLink, FileUp, FlaskConical, Lock, Pencil, Plus, RotateCcw, Save, ShieldCheck, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { Viewport } from "@xyflow/react";
@@ -13,6 +13,7 @@ import { Canvas, NODE_ICON } from "@/features/agentbuilder/Canvas";
 import { ImportDialog } from "@/features/agentbuilder/ImportDialog";
 import { AgentSettings, NodeSettings, type Meta } from "@/features/agentbuilder/Panels";
 import { TestPanel } from "@/features/agentbuilder/TestPanel";
+import { checklist, NODE_GUIDE, TEMPLATES, type Template } from "@/features/agentbuilder/guide";
 import {
   downloadPackage,
   MODE_TR,
@@ -34,6 +35,7 @@ import {
   type WfNode,
 } from "@/features/agentbuilder/api";
 import { errorToast } from "@/hooks/queries";
+import { toast } from "sonner";
 import { api, ApiError } from "@/services/api";
 import { useAuth } from "@/services/auth";
 import { cn, fmtDuration, fmtNum, fmtTime } from "@/lib/utils";
@@ -239,20 +241,43 @@ function exportError(e: unknown) {
   } else errorToast(e, "Dışa aktarılamadı");
 }
 
+/** Yeni agent'ın taslağına şablonu uygular (oluşturma sonrası tek PUT; şablon yalnız başlangıç noktasıdır). */
+async function applyTemplate(id: string, t: Template, cat: Catalog) {
+  const d = await api.get<AgentDetail>(`/agents/${id}`);
+  const def = t.build(d.draft!, cat);
+  await api.put(`/agents/${id}/draft`, { revision: d.draft_revision, name: d.name, description: d.description, modes: d.modes, definition: def });
+}
+
 function CreateDialog({ onClose }: { onClose: () => void }) {
   const nav = useNavigate();
+  const cat = useCatalog(true);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
+  const [tpl, setTpl] = useState("basic");
   const [modes, setModes] = useState<AgentMode[]>(["chat"]);
-  const create = useAbMutation(() => api.post<AgentSummary>("/agents", { name, description: desc || null, modes }), "Agent oluşturulamadı", {
-    onSuccess: (r) => (onClose(), nav(`/agent-builder/${r.id}`)),
-  });
+  const t = TEMPLATES.find((x) => x.key === tpl)!;
+  const create = useAbMutation(
+    async () => {
+      const r = await api.post<AgentSummary>("/agents", { name, description: desc || t.description, modes });
+      if (cat.data && tpl !== "basic") {
+        try {
+          await applyTemplate(r.id, t, cat.data);
+        } catch (e) {
+          errorToast(e, "Şablon uygulanamadı; boş workflow ile açıldı");
+        }
+      } else if (cat.data) await applyTemplate(r.id, t, cat.data).catch(() => undefined);
+      return r;
+    },
+    "Agent oluşturulamadı",
+    { onSuccess: (r) => (onClose(), nav(`/agent-builder/${r.id}?panel=guide`)) },
+  );
   return (
     <Dialog
       open
       onOpenChange={(v) => !v && onClose()}
       title="Yeni agent"
-      description="Başlangıç → LLM → Sonuç workflow'u ile oluşturulur; model ve diğer ayarlar editörde seçilir."
+      description="Bir şablonla başlayın; editörde her adımın ne yaptığı ve neye bağlanacağı yazar. Model ve diğer ayarlar sonra değiştirilebilir."
+      wide
       footer={
         <Button variant="primary" loading={create.isPending} disabled={!name.trim() || !modes.length} onClick={() => create.mutate(undefined)}>
           Oluştur
@@ -263,6 +288,27 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
       <Input id="new-name" maxLength={100} value={name} onChange={(e) => setName(e.target.value)} className="mb-3" />
       <Label htmlFor="new-desc">Açıklama</Label>
       <Textarea id="new-desc" rows={2} maxLength={2000} value={desc} onChange={(e) => setDesc(e.target.value)} className="mb-3 w-full" />
+      <Label>Başlangıç şablonu</Label>
+      <div className="mb-3 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="şablon">
+        {TEMPLATES.map((x) => (
+          <button
+            key={x.key}
+            type="button"
+            role="radio"
+            aria-checked={tpl === x.key}
+            onClick={() => {
+              setTpl(x.key);
+              if (x.key === "report") setModes(["scheduled"]);
+              else if (tpl === "report") setModes(["chat"]);
+            }}
+            className={cn("rounded-md border p-2 text-left text-xs", tpl === x.key ? "border-accent ring-2 ring-accent/30" : "border-line hover:bg-surface-2")}
+          >
+            <div className="font-medium text-ink">{x.title}</div>
+            <div className="mt-0.5 text-2xs text-muted">{x.description}</div>
+            <div className="mt-1 font-mono text-2xs text-accent-text">{x.flow}</div>
+          </button>
+        ))}
+      </div>
       <Label>Çalışma modları</Label>
       {(["chat", "scheduled"] as AgentMode[]).map((m) => (
         <label key={m} className="mr-4 inline-flex items-center gap-1.5 text-xs">
@@ -270,6 +316,7 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
           {MODE_TR[m]}
         </label>
       ))}
+      <p className="mt-1 text-2xs text-muted">Soru-Cevap: kullanıcı soru sorunca çalışır. Zamanlanmış: Settings › Scheduling'deki schedule belirli aralıkla çalıştırır.</p>
     </Dialog>
   );
 }
@@ -502,7 +549,7 @@ function SystemAgentView({ a }: { a: AgentDetail }) {
   );
 }
 
-type RightTab = "node" | "agent" | "test" | "versions" | "issues";
+type RightTab = "guide" | "node" | "agent" | "test" | "versions" | "issues";
 
 function DraftEditor({ a, cat }: { a: AgentDetail; cat: Catalog }) {
   const { can } = useAuth();
@@ -516,7 +563,8 @@ function DraftEditor({ a, cat }: { a: AgentDetail; cat: Catalog }) {
   const [dirty, setDirty] = useState(false);
   const [issues, setIssues] = useState<Issue[]>(a.issues);
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useState<RightTab>(sp.get("panel") === "test" ? "test" : "agent");
+  const [tab, setTab] = useState<RightTab>(sp.get("panel") === "test" ? "test" : sp.get("panel") === "guide" || !a.versions.length ? "guide" : "agent");
+  const [tested, setTested] = useState(a.last_run?.mode === "test" && a.last_run.status === "completed");
   const [runState, setRunState] = useState<Record<string, { status: string; duration_ms?: number | null }>>({});
   const [view, setView] = useState<{ version: number; def: Definition } | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -566,6 +614,33 @@ function DraftEditor({ a, cat }: { a: AgentDetail; cat: Catalog }) {
     onSuccess: (r) => (setIssues(r.issues), setTab("issues")),
   });
 
+  /** Seçili node'dan sonra yeni adım: sonraki adım varsa araya girer (A → yeni → B), yoksa sona eklenir. */
+  function addAfter(src: string, type: string, branch: "true" | "false" | null) {
+    if (readOnly) return;
+    const s0 = def.workflow.nodes.find((n) => n.id === src);
+    if (!s0) return;
+    const used = new Set(def.workflow.nodes.map((n) => n.id));
+    let i = 1;
+    while (used.has(`${type}_${i}`)) i++;
+    const nid = `${type}_${i}`;
+    const old = def.workflow.edges.find((e) => e.source === src && (e.branch ?? null) === branch);
+    const dy = branch === "true" ? -90 : branch === "false" ? 110 : 0;
+    const node: WfNode = { id: nid, type, label: NODE_TR[type] ?? type, config: DEFAULT_CONFIG[type]?.(nid) ?? {}, position: { x: s0.position.x + 280, y: s0.position.y + dy } };
+    // araya girerken sağdaki node'ları kaydır (üst üste binmesin)
+    const shifted = old ? def.workflow.nodes.map((n) => (n.position.x > s0.position.x ? { ...n, position: { ...n.position, x: n.position.x + 280 } } : n)) : def.workflow.nodes;
+    const edges = def.workflow.edges.filter((e) => e !== old);
+    edges.push({ id: `e_${src}_${branch ? `${branch}_` : ""}${nid}`, source: src, target: nid, branch });
+    // araya girerken eski hedef yeni adımdan sonra gelir (Koşul'da yeşil yol); Sonuç'tan sonra adım olamaz
+    if (old && type !== "result") {
+      const br = type === "condition" ? "true" : null;
+      edges.push({ id: `e_${nid}_${br ? `${br}_` : ""}${old.target}`, source: nid, target: old.target, branch: br });
+    }
+    edit({ ...def, workflow: { nodes: [...shifted, node], edges } });
+    setSelected(nid);
+    setTab("node");
+    toast.success(`${NODE_TR[type]} eklendi ve bağlandı`, { description: NODE_GUIDE[type]?.what });
+  }
+
   function addNode(type: string, pos?: { x: number; y: number }) {
     if (readOnly) return;
     const used = new Set(def.workflow.nodes.map((n) => n.id));
@@ -593,7 +668,10 @@ function DraftEditor({ a, cat }: { a: AgentDetail; cat: Catalog }) {
 
   const activate = useAbMutation((n: number) => api.post(`/agents/${a.id}/versions/${n}/activate`), "Sürüm aktif edilemedi");
 
+  const steps = checklist(shown, { dirty, versions: a.versions.length, tested, errors: errors.length, modes: meta.modes });
+  const doneCount = steps.filter((x) => x.done).length;
   const rightTabs = [
+    { value: "guide", label: `Rehber ${doneCount}/${steps.length}` },
     ...(sel ? [{ value: "node", label: "Node" }] : []),
     { value: "agent", label: "Agent" },
     { value: "test", label: "Test" },
@@ -714,6 +792,7 @@ function DraftEditor({ a, cat }: { a: AgentDetail; cat: Catalog }) {
                   issues={issues.filter((i) => i.node_id === sel.id)}
                   resolved={models[sel.id] ?? null}
                   readOnly={readOnly}
+                  onAddAfter={(t, b) => addAfter(sel.id, t, b)}
                   onChange={(n) => edit({ ...def, workflow: { ...def.workflow, nodes: def.workflow.nodes.map((x) => (x.id === n.id ? n : x)) } })}
                   onDelete={() => {
                     edit({ ...def, workflow: { nodes: def.workflow.nodes.filter((x) => x.id !== sel.id), edges: def.workflow.edges.filter((e) => e.source !== sel.id && e.target !== sel.id) } });
@@ -723,6 +802,24 @@ function DraftEditor({ a, cat }: { a: AgentDetail; cat: Catalog }) {
                 />
               </TabPanel>
             )}
+            <TabPanel value="guide">
+              <GuidePanel
+                steps={steps}
+                readOnly={readOnly}
+                onAction={(st) => {
+                  if (!st.action) return;
+                  if (st.action.kind === "node") {
+                    setSelected(st.action.id);
+                    setTab("node");
+                  } else setTab(st.action.tab as RightTab);
+                }}
+                onTemplate={(t) => {
+                  edit(t.build({ ...def }, cat));
+                  setSelected(null);
+                  toast.success(`Şablon uygulandı: ${t.title}`, { description: "Kaydetmeden önce adımları inceleyin." });
+                }}
+              />
+            </TabPanel>
             <TabPanel value="agent">
               <AgentSettings def={shown} meta={meta} cat={cat} issues={issues} readOnly={readOnly} onDef={edit} onMeta={(m) => (setMeta(m), setDirty(true))} />
             </TabPanel>
@@ -731,7 +828,10 @@ function DraftEditor({ a, cat }: { a: AgentDetail; cat: Catalog }) {
                 agentId={a.id}
                 canTest={canBuild && !archived}
                 blocked={dirty ? "Test kayıtlı taslağı çalıştırır; önce kaydedin." : null}
-                onNodes={setRunState}
+                onNodes={(m) => {
+                  setRunState(m);
+                  if (Object.keys(m).length && Object.values(m).every((x) => x.status === "ok")) setTested(true);
+                }}
                 onIssues={(i) => i.length && (setIssues(i), setTab("issues"))}
               />
             </TabPanel>
@@ -802,6 +902,111 @@ function DraftEditor({ a, cat }: { a: AgentDetail; cat: Catalog }) {
           onClose={() => setPublishOpen(false)}
           onIssues={(i) => (setIssues(i), setTab("issues"))}
         />
+      )}
+    </div>
+  );
+}
+
+function GuidePanel({ steps, readOnly, onAction, onTemplate }: {
+  steps: ReturnType<typeof checklist>;
+  readOnly: boolean;
+  onAction: (s: ReturnType<typeof checklist>[number]) => void;
+  onTemplate: (t: Template) => void;
+}) {
+  const [confirm, setConfirm] = useState<Template | null>(null);
+  const done = steps.filter((x) => x.done).length;
+  const next = steps.find((x) => !x.done);
+  return (
+    <div className="space-y-4 text-xs">
+      <section aria-label="kurulum adımları">
+        <div className="mb-1 flex items-center justify-between">
+          <b className="text-ink">Kurulum adımları</b>
+          <span className="tabular-nums text-muted">
+            {done}/{steps.length}
+          </span>
+        </div>
+        <div className="mb-2 h-1.5 rounded-full bg-surface-3" aria-hidden>
+          <div className="h-1.5 rounded-full bg-st-good" style={{ width: `${(done / steps.length) * 100}%` }} />
+        </div>
+        {next && (
+          <p className="mb-2 rounded-sm bg-accent/5 px-2 py-1 text-ink">
+            <b>Sıradaki:</b> {next.label}. <span className="text-ink-2">{next.hint}</span>
+          </p>
+        )}
+        <ol className="space-y-1">
+          {steps.map((st) => (
+            <li key={st.key} className="flex items-start gap-1.5">
+              {st.done ? <CheckCircle2 className="mt-px size-3.5 shrink-0 text-st-good-ink" aria-label="tamam" /> : <Circle className="mt-px size-3.5 shrink-0 text-muted" aria-label="bekliyor" />}
+              <div className="min-w-0">
+                {st.action && !st.done ? (
+                  <button className="text-left text-accent-text hover:underline" onClick={() => onAction(st)}>
+                    {st.label}
+                  </button>
+                ) : (
+                  <span className={st.done ? "text-muted line-through" : "text-ink"}>{st.label}</span>
+                )}
+                {!st.done && <div className="text-2xs text-muted">{st.hint}</div>}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+      <section aria-label="agent nasıl çalışır">
+        <b className="text-ink">Agent nasıl çalışır?</b>
+        <p className="mt-1 text-ink-2">
+          Agent, soldan sağa akan adımlardan oluşur. Her adım bir iş yapar ve sonucunu bir <b>değişkene</b> yazar; sonraki adımlar bu sonucu <code>{"{{değişken}}"}</code> ile kullanır.
+        </p>
+        <ol className="mt-1.5 space-y-1 text-ink-2">
+          <li>
+            <b>1. Başlangıç</b>: kullanıcının sorusu <code>{"{{input}}"}</code> olarak gelir.
+          </li>
+          <li>
+            <b>2. Veri topla</b> (isteğe bağlı): <i>MCP Tool</i> Dynatrace'ten veri çeker, <i>Memory Retrieval</i> geçmiş kayıtları getirir.
+          </li>
+          <li>
+            <b>3. Karar ver</b> (isteğe bağlı): <i>Koşul</i> akışı ikiye ayırır (ör. veri yoksa farklı yanıt).
+          </li>
+          <li>
+            <b>4. Düşün</b>: <i>LLM</i> toplanan bilgiyle yanıtı yazar; <i>Structured Output</i> JSON üretir.
+          </li>
+          <li>
+            <b>5. Sonuç</b>: kullanıcıya dönen metin, çoğu zaman <code>{"{{answer}}"}</code>.
+          </li>
+        </ol>
+        <p className="mt-1.5 rounded-sm bg-surface-2 px-2 py-1 font-mono text-2xs text-ink-2">Başlangıç → MCP Tool → Koşul → LLM → Sonuç</p>
+        <p className="mt-1.5 text-2xs text-muted">
+          Bağlamak için: bir node'un sağındaki noktadan sürükleyip sonraki node'un solundaki noktaya bırakın. Ya da node'u seçip &quot;Sonraki adımı ekle ve bağla&quot; düğmelerini kullanın.
+        </p>
+      </section>
+      {!readOnly && (
+        <section aria-label="şablonlar">
+          <b className="text-ink">Şablondan başla</b>
+          <p className="mt-0.5 text-2xs text-muted">Workflow'u hazır bir örnekle değiştirir; sonra istediğiniz gibi düzenleyin.</p>
+          <div className="mt-1.5 space-y-1.5">
+            {TEMPLATES.map((t) => (
+              <button key={t.key} type="button" onClick={() => setConfirm(t)} className="w-full rounded-md border border-line p-2 text-left hover:bg-surface-2">
+                <div className="font-medium text-ink">{t.title}</div>
+                <div className="text-2xs text-muted">{t.description}</div>
+                <div className="mt-0.5 font-mono text-2xs text-accent-text">{t.flow}</div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {confirm && (
+        <Dialog
+          open
+          onOpenChange={(v) => !v && setConfirm(null)}
+          title={`Şablon: ${confirm.title}`}
+          description="Mevcut workflow (node'lar ve bağlantılar) şablonla değiştirilir. Kaydetmeden önce vazgeçerseniz sayfayı yenilemeniz yeterli."
+          footer={
+            <Button variant="primary" onClick={() => (onTemplate(confirm), setConfirm(null))}>
+              Uygula
+            </Button>
+          }
+        >
+          <p className="font-mono text-xs">{confirm.flow}</p>
+        </Dialog>
       )}
     </div>
   );

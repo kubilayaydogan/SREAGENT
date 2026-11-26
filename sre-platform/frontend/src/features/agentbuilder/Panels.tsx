@@ -1,11 +1,85 @@
 /** Builder sağ paneli: seçili node'un ayarları ya da agent ayarları. Değerler tanıma yazılır; doğrulama backend'dedir
  *  (kaydet / test / yayımla), buradaki ipuçları yalnız yardımcıdır. Bağlantılar kimlikle seçilir; secret alanı yok. */
-import { AlertTriangle, Lock, Plus, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, Lightbulb, Lock, Plus, Trash2, XCircle } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { TabPanel, Tabs } from "@/components/ui/overlay";
 import { Button, Input, Label, Select, Textarea } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 import { NO_VALUE_OPS, NODE_TR, OPERATOR_TR, type AgentMode, type Catalog, type Definition, type Issue, type ResolvedModel, type WfNode } from "./api";
+import { availableVars, NODE_GUIDE } from "./guide";
+
+/** Kullanılabilir değişkenler: tıklayınca alana eklenir. Yalnız bu node'a BAĞLI önceki adımların çıktıları listelenir. */
+export function VarChips({ def, nodeId, onPick, raw, disabled }: { def: Definition; nodeId: string; onPick: (v: string) => void; raw?: boolean; disabled?: boolean }) {
+  const vars = availableVars(def, nodeId);
+  if (disabled) return null;
+  return (
+    <div className="mt-1">
+      <span className="text-2xs text-muted">Eklemek için tıklayın: </span>
+      <span className="inline-flex flex-wrap gap-1">
+        {vars.map((v) => (
+          <button
+            key={v.name}
+            type="button"
+            title={`${v.label} · kaynak: ${v.from}`}
+            onClick={() => onPick(raw ? v.name : `{{${v.name}}}`)}
+            className="rounded-sm border border-line bg-surface-2 px-1 font-mono text-2xs text-accent-text hover:border-accent"
+          >
+            {raw ? v.name : `{{${v.name}}}`}
+          </button>
+        ))}
+      </span>
+      {vars.length <= 2 && <p className="text-2xs text-muted">Önceki adımların çıktıları, bu node'un girişi bağlandıkça burada görünür.</p>}
+    </div>
+  );
+}
+
+/** Node rehberi: ne yapar, ne zaman kullanılır, öncesine / sonrasına ne bağlanır + tek tıkla sonraki adım. */
+function GuideCard({ n, readOnly, onAddAfter, hasNext }: { n: WfNode; readOnly: boolean; onAddAfter?: (type: string, branch: "true" | "false" | null) => void; hasNext: Record<string, boolean> }) {
+  const g = NODE_GUIDE[n.type];
+  if (!g) return null;
+  const add = (b: "true" | "false" | null, label?: string) =>
+    !readOnly &&
+    onAddAfter &&
+    g.after.length > 0 && (
+      <div className="mt-1.5">
+        <div className="text-2xs font-medium text-ink-2">{label ?? "Sonraki adımı ekle ve bağla:"}</div>
+        <div className="mt-0.5 flex flex-wrap gap-1">
+          {g.after.map((t) => (
+            <Button key={t} size="sm" variant="outline" className="h-6 px-1.5 text-2xs" onClick={() => onAddAfter(t, b)} title={NODE_GUIDE[t]?.what}>
+              <ArrowRight className="size-3" /> {NODE_TR[t]}
+            </Button>
+          ))}
+        </div>
+      </div>
+    );
+  return (
+    <div className="mb-3 rounded-md border border-accent/30 bg-accent/5 p-2 text-xs" role="note" aria-label="node rehberi">
+      <p className="text-ink">{g.what}</p>
+      <p className="mt-1 text-2xs text-ink-2">
+        <b>Ne zaman:</b> {g.when}
+      </p>
+      <p className="mt-0.5 text-2xs text-ink-2">
+        <b>Öncesi:</b> {g.before}
+      </p>
+      {g.after.length > 0 && (
+        <p className="mt-0.5 text-2xs text-ink-2">
+          <b>Sonrası:</b> genelde {g.after.map((t) => NODE_TR[t]).join(", ")}
+        </p>
+      )}
+      <p className="mt-1 flex items-start gap-1 text-2xs text-muted">
+        <Lightbulb className="mt-px size-3 shrink-0 text-st-warning-ink" /> {g.tip}
+      </p>
+      {n.type === "condition" ? (
+        <>
+          {add("true", hasNext.true ? "Yeşil (true) yola araya adım ekle:" : "Yeşil (true) yol, koşul doğruysa:")}
+          {add("false", hasNext.false ? "Kırmızı (false) yola araya adım ekle:" : "Kırmızı (false) yol, koşul yanlışsa:")}
+        </>
+      ) : (
+        add(null, hasNext.out ? "Bu adımla sonraki arasına ekle:" : undefined)
+      )}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------- küçük yardımcılar
 function Row({ label, hint, issue, children, htmlFor }: { label: ReactNode; hint?: ReactNode; issue?: Issue[]; children: ReactNode; htmlFor?: string }) {
@@ -113,7 +187,7 @@ function ModelOverride({ n, cat, set, issues, resolved, readOnly }: { n: WfNode;
 }
 
 // ---------------------------------------------------------------- node ayarları
-export function NodeSettings({ node: n, def, cat, issues, resolved, readOnly, onChange, onDelete }: {
+export function NodeSettings({ node: n, def, cat, issues, resolved, readOnly, onChange, onDelete, onAddAfter }: {
   node: WfNode;
   def: Definition;
   cat: Catalog;
@@ -122,8 +196,11 @@ export function NodeSettings({ node: n, def, cat, issues, resolved, readOnly, on
   readOnly: boolean;
   onChange: (n: WfNode) => void;
   onDelete: () => void;
+  onAddAfter?: (type: string, branch: "true" | "false" | null) => void;
 }) {
   const c = n.config ?? {};
+  const outs = def.workflow.edges.filter((e) => e.source === n.id);
+  const hasNext = { out: outs.some((e) => !e.branch), true: outs.some((e) => e.branch === "true"), false: outs.some((e) => e.branch === "false") };
   const set = (k: string, v: unknown) => {
     const next = { ...c };
     if (v === undefined) delete next[k];
@@ -131,15 +208,20 @@ export function NodeSettings({ node: n, def, cat, issues, resolved, readOnly, on
     onChange({ ...n, config: next });
   };
   const f = (k: string) => issues.filter((i) => i.field === k);
+  const append = (k: string, v: string) => {
+    const cur = ((c[k] as string) ?? "").replace(/\s+$/, "");
+    set(k, cur ? `${cur} ${v}` : v);
+  };
   const general = issues.filter((i) => !i.field || !["prompt", "instructions", "output_var", "tool", "args", "args.dqlQueryString", "query", "top_k", "field", "operator", "value", "template", "schema", "max_tokens", "effort", "temperature", "llm_profile_id", "timeout_s"].includes(i.field));
   const con = cat.connectors.find((x) => x.id === def.settings.tools.connector_id);
-  const ta = (k: string, label: string, hint?: string, rows = 4) => (
+  const ta = (k: string, label: string, hint?: string, rows = 4, chips = true) => (
     <Row label={label} htmlFor={`${n.id}-${k}`} hint={hint} issue={f(k)}>
       <Textarea id={`${n.id}-${k}`} rows={rows} disabled={readOnly} value={(c[k] as string) ?? ""} onChange={(e) => set(k, e.target.value)} className="w-full font-mono text-xs" />
+      {chips && <VarChips def={def} nodeId={n.id} disabled={readOnly} onPick={(v) => append(k, v)} />}
     </Row>
   );
   const ovar = (
-    <Row label="Çıktı değişkeni" htmlFor={`${n.id}-ov`} issue={f("output_var")} hint="Sonraki node'larda {{ad}} ya da {{ad.alan}} ile kullanılır">
+    <Row label="Çıktı değişkeni" htmlFor={`${n.id}-ov`} issue={f("output_var")} hint="Bu adımın sonucu bu adla saklanır; sonraki adımlarda {{ad}} ile kullanılır. Küçük harf, rakam ve _ kullanın (ör. answer, loglar).">
       <Input id={`${n.id}-ov`} disabled={readOnly} value={(c.output_var as string) ?? ""} onChange={(e) => set("output_var", e.target.value.trim())} className="font-mono" />
     </Row>
   );
@@ -160,7 +242,8 @@ export function NodeSettings({ node: n, def, cat, issues, resolved, readOnly, on
           {i.message}
         </p>
       ))}
-      <Row label="Etiket" htmlFor={`${n.id}-label`}>
+      <GuideCard n={n} readOnly={readOnly} onAddAfter={onAddAfter} hasNext={hasNext} />
+      <Row label="Etiket" htmlFor={`${n.id}-label`} hint="Canvas'ta görünen ad; ne yaptığını anlatan kısa bir ad verin (ör. 'Hata loglarını çek').">
         <Input id={`${n.id}-label`} disabled={readOnly} maxLength={80} value={n.label} onChange={(e) => onChange({ ...n, label: e.target.value })} />
       </Row>
       {n.type === "start" && (
@@ -171,8 +254,8 @@ export function NodeSettings({ node: n, def, cat, issues, resolved, readOnly, on
       )}
       {n.type === "llm" && (
         <>
-          {ta("prompt", "Prompt", "Şablon: {{input}}, önceki node çıktıları; veri değerleri ayrı veri bloğu olarak eklenir", 6)}
-          {ta("instructions", "Ek talimat (system)", undefined, 3)}
+          {ta("prompt", "Prompt", "Modele bu adımda ne yapmasını istediğinizi yazın. Kullanıcının sorusu {{input}}; önceki adımların sonuçları kendi değişken adlarıyla.", 6)}
+          {ta("instructions", "Ek talimat (system)", "İsteğe bağlı: yalnız bu adım için kural (ör. 'En fazla 5 madde yaz').", 3, false)}
           {ovar}
           <label className="mb-3 flex items-center gap-2 text-xs text-ink-2">
             <input type="checkbox" disabled={readOnly} checked={c.stream !== false} onChange={(e) => set("stream", e.target.checked)} />
@@ -215,6 +298,15 @@ export function NodeSettings({ node: n, def, cat, issues, resolved, readOnly, on
                 value={((c.args as Record<string, unknown>)?.dqlQueryString as string) ?? ""}
                 onChange={(e) => set("args", { ...((c.args as object) ?? {}), dqlQueryString: e.target.value })}
               />
+              <VarChips
+                def={def}
+                nodeId={n.id}
+                disabled={readOnly}
+                onPick={(v) => set("args", { ...((c.args as object) ?? {}), dqlQueryString: `${((c.args as Record<string, unknown>)?.dqlQueryString as string) ?? ""}${v}` })}
+              />
+              <p className="mt-1 text-2xs text-muted">
+                Örnek: <code>fetch logs, from:now()-30m | filter loglevel == "ERROR" | limit 20</code>. Sonuç: <code>.status</code> (OK, EMPTY, ERROR) ve <code>.records</code>.
+              </p>
             </Row>
           ) : (
             <Row label="Parametreler (JSON)" htmlFor={`${n.id}-args`} issue={f("args")}>
@@ -241,6 +333,7 @@ export function NodeSettings({ node: n, def, cat, issues, resolved, readOnly, on
         <>
           <Row label="Alan" htmlFor={`${n.id}-field`} issue={f("field")} hint="Değişken yolu: answer, p95.status, risk.severity…">
             <Input id={`${n.id}-field`} disabled={readOnly} value={(c.field as string) ?? ""} onChange={(e) => set("field", e.target.value.trim())} className="font-mono" />
+            <VarChips def={def} nodeId={n.id} raw disabled={readOnly} onPick={(v) => set("field", v)} />
           </Row>
           <Row label="Operatör" htmlFor={`${n.id}-op`} issue={f("operator")}>
             <Select id={`${n.id}-op`} disabled={readOnly} value={(c.operator as string) ?? ""} onChange={(e) => set("operator", e.target.value)} className="w-full">
@@ -257,10 +350,18 @@ export function NodeSettings({ node: n, def, cat, issues, resolved, readOnly, on
               <Input id={`${n.id}-val`} disabled={readOnly} value={c.value == null ? "" : String(c.value)} onChange={(e) => set("value", e.target.value)} />
             </Row>
           )}
-          <p className="text-2xs text-muted">Yeşil çıkış: koşul doğru · kırmızı çıkış: yanlış. İki dal da bağlı olmalı.</p>
+          {typeof c.field === "string" && c.field && c.operator ? (
+            <p className="rounded-sm bg-surface-2 px-2 py-1 text-2xs text-ink-2">
+              Okunuşu: <b>{c.field}</b> {OPERATOR_TR[String(c.operator)] ?? String(c.operator)}
+              {!NO_VALUE_OPS.has(String(c.operator)) && <> <b>&quot;{String(c.value ?? "")}&quot;</b></>} ise <span className="text-st-good-ink">yeşil (true)</span>, değilse{" "}
+              <span className="text-st-critical-ink">kırmızı (false)</span> yoldan devam eder.
+            </p>
+          ) : (
+            <p className="text-2xs text-muted">Yeşil çıkış: koşul doğru · kırmızı çıkış: yanlış. İki dal da bağlı olmalı.</p>
+          )}
         </>
       )}
-      {n.type === "result" && ta("template", "Sonuç şablonu", "Zamanlanmış JSON çıktısında şablon JSON üretmeli (ör. {{risk}})", 5)}
+      {n.type === "result" && ta("template", "Sonuç şablonu", "Kullanıcının göreceği metin. Çoğu zaman yalnız {{answer}} yeterlidir. Zamanlanmış JSON çıktısında bir JSON değişkeni verin (ör. {{risk}}).", 5)}
     </div>
   );
 }
@@ -307,6 +408,7 @@ export function AgentSettings({ def, meta, cat, issues, readOnly, onDef, onMeta 
   return (
     <Tabs value={tab} onValueChange={setTab} tabs={TABS.map((t) => ({ value: t.value, label: tabLabel(t) }))}>
       <TabPanel value="identity">
+        <p className="mb-3 rounded-sm bg-surface-2 px-2 py-1.5 text-2xs text-ink-2">Agent'ın adı ve nerede çalışacağı. Soru-Cevap: kullanıcı soru sorduğunda; Zamanlanmış: schedule belirli aralıkla çalıştırdığında.</p>
         <Row label="Ad" htmlFor="ag-name" issue={issues.filter((i) => i.field === "name")}>
           <Input id="ag-name" maxLength={100} disabled={readOnly} value={meta.name} onChange={(e) => onMeta({ ...meta, name: e.target.value })} />
         </Row>
@@ -328,6 +430,7 @@ export function AgentSettings({ def, meta, cat, issues, readOnly, onDef, onMeta 
         </Row>
       </TabPanel>
       <TabPanel value="model">
+        <p className="mb-3 rounded-sm bg-surface-2 px-2 py-1.5 text-2xs text-ink-2">Agent'ın varsayılan 'beyni'. LLM node'ları ayrıca kendi modelini seçmezse bu kullanılır. Profiller Settings › LLM'de tanımlıdır; API anahtarı orada saklanır.</p>
         <Row label="LLM profili (provider + model)" htmlFor="ag-prof" issue={f("settings.model.llm_profile_id")} hint="Settings › LLM'de tanımlı profiller; API anahtarı profilde saklanır, tanıma yazılmaz">
           <Select id="ag-prof" disabled={readOnly} value={st.model.llm_profile_id ?? ""} onChange={(e) => up("model", { llm_profile_id: e.target.value || null })} className="w-full">
             <option value="">seçin…</option>
@@ -377,6 +480,7 @@ export function AgentSettings({ def, meta, cat, issues, readOnly, onDef, onMeta 
         {prof && !prof.supports_temperature && <p className="text-2xs text-muted">{cat.temperature_note}</p>}
       </TabPanel>
       <TabPanel value="instructions">
+        <p className="mb-3 rounded-sm bg-surface-2 px-2 py-1.5 text-2xs text-ink-2">System prompt agent'ın kim olduğunu ve uyacağı kuralları anlatır; her LLM adımına eklenir. Örnek: 'Sen bir SRE asistanısın. Kısa, Türkçe yanıt ver; veride olmayanı iddia etme.'</p>
         <Row label="System prompt" htmlFor="ag-sys" issue={f("settings.instructions.system_prompt")}>
           <Textarea id="ag-sys" rows={7} disabled={readOnly} value={st.instructions.system_prompt} onChange={(e) => up("instructions", { system_prompt: e.target.value })} className="w-full text-xs" />
         </Row>
@@ -405,6 +509,7 @@ export function AgentSettings({ def, meta, cat, issues, readOnly, onDef, onMeta 
         )}
       </TabPanel>
       <TabPanel value="mcp">
+        <p className="mb-3 rounded-sm bg-surface-2 px-2 py-1.5 text-2xs text-ink-2">Agent'ın veri çekebileceği kaynak. MCP Tool node'u kullanacaksanız connector seçip izin verilen tool'ları işaretleyin.</p>
         <Row label="Connector" htmlFor="ag-con" issue={f("settings.tools.connector_id")}>
           <Select id="ag-con" disabled={readOnly} value={st.tools.connector_id ?? ""} onChange={(e) => up("tools", { connector_id: e.target.value || null, allowed_tools: [] })} className="w-full">
             <option value="">yok</option>
@@ -438,6 +543,7 @@ export function AgentSettings({ def, meta, cat, issues, readOnly, onDef, onMeta 
         </Row>
       </TabPanel>
       <TabPanel value="memory">
+        <p className="mb-3 rounded-sm bg-surface-2 px-2 py-1.5 text-2xs text-ink-2">Geçmiş kayıtları kullanmak için kaynağı 'platform' yapın. Geçmiş tur: Soru-Cevap'ta önceki kaç mesajın modele gönderileceği.</p>
         <Row label="RAG kaynağı" htmlFor="ag-mem" issue={f("settings.memory")}>
           <Select id="ag-mem" disabled={readOnly} value={st.memory.source} onChange={(e) => up("memory", { source: e.target.value as "none" | "platform" })} className="w-full">
             <option value="none">yok</option>
@@ -467,6 +573,7 @@ export function AgentSettings({ def, meta, cat, issues, readOnly, onDef, onMeta 
         </div>
       </TabPanel>
       <TabPanel value="policies">
+        <p className="mb-3 rounded-sm bg-surface-2 px-2 py-1.5 text-2xs text-ink-2">Güvenlik kuralları. Mandatory (lock simgeli) olanlar her agent'ta zorunlu çalışır; diğerlerini bu agent için kapatabilirsiniz.</p>
         <p className="mb-2 text-xs text-muted">
           Zorunlu platform politikaları (redaction, call limit, tool allowlist, tool parametre doğrulama) özel agent'larda da her koşulda çalışır. Yalnız
           zorunlu olmayan middleware'ler bu agent için kapatılabilir. Guardrail ve onay kuralları platform policy'sinden gelir.
@@ -497,6 +604,7 @@ export function AgentSettings({ def, meta, cat, issues, readOnly, onDef, onMeta 
         ))}
       </TabPanel>
       <TabPanel value="io">
+        <p className="mb-3 rounded-sm bg-surface-2 px-2 py-1.5 text-2xs text-ink-2">Girdi ve çıktının biçimi. Çoğu agent için varsayılanlar yeterlidir; zamanlanmış rapor JSON olacaksa çıktı şeması verin.</p>
         <label className="mb-3 flex items-center gap-2 text-xs text-ink-2">
           <input type="checkbox" disabled={readOnly} checked={st.io.streaming} onChange={(e) => up("io", { streaming: e.target.checked })} />
           Soru-cevapta streaming yanıt
@@ -518,6 +626,7 @@ export function AgentSettings({ def, meta, cat, issues, readOnly, onDef, onMeta 
         </Row>
       </TabPanel>
       <TabPanel value="limits">
+        <p className="mb-3 rounded-sm bg-surface-2 px-2 py-1.5 text-2xs text-ink-2">Kaçak çalışmayı önleyen sınırlar. Emin değilseniz varsayılanları bırakın.</p>
         <div className="grid grid-cols-2 gap-2">
           {(
             [

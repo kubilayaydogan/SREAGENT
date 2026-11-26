@@ -8,6 +8,7 @@ import AgentBuilderPage from "@/pages/AgentBuilderPage";
 import InvestigatePage from "@/pages/InvestigatePage";
 import { AuthProvider } from "@/services/auth";
 import { tokenStore } from "@/services/api";
+import { availableVars, checklist, connectionProblem, structureHints, TEMPLATES } from "@/features/agentbuilder/guide";
 import { SYSTEM_AGENT_ID, type AgentDetail, type AgentSummary, type Catalog, type Definition } from "@/features/agentbuilder/api";
 
 function json(data: unknown, status = 200) {
@@ -202,6 +203,69 @@ describe("Agent Builder", () => {
     const call = f.mock.calls.find(([u]) => String(u) === "/api/agents/import")!;
     const body = JSON.parse(String((call[1] as RequestInit).body));
     expect(body).toMatchObject({ target: "new", name: "Rapor Agent (içe aktarılan)", mapping: { "llm:1": "p-opus" } });
+  });
+});
+
+describe("Agent Builder rehberi", () => {
+  it("bağlantı kuralları neden bağlanamadığını açıklar", () => {
+    expect(connectionProblem(DEF, "llm_1", "start", null)).toMatch(/Başlangıç'a giriş/);
+    expect(connectionProblem(DEF, "result", "llm_1", null)).toMatch(/Sonuç son adımdır/);
+    expect(connectionProblem(DEF, "result", "start", null)).toMatch(/Başlangıç'a giriş/);
+    expect(connectionProblem(DEF, "llm_1", "llm_1", null)).toMatch(/kendisine/);
+    // llm_1 → start yerine döngü: result zaten llm_1'den sonra; llm_1'e geri bağlamak döngü
+    const loop = { ...DEF, workflow: { ...DEF.workflow, nodes: [...DEF.workflow.nodes, { id: "llm_2", type: "llm", label: "x", config: {}, position: { x: 0, y: 0 } }], edges: [...DEF.workflow.edges, { id: "e3", source: "llm_1", target: "llm_2", branch: null }] } };
+    expect(connectionProblem(loop, "llm_2", "llm_1", null)).toMatch(/döngü/);
+    expect(connectionProblem(DEF, "start", "result", null)).toBeNull();
+  });
+
+  it("değişkenler yalnız bağlı önceki adımlardan; eksik bağlantılar ipucu üretir", () => {
+    const names = availableVars(DEF, "result").map((v) => v.name);
+    expect(names).toEqual(expect.arrayContaining(["input", "now", "answer"]));
+    expect(availableVars(DEF, "llm_1").map((v) => v.name)).not.toContain("answer");
+    expect(structureHints(DEF)).toEqual({});
+    const loose = { ...DEF, workflow: { ...DEF.workflow, edges: [DEF.workflow.edges[0]] } };
+    const h = structureHints(loose);
+    expect(h.llm_1[0].kind).toBe("no_output");
+    expect(h.result[0].kind).toBe("no_input");
+  });
+
+  it("kontrol listesi ve şablonlar", () => {
+    const steps = checklist(DEF, { dirty: false, versions: 0, tested: false, errors: 0, modes: ["chat"] });
+    expect(steps.find((x) => x.key === "model")!.done).toBe(true);
+    expect(steps.find((x) => x.key === "test")!.done).toBe(false);
+    expect(steps.find((x) => x.key === "publish")!.done).toBe(false);
+    const cat = { ...CAT, connectors: [{ id: "c-1", name: "dt", enabled: true, tools: [{ name: "execute-dql", executable: true }] }] } as unknown as typeof CAT;
+    for (const t of TEMPLATES) {
+      const d = t.build(DEF, cat);
+      expect(structureHints(d)).toEqual({}); // her şablon tam bağlı
+      expect(d.workflow.nodes.filter((n) => n.type === "start")).toHaveLength(1);
+    }
+    const tel = TEMPLATES.find((t) => t.key === "telemetry")!.build(DEF, cat);
+    expect(tel.settings.tools.connector_id).toBe("c-1");
+    expect(tel.settings.tools.allowed_tools).toEqual(["execute-dql"]);
+  });
+
+  it("node rehberi: sonraki adım ekle araya girer ve bağlar; Rehber sekmesi adımları gösterir", async () => {
+    login();
+    mockFetch([
+      ["/api/auth/me", user("sre")],
+      ["/api/agents/catalog", CAT],
+      ["/api/agents/a-1", DETAIL],
+    ]);
+    wrap(<AgentBuilderPage />, "/agent-builder/a-1", "/agent-builder/:id?");
+    fireEvent.click(await screen.findByTestId("node-llm_1"));
+    const card = await screen.findByRole("note", { name: "node rehberi" });
+    expect(within(card).getByText(/Modele bir prompt gönderir/)).toBeInTheDocument();
+    // değişken çipi prompt'a ekler
+    fireEvent.click(within(screen.getByLabelText("Prompt").parentElement!).getByRole("button", { name: "{{now}}" }));
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe("{{input}} {{now}}");
+    fireEvent.click(within(card).getByRole("button", { name: /Koşul/ }));
+    expect(await screen.findByTestId("node-condition_1")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: /Rehber/ }));
+    const steps = await screen.findByRole("region", { name: "kurulum adımları" });
+    expect(within(steps).getByText("Tüm node'ları bağlayın")).toBeInTheDocument();
+    expect(within(steps).getByText(/condition_1: .*çıkış bağlı değil/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "agent nasıl çalışır" })).toBeInTheDocument();
   });
 });
 

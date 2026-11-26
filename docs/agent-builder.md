@@ -39,6 +39,31 @@ Bağımlılık kontrolleri (test ve yayında engelleyici, kayıtta uyarı):
 - tool agent allowlist'inde, connector onayında, platform policy'sinde ve zorunlu Tool allowlist middleware'inde izinli;
 - yürütme adapter'ı var (bugün yalnız Dynatrace `execute-dql`).
 
+## Rehberlik (editör)
+
+Editör, agent'ların nasıl çalıştığını az bilen bir kullanıcının da workflow kurabilmesi için yol gösterir. Kurallar `features/agentbuilder/guide.ts` dosyasındadır ve yalnız yön gösterir; son kararı backend doğrulaması verir.
+- **Şablonlar:** Yeni agent oluştururken ya da Rehber sekmesinden seçilir. Mevcut şablonlar:
+  - basit soru-cevap;
+  - Dynatrace verisiyle yanıt (veri yoksa ayrı dal);
+  - geçmiş kayıtlarla yanıt;
+  - zamanlanmış JSON risk raporu.
+
+  Şablon, etkin ilk LLM profilini ve çalıştırılabilir tool'u olan ilk connector'ı seçer.
+- **Rehber sekmesi:**
+  - kurulum kontrol listesi (mod, model, system prompt, connector / memory, sonuç, bağlantılar, kayıt, hata, test, yayın) ve sıradaki adım;
+  - "Agent nasıl çalışır?" açıklaması.
+- **Node rehberi:** Seçili node'un panelinde şunlar gösterilir:
+  - ne yaptığı, ne zaman kullanıldığı, öncesine ve sonrasına ne bağlanacağı;
+  - "Sonraki adımı ekle ve bağla" düğmeleri. Sonraki adım varsa yeni node araya girer; Koşul'da yeşil ve kırmızı yol ayrı ayrı eklenir.
+- **Değişken çipleri:** Yalnız bu node'a bağlı önceki adımların çıktılarını listeler (`{{input}}`, `{{answer}}`, `{{veri.status}}` …); tıklanan değişken alana eklenir.
+- **Canvas ipuçları:** Bağlı olmayan giriş ve çıkışlar ile Koşul'un eksik dalı node üzerinde turuncu yazıyla gösterilir.
+- **Bağlantı açıklamaları:** Geçersiz bir bağlantı sessizce reddedilmez; nedeni bildirim olarak gösterilir. Engellenen bağlantılar:
+  - Başlangıç'a giriş;
+  - Sonuç'tan çıkış;
+  - döngü;
+  - Koşul'da dal noktası dışından bağlantı.
+- **Yardım kutusu:** Canvas'taki kısa yardım kapatılabilir; tercih tarayıcıda saklanır.
+
 ## Çalışma
 
 `builder/engine.py` tanımı gerçek bir LangGraph `StateGraph`'ına derler; soru-cevapta AsyncPostgresSaver checkpointer'ı kullanılır. Özel agent'lar süreç genelindeki LLM ayarını değiştirmez. Her run, node'un çözülmüş profilinden kendi istemcisini (TracedChatAnthropic) kurar; bu sayede farklı modeldeki iki agent eşzamanlı çalışabilir.
