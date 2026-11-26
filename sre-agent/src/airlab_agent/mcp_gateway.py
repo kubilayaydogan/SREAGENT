@@ -282,11 +282,42 @@ class McpGateway:
 
     async def _one_inner(self, session, key: str, dql: str, call_id: str | None = None,
                          traced: bool = False) -> QueryResult:
+        """wrap_tool_call (Agent Middleware) bu doğrudan MCP istemci çağrısını sarar: allowlist, DQL doğrulama ve
+        query budget middleware'leri tools/call GÖNDERİLMEDEN karar verir; engellenen çağrı sunucuya gitmez."""
+        from . import middleware as mw
         call_id = call_id or str(uuid.uuid4())
         args = {"dqlQueryString": dql, "includeTypes": False}
         preview = request_preview(SERVER, DQL_TOOL, args if isinstance(dql, str) else {}, key)
-        bad = validate_dql(dql)
-        if bad:                                       # tools/call GÖNDERİLMEDİ
+        call = mw.Call(kind="tool", target=DQL_TOOL, task=key, connector=SERVER, tool_call_id=call_id,
+                       # kayıt görünümünde ham DQL YOK (MCP çağrı kaydıyla aynı politika): yalnız güvenli önizleme
+                       request={"query_key": key, "tool": DQL_TOOL, "connector": SERVER, "preview": preview,
+                                "_dql": dql},
+                       state={"queries_used": self.queries_used, "max_queries": self.max_queries})
+
+        def blocked(d) -> QueryResult:                # tools/call GÖNDERİLMEDİ; sonuç eski davranışla aynı
+            if d.code == "query_budget":
+                r = QueryResult(key, dql, "SKIPPED_BUDGET", error="query budget doldu", call_id=call_id)
+                return self._end(r, elapsed_ms=0, traced=traced, sent=False, preview=preview)
+            msg = f"DQL reddedildi: {d.reason}" if d.code == "dql_rejected" else                 f"middleware engelledi ({d.code or 'blocked'}): {d.reason}"
+            r = QueryResult(key, str(dql)[:MAX_DQL_CHARS], "ERROR", error=msg, call_id=call_id)
+            return self._end(r, elapsed_ms=0, traced=traced, outcome="rejected", sent=False, preview=preview)
+
+        async def send(_req) -> QueryResult:
+            try:
+                r = await self._send(session, key, dql, call_id, traced, args, preview)
+            except McpUnavailable as e:
+                call.attempts = list(getattr(e, "attempts", []))
+                raise
+            call.attempts = list(r.attempts)
+            call.response = {"status": r.status, "outcome": r.outcome, "records": len(r.records),
+                             "query_id": r.query_id}
+            return r
+        return await mw.run_tool_async(call, send, blocked)
+
+    async def _send(self, session, key: str, dql: str, call_id: str, traced: bool, args: dict,
+                    preview: dict) -> QueryResult:
+        bad = validate_dql(dql)                       # son savunma hattı (middleware ile aynı kural, çoğaltma değil)
+        if bad:
             r = QueryResult(key, str(dql)[:MAX_DQL_CHARS], "ERROR", error=f"DQL reddedildi: {bad}", call_id=call_id)
             return self._end(r, elapsed_ms=0, traced=traced, outcome="rejected", sent=False, preview=preview)
         if self.queries_used >= self.max_queries:

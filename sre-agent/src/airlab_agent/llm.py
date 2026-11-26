@@ -252,9 +252,16 @@ class Llm:
             msgs.append((h["role"], redact_text(h["content"][:1500], "llm")))
         msgs.append(("human", redact_text(question, "llm")))
         try:
-            budget_check("interpret_question")
-            runnable = self.chat.with_structured_output(AnalysisRequest, include_raw=True, method="json_schema")
-            out = runnable.invoke(msgs, config=child_config(self.callbacks, "interpret_question", metadata={"model": self.model_name}))
+            from . import middleware as mw          # before_model / wrap_model_call / after_model (client wrapper)
+            call = mw.Call(kind="model", target=self.model_name, task="interpret_question", request={"messages": msgs})
+
+            def go(req):
+                runnable = self.chat.with_structured_output(AnalysisRequest, include_raw=True, method="json_schema")
+                o = runnable.invoke(req["messages"], config=child_config(self.callbacks, "interpret_question",
+                                                                         metadata={"model": self.model_name}))
+                call.response = _usage_view(o.get("raw"))
+                return o
+            out = mw.run_model_sync(call, go)
             self._track(out["raw"])
             budget_add("interpret_question", self.model_name, out["raw"])
             if out.get("parsed") is None:
@@ -270,10 +277,16 @@ class Llm:
         human = (f"Kullanıcı sorusu: {redact_text(question, 'llm')}\n\n" if question else "") + \
             f"<analysis_data>\n{payload}\n</analysis_data>\n\nBu bulguları açıkla."
         try:
-            budget_check("explain_findings")
-            msg = self.rca_chat.invoke([("system", SYSTEM_EXPLAIN), ("human", human)],
-                                   config=child_config(self.callbacks, "explain_findings",
-                                                            metadata={"model": self.rca_model_name}))
+            from . import middleware as mw
+            call = mw.Call(kind="model", target=self.rca_model_name, task="explain_findings",
+                           request={"messages": [("system", SYSTEM_EXPLAIN), ("human", human)]})
+
+            def go(req):
+                m = self.rca_chat.invoke(req["messages"], config=child_config(self.callbacks, "explain_findings",
+                                                                              metadata={"model": self.rca_model_name}))
+                call.response = _usage_view(m)
+                return m
+            msg = mw.run_model_sync(call, go)
             self._track(msg)
             budget_add("explain_findings", self.rca_model_name, msg)
             if (msg.response_metadata or {}).get("stop_reason") == "refusal":
@@ -289,6 +302,13 @@ class Llm:
             raise
         except Exception as e:  # noqa: BLE001
             raise LlmUnavailable(f"{type(e).__name__}: {str(e)[:300]}") from None
+
+
+def _usage_view(msg) -> dict:
+    """Middleware kaydı için yanıt metadata'sı (içerik değil): token sayıları ve stop_reason."""
+    u = getattr(msg, "usage_metadata", None) or {}
+    return {"input_tokens": u.get("input_tokens"), "output_tokens": u.get("output_tokens"),
+            "stop_reason": (getattr(msg, "response_metadata", None) or {}).get("stop_reason")}
 
 
 def _log_terminology(text: str, where: str) -> None:

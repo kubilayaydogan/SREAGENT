@@ -189,7 +189,7 @@ def test_role_permission_matrix_preserves_previous_behaviour():
     assert ROLE_PERMISSIONS[Role.SRE] == {P.RECORD_READ} | sre_only | {P.MEMORY_WRITE}
     assert ROLE_PERMISSIONS[Role.ADMIN] == set(P)
     for p in (P.APPROVAL_DECIDE, P.SETTINGS_WRITE, P.CONNECTOR_MANAGE, P.LLM_MANAGE, P.SECRET_MANAGE, P.MEMORY_DELETE,
-              P.KNOWLEDGE_MANAGE, P.USER_MANAGE, P.MEMORY_APPROVE):
+              P.KNOWLEDGE_MANAGE, P.USER_MANAGE, P.MEMORY_APPROVE, P.MIDDLEWARE_MANAGE):
         assert not has(Role.SRE, p) and has(Role.ADMIN, p)
 
 

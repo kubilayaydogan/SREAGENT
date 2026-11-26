@@ -124,6 +124,9 @@ async def retention(rt, params: dict) -> dict[str, Any]:
         counts = await ret_svc.purge(s, ret)
         from .memory import manager as mem_mgr          # Agent Memory: expire + arşiv/olay saklama süreleri
         counts.update({f"memory_{k}": v for k, v in (await mem_mgr.retention(s, eff.get("agent_memory", {}))).items()})
+        from .middleware import queries as mw_q
+        counts["middleware_executions"] = await mw_q.retention(
+            s, (eff.get("agent_middleware") or {}).get("execution_retention_days", 30))
         out.update(counts)
         out["approvals_expired"] = await approvals.expire_due(s)
         out["auth_sessions_purged"] = await sessions.purge_expired(s)     # süresi 30+ gün önce dolmuş oturumlar

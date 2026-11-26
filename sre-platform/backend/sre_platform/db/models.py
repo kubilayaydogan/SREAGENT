@@ -1145,3 +1145,82 @@ class MemoryRetrieval(Base):
     duration_ms: Mapped[float | None] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ok")
     error: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+
+# ================================================================================================ Agent Middleware (0016)
+class MiddlewareConfig(Base):
+    """Kodda kayıtlı bir middleware'in GÜNCEL yapılandırması (tanım kodda: airlab_agent.middleware.REGISTRY).
+    Satır yoksa kod varsayılanı geçerlidir (version 0). `version` optimistic concurrency içindir."""
+    __tablename__ = "middleware_configs"
+    __table_args__ = ({"schema": SCHEMA},)
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    order: Mapped[int] = mapped_column("run_order", Integer, nullable=False)
+    params: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    scope: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_by: Mapped[str | None] = mapped_column(String(64))
+
+
+class MiddlewareConfigVersion(Base):
+    """Değişmez yapılandırma geçmişi: her kaydedilen sürümün tam (maskeli) snapshot'ı."""
+    __tablename__ = "middleware_config_versions"
+    __table_args__ = (UniqueConstraint("name", "version", name="uq_middleware_config_version"),
+                      Index("ix_middleware_config_versions_name", "name", text("version DESC")),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    change: Mapped[str] = mapped_column(String(32), nullable=False)          # update | enable | disable | reorder
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    actor: Mapped[str] = mapped_column(String(64), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MiddlewareExecution(Base):
+    """Bir middleware'in (veya sardığı çağrının / run kökünün) belirli bir run'daki yürütmesi.
+    entry_type: agent (run kökü) | call (model/tool çağrısı zarfı) | middleware (hook yürütmesi).
+    Sıralama `sequence` + `parent_execution_id` iledir (zaman damgasıyla değil). before/after maskeli ve sınırlı."""
+    __tablename__ = "middleware_executions"
+    __table_args__ = (Index("ix_middleware_exec_ts", text("started_at DESC")),
+                      Index("ix_middleware_exec_run", "run_id", "sequence"),
+                      Index("ix_middleware_exec_mw_ts", "middleware", text("started_at DESC")),
+                      Index("ix_middleware_exec_parent", "parent_execution_id"),
+                      Index("ix_middleware_exec_tool_call", "tool_call_id"),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    run_id: Mapped[str | None] = mapped_column(String(160))
+    run_kind: Mapped[str | None] = mapped_column(String(16))
+    user_id: Mapped[str | None] = mapped_column(String(64))           # chat_turn: yalnız sahibi görür (admin hepsini)
+    thread_id: Mapped[str | None] = mapped_column(String(160))
+    trace_id: Mapped[str | None] = mapped_column(String(64))
+    parent_execution_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    entry_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    middleware: Mapped[str | None] = mapped_column(String(64))
+    middleware_version: Mapped[int | None] = mapped_column(Integer)
+    hook: Mapped[str | None] = mapped_column(String(32))
+    target_kind: Mapped[str | None] = mapped_column(String(16))
+    target: Mapped[str | None] = mapped_column(String(128))
+    task: Mapped[str | None] = mapped_column(String(128))
+    connector: Mapped[str | None] = mapped_column(String(64))
+    tool_call_id: Mapped[str | None] = mapped_column(String(64))
+    attempt_no: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    overhead_ms: Mapped[float | None] = mapped_column(Float)
+    wrapped_ms: Mapped[float | None] = mapped_column(Float)
+    result: Mapped[str] = mapped_column(String(16), nullable=False)
+    decision: Mapped[str | None] = mapped_column(String(16))
+    outcome: Mapped[str | None] = mapped_column(String(24))
+    reason: Mapped[str | None] = mapped_column(String(300))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    policy: Mapped[str | None] = mapped_column(String(160))
+    changed_fields: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    before: Mapped[Any | None] = mapped_column(JSONB)
+    after: Mapped[Any | None] = mapped_column(JSONB)
+    truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    extra: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)

@@ -14,7 +14,8 @@ export type SectionId =
   | "observability"
   | "notifications"
   | "retention"
-  | "agent_memory";
+  | "agent_memory"
+  | "agent_middleware";
 export type FieldSource = "locked" | "admin" | "env" | "default";
 export type ApplyMode = "next_run" | "next_tick" | "restart";
 export type FieldKind = "bool" | "int" | "float" | "string" | "enum" | "object";

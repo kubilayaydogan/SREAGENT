@@ -16,7 +16,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from airlab_agent.llm import LlmUnavailable, _log_terminology, bound_llm_output, budget_add, budget_check
+from airlab_agent.llm import LlmUnavailable, _log_terminology, _usage_view, bound_llm_output, budget_add
 from airlab_agent.redact import redact_text
 from airlab_agent.terminology import with_policy
 from airlab_agent.tracing import child_config
@@ -99,10 +99,16 @@ class ClaudePort:
         msgs = [("system", sys)] + [(h["role"] if h["role"] != "user" else "human", redact_text(h["content"][:1500], "llm"))
                                     for h in history[-6:]] + [("human", redact_text(question, "llm"))]
         try:
-            budget_check("route_question")
-            r = self.llm.chat.with_structured_output(ChatRoute, include_raw=True, method="json_schema")
-            out = await r.ainvoke(msgs, config=child_config(self.llm.callbacks, "route_question",
-                                                            metadata={"model": self.model_name}))
+            from airlab_agent import middleware as mw   # before_model / wrap_model_call / after_model (client wrapper)
+            call = mw.Call(kind="model", target=self.model_name, task="route_question", request={"messages": msgs})
+
+            async def go(req):
+                r = self.llm.chat.with_structured_output(ChatRoute, include_raw=True, method="json_schema")
+                o = await r.ainvoke(req["messages"], config=child_config(self.llm.callbacks, "route_question",
+                                                                         metadata={"model": self.model_name}))
+                call.response = _usage_view(o.get("raw"))
+                return o
+            out = await mw.run_model_async(call, go)
             self.llm._track(out["raw"])
             budget_add("route_question", self.model_name, out["raw"])
             if out.get("parsed") is None:
@@ -118,11 +124,16 @@ class ClaudePort:
         system = with_policy(system)
         chat = getattr(self.llm, "rca_chat", self.llm.chat) if rca else self.llm.chat
         try:
-            budget_check("answer")
+            from airlab_agent import middleware as mw   # streaming: chunk'lar buffer'lanmadan anında iletilir
+            model = self.rca_model_name if rca else self.model_name
+            call = mw.Call(kind="model", target=model, task="answer",
+                           request={"messages": [("system", system), ("human", human)], "stream": True})
+
+            def go(req):
+                return chat.astream(req["messages"], config=child_config(self.llm.callbacks, "answer",
+                                                                         metadata={"model": model, "rca": rca}))
             last = None
-            async for chunk in chat.astream([("system", system), ("human", human)],
-                                                     config=child_config(self.llm.callbacks, "answer",
-                                                                    metadata={"model": self.rca_model_name if rca else self.model_name, "rca": rca})):
+            async for chunk in mw.stream_model(call, go):
                 last = chunk if last is None else last + chunk
                 c = chunk.content
                 if isinstance(c, str):

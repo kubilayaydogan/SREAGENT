@@ -27,6 +27,7 @@ class P(str, Enum):
     MEMORY_DELETE = "memory:delete"             # checkpoint thread silme, memory kaydı silme
     MEMORY_WRITE = "memory:write"               # memory kaydı oluşturma / düzenleme / arşiv / verify, procedural öneri
     MEMORY_APPROVE = "memory:approve"           # procedural memory onayı (four-eyes), memory export
+    MIDDLEWARE_MANAGE = "middleware:manage"     # agent middleware yapılandırması (etkinlik, order, kapsam, parametre)
     KNOWLEDGE_MANAGE = "knowledge:manage"       # runbook
     USER_MANAGE = "user:manage"
 

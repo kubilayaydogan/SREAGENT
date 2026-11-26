@@ -338,10 +338,25 @@ class MemorySettings(_Section):
         help="Güvenilmeyen kaynak procedural memory'ye yazamaz ve kendini 'verified' işaretleyemez"))
 
 
+# ------------------------------------------------------------------------------------------------ middleware
+class MiddlewareSettings(_Section):
+    """Agent Middleware kayıt ayarları. Middleware tanımları kodda, middleware yapılandırması (etkin, order, kapsam,
+    parametre) Agent Middleware sayfasında versiyonlu tutulur; burası yalnız execution kaydını yönetir."""
+    record_executions: bool = Field(True, json_schema_extra=_meta(
+        help="Middleware execution kayıtları (metadata). Kapalıyken middleware'ler yine çalışır, yalnız kayıt yazılmaz"))
+    capture_payloads: bool = Field(False, json_schema_extra=_meta(
+        help="Önceki / sonraki payload görünümü ve diff kaydedilir (kayıttan önce maskelenir, boyut sınırlı)"))
+    max_payload_bytes: int = Field(16000, ge=1000, le=200000, json_schema_extra=_meta(
+        help="Tek payload görünümünün en büyük boyutu; aşan kısım kırpılır ve 'truncated' işaretlenir", unit="bayt"))
+    execution_retention_days: int = Field(30, ge=1, le=3650, json_schema_extra=_meta(
+        apply="next_tick", help="Middleware execution kayıtları bu süreden sonra silinir", unit="gün"))
+
+
 SECTIONS: dict[str, type[_Section]] = {
     "general": GeneralSettings, "agent": AgentSettings, "scheduling": SchedulingSettings, "risk": RiskSettings,
     "llm": LlmSettings, "observability": ObservabilitySettings, "notifications": NotificationSettings,
     "retention": RetentionSettings, "agent_memory": MemorySettings,
+    "agent_middleware": MiddlewareSettings,
 }
 
 
@@ -388,6 +403,8 @@ LABELS = {
     "require_procedural_approval": "Require Procedural Memory Approval", "pii_redaction_enabled": "Enable PII Redaction",
     "secret_redaction_enabled": "Enable Secret Redaction",
     "poisoning_protection_enabled": "Enable Memory Poisoning Protection",
+    "record_executions": "Record Middleware Executions", "capture_payloads": "Capture Payloads",
+    "max_payload_bytes": "Maximum Payload Size", "execution_retention_days": "Execution Retention Period",
 }
 
 

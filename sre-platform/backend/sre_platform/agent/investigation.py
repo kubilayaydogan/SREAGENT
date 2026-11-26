@@ -13,6 +13,7 @@ import logging
 import threading
 import time
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
 
@@ -39,6 +40,9 @@ class InvestigationTimeout(Exception):
     pass
 
 
+_MW_SESSION: ContextVar = ContextVar("sre_mw_session", default=None)
+
+
 class InvestigationRunner:
     def __init__(self, rt):
         self.rt = rt
@@ -46,11 +50,29 @@ class InvestigationRunner:
     async def run(self, inv_id: uuid.UUID, **kw) -> tuple[Investigation, dict | None]:
         """Memory event korelasyonu (run_id, thread_id, ayar snapshot'ı) koşu boyunca bağlanır ve koşu bitince
         çağıranın bağlamına (ör. sohbet turu) geri döner."""
+        from airlab_agent import middleware as mw
+
         from ..memory import events as mem_events
         token = mem_events.CTX.set(mem_events.CTX.get())
+        mw_token = mw.RUN.set(mw.RUN.get())             # middleware run bağlamı koşu sonunda çağırana geri döner
+        sess_token = _MW_SESSION.set(None)
+        failed: tuple[str, str] | None = None
         try:
             return await self._run(inv_id, **kw)
+        except BaseException as e:
+            failed = ("cancelled" if isinstance(e, asyncio.CancelledError) else "failed",
+                      redact_text(f"{type(e).__name__}: {e}"))
+            raise
         finally:
+            # Middleware run'ı koşunun EN SONUNDA kapanır (correlation dahil tüm MCP / LLM çağrıları run içinde)
+            msess = _MW_SESSION.get()
+            if msess is not None:
+                try:
+                    await msess.finish(*(getattr(msess, "final", None) or failed or ("completed", None)))
+                except BaseException:  # noqa: BLE001 — kayıt kapanışı koşu sonucunu değiştirmez
+                    log.exception("middleware run kapanışı başarısız")
+            _MW_SESSION.reset(sess_token)
+            mw.RUN.reset(mw_token)
             mem_events.CTX.reset(token)
 
     async def _run(self, inv_id: uuid.UUID, *, emit, cancel: threading.Event | None = None,
@@ -122,6 +144,15 @@ class InvestigationRunner:
         mem_events.CTX.set(mem_events.MemCtx(
             run_id=tsess.run_id if tsess else run_id, thread_id=run_id, trace_id=str(inv_id), node=None,
             correlation_id=run_id, user_id=_mc.user_id, cfg=(rc.effective or {}).get("agent_memory") or {}))
+        from ..middleware import runtime as mw_rt
+        msess = None
+        try:                                        # middleware bağlamı: snapshot + before_agent (custom run wrapper)
+            msess = await mw_rt.start(self.rt, rc, run_id=tsess.run_id if tsess else run_id, kind="analysis",
+                                      graph="airlab-sre-analysis", thread_id=run_id, trace_id=str(inv_id),
+                                      user_id=_mc.user_id)
+            _MW_SESSION.set(msess)
+        except Exception:  # noqa: BLE001 — kayıt başlatılamadı; zorunlu middleware'ler kod varsayılanıyla çalışır
+            log.exception("middleware run bağlamı başlatılamadı")
         use_llm = core_llm is not None
         gw_factory = rc.gateway_factory
         callbacks = (self.rt.callbacks or getattr(core_llm, "callbacks", None)) if rc.trace else []
@@ -171,6 +202,9 @@ class InvestigationRunner:
                 log.exception("analiz başarısız")
         if tsess is not None:
             await tsess.finish("failed" if error else "completed", error)
+        if msess is not None:                       # after_agent yalnız normal tamamlanmada; kapanış run() sonunda
+            msess.final = ("cancelled" if cancelled else "timeout" if timed_out else
+                           "failed" if error else "completed", error)
         # açık kalan araç kayıtlarını kapat
         if rows:
             async with transaction(sm) as s:

@@ -186,6 +186,11 @@ def data_banner(report: dict | None) -> str:
     return ("> **Uyarı:** " + " ".join(parts) + "\n\n") if parts else ""
 
 
+def _mw_status(e: BaseException) -> str:
+    import asyncio
+    return "cancelled" if isinstance(e, asyncio.CancelledError) else "failed"
+
+
 class ChatOrchestrator:
     def __init__(self, rt):
         self.rt = rt
@@ -434,7 +439,8 @@ class ChatOrchestrator:
         graph = self._graph(ctx)
         rid = uuid.UUID(ctx.result["user_message_id"])                 # trace id = kullanıcı mesajının id'si
         tsess = await self._trace_start(ctx, attempt=1)
-        err = None
+        msess = await self._mw_start(ctx, tsess, rid)
+        err, status = None, "completed"
         try:
             with self._mem_bind(ctx, tsess, rid):
                 state = await self._invoke(ctx, graph, {"question": question,
@@ -442,12 +448,27 @@ class ChatOrchestrator:
                                            self._config(ctx, run_id=rid), tsess)
         except BaseException as e:
             err = f"{type(e).__name__}: {e}"
+            status = _mw_status(e)
             raise
         finally:
             await self._link(ctx, rid)
             if tsess is not None:
                 await tsess.finish("failed" if err else "completed", err)
+            if msess is not None:
+                await msess.finish(status, err)
         return await self._finish(ctx, state)
+
+    async def _mw_start(self, ctx: TurnContext, tsess, rid):
+        """Agent Middleware run bağlamı (snapshot + before_agent). Başlatılamazsa tur kod varsayılanıyla sürer."""
+        from ..middleware import runtime as mw_rt
+        try:
+            return await mw_rt.start(self.rt, ctx.rc, kind="chat_turn", graph="chat-turn", thread_id=ctx.thread_id,
+                                     run_id=tsess.run_id if tsess is not None else
+                                     f"chat-{ctx.result.get('user_message_id') or rid}",
+                                     trace_id=str(rid), user_id=str(ctx.user_id))
+        except Exception:  # noqa: BLE001
+            log.exception("middleware run bağlamı başlatılamadı")
+            return None
 
     async def _trace_start(self, ctx: TurnContext, *, attempt: int):
         """Agent Trace run'ı: platform run_id = turun kullanıcı mesajı; sürdürülen tur yeni girişim."""
@@ -514,18 +535,22 @@ class ChatOrchestrator:
                 if ctx.result.get("user_message_id") else 1
         rid = uuid.uuid4()
         tsess = await self._trace_start(ctx, attempt=max(2, attempt))
-        err = None
+        msess = await self._mw_start(ctx, tsess, rid)
+        err, status = None, "completed"
         try:
             with self._mem_bind(ctx, tsess, rid):
                 state = await self._invoke(ctx, graph, None,
                                            self._config(ctx, run_id=rid, attempt=attempt, resumed=True), tsess)
         except BaseException as e:
             err = f"{type(e).__name__}: {e}"
+            status = _mw_status(e)
             raise
         finally:
             await self._link(ctx, rid, resumed=True)
             if tsess is not None:
                 await tsess.finish("failed" if err else "completed", err)
+            if msess is not None:
+                await msess.finish(status, err)
         return await self._finish(ctx, state)
 
     async def pending(self, thread_id: str) -> list[str]:

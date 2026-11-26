@@ -15,6 +15,7 @@ export const PERM_LABEL: Record<string, string> = {
   "memory:delete": "Checkpoint / memory kaydı silme",
   "memory:write": "Memory kaydı oluşturma, düzenleme, arşivleme, verify",
   "memory:approve": "Procedural memory onayı, memory export",
+  "middleware:manage": "Agent middleware yapılandırması (etkinlik, sıra, kapsam, parametre)",
   "knowledge:manage": "Runbook yönetimi",
   "user:manage": "Kullanıcı ve oturum yönetimi",
 };

@@ -53,6 +53,7 @@ class RunConfig:
     snapshot: dict
     effective: dict
     notes: list[str] = field(default_factory=list)
+    middleware: dict = field(default_factory=dict)        # Agent Middleware yapılandırma snapshot'ı (run boyunca sabit)
 
 
 def merged_cfg(base_cfg: dict, eff: dict) -> dict:
@@ -101,6 +102,10 @@ async def run_config(rt, *, trigger: str = "manual") -> RunConfig:
         llm_eff = eff["llm"]
         profiles, prof_snap, notes = await llm_profiles.task_profiles(s, llm_eff,
                                                                       allowed=llm_profiles.allowed_models(rt))
+        from ..middleware import service as mw_service
+        mw_snap = await mw_service.snapshot(s)
+    from airlab_agent import middleware as _mw
+    _mw.set_fallback_config(mw_snap)                # run dışı çağrılar (watch) en son yüklenen yapılandırmayı kullanır
     a, o = eff["agent"], eff["observability"]
     has_llm = rt.llm is not None and a["llm_enabled"]
     llm_chat = has_llm and profiles.get("chat", True) is not None
@@ -117,12 +122,14 @@ async def run_config(rt, *, trigger: str = "manual") -> RunConfig:
                 "model_override": llm_eff.get("model_override")},
         "tracing": {"langsmith": trace, "sampling_rate": o["sampling_rate"]},
         "memory": eff.get("agent_memory", {}),
+        "middleware": {n: {"version": c["version"], "enabled": c["enabled"], "order": c["order"]}
+                       for n, c in mw_snap.items()},
     }
     snapshot["hash"] = _hash({k: v for k, v in snapshot.items() if k != "trigger"})
     return RunConfig(agent=agent, timeout_s=int(a["run_timeout_s"]), recursion_limit=int(a["recursion_limit"]),
                      gateway_factory=gw, llm_chat=llm_chat, llm_rca=llm_rca,
                      profiles={k: v for k, v in profiles.items() if v}, model_override=llm_eff.get("model_override"),
-                     trace=trace, snapshot=snapshot, effective=eff, notes=notes)
+                     trace=trace, snapshot=snapshot, effective=eff, notes=notes, middleware=mw_snap)
 
 
 def apply_llm(rt, rc: RunConfig) -> None:

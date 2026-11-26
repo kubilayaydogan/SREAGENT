@@ -89,6 +89,7 @@ def bootstrap(rt) -> tuple[dict[str, dict], dict[str, dict[str, str]]]:
         "retention": {"investigations_days": ps.retention_days, "watch_events_days": ps.retention_days,
                       "llm_runs_days": ps.retention_days},
         "agent_memory": {},
+        "agent_middleware": {},
     }
     # kaynak: ortam değişkeni tanımlıysa ya da AGENT_CONFIG paket varsayılanını değiştirdiyse "env"
     yaml_paths = {
