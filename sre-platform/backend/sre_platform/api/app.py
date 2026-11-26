@@ -40,6 +40,8 @@ async def bootstrap(rt) -> None:
         raise RuntimeError(f"veritabanı şeması hazır değil ({detail}); önce 'sre-platform migrate' çalıştırın")
     async with transaction(rt.sm) as s:
         await applications.sync_from_config(s, rt.agent.cfg)
+        from ..builder.service import ensure_system_agent
+        await ensure_system_agent(s)            # gömülü SRE Agent kaydı (migration tohumu silinmişse yeniden)
         if await users.ensure_admin(s, rt.ps.admin_username, rt.ps.admin_password):
             log.info("ilk admin kullanıcı oluşturuldu", extra={"username": rt.ps.admin_username})
     from ..settings.runtime import apply_startup
@@ -204,14 +206,35 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
         code = {403: "forbidden", 404: "not_found", 409: "conflict"}.get(e.status, "middleware_config_invalid")
         return _err(e.status, code, e.message, e.detail or None)
 
+    from ..builder.package import PackageInvalid, SensitiveContent
+    from ..builder.service import Invalid as AgentInvalid
+    from ..builder.service import NotRunnable
+
+    @app.exception_handler(AgentInvalid)
+    async def _ai(_, e: AgentInvalid):
+        return _err(422, "agent_invalid", e.message, e.issues)
+
+    @app.exception_handler(NotRunnable)
+    async def _nr(_, e: NotRunnable):
+        return _err(409, e.code, e.message)
+
+    @app.exception_handler(SensitiveContent)
+    async def _sens(_, e: SensitiveContent):
+        return _err(422, "sensitive_content", "dışa aktarma engellendi: serbest metin alanlarında hassas bilgi var; "
+                                              "alanları düzeltip tekrar deneyin", e.fields)
+
+    @app.exception_handler(PackageInvalid)
+    async def _pkg(_, e: PackageInvalid):
+        return _err(422, "package_invalid", e.message, e.issues or None)
+
     @app.exception_handler(RequestValidationError)
     async def _rv(_, e: RequestValidationError):
         details = [{"loc": list(x.get("loc", [])), "msg": x.get("msg"), "type": x.get("type")} for x in e.errors()]
         return _err(422, "validation_error", "istek doğrulanamadı", details)
 
-    from .routes import agent, auth, catalog, agent_traces, context_windows, mcp_calls, memory, middleware, records
+    from .routes import agent, agents, auth, catalog, agent_traces, context_windows, mcp_calls, memory, middleware, records
     from .routes import settings as settings_routes
     for r in (auth.router, catalog.router, catalog.system, agent.router, records.router, mcp_calls.router, agent_traces.router,
-              memory.router, middleware.router, context_windows.router, settings_routes.router):
+              memory.router, middleware.router, context_windows.router, agents.router, settings_routes.router):
         app.include_router(r, prefix="/api")
     return app

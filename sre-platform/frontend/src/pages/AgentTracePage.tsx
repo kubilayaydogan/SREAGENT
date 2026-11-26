@@ -10,6 +10,7 @@ import { Tabs, TabPanel } from "@/components/ui/overlay";
 import { Badge, buttonVariants, Card, Input, Mono, Segmented, Select, Skeleton } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, Notice, Page, PageHeader, Pagination, TableSkeleton } from "@/components/ui/states";
 import { useAgentTrace, useAgentTraces, useNodeExec, useTraceCall, useTraceEvent } from "@/hooks/queries";
+import { useAgents } from "@/features/agentbuilder/api";
 import { streamRun } from "@/services/sse";
 import { cn, fmtDuration, fmtTime } from "@/lib/utils";
 import type { NodeExec, Snapshot, TraceCapture, TraceDetail, TraceEventFull, TraceEventMeta, TraceEventType, TraceRun } from "@/types/api";
@@ -58,7 +59,7 @@ const STATUS_TR: Record<string, string> = {
   cancelled: "iptal edildi",
   queued: "kuyrukta",
 };
-const KIND_TR = { analysis: "Analiz", chat_turn: "Sohbet turu" } as const;
+const KIND_TR = { analysis: "Analiz", chat_turn: "Sohbet turu", custom_agent: "Özel agent" } as const;
 const NOT_RECORDED = "Bu çalıştırma için trace verisi kaydedilmemiş";
 const UNOBSERVED = "Gözlemlenemedi";
 
@@ -74,7 +75,7 @@ function StatusDot({ status }: { status: string }) {
 }
 
 // ---------------------------------------------------------------- liste
-const FILTER_KEYS = ["kind", "status", "q", "recorded"];
+const FILTER_KEYS = ["kind", "status", "q", "recorded", "agent_id", "agent_version", "agent_mode"];
 
 export default function AgentTracePage() {
   const { key } = useParams();
@@ -84,7 +85,18 @@ export default function AgentTracePage() {
 function TraceList() {
   const { get: g, set, clear } = useUrlFilters();
   const page = Number(g("page") || 1);
-  const params = { kind: g("kind") || undefined, status: g("status") || undefined, q: g("q") || undefined, recorded: g("recorded") || undefined, page, size: 50 };
+  const params = {
+    kind: g("kind") || undefined,
+    status: g("status") || undefined,
+    q: g("q") || undefined,
+    recorded: g("recorded") || undefined,
+    agent_id: g("agent_id") || undefined,
+    agent_version: g("agent_version") || undefined,
+    agent_mode: g("agent_mode") || undefined,
+    page,
+    size: 50,
+  };
+  const agents = useAgents({ archived: true });
   const { data, isLoading, error, refetch, isFetching } = useAgentTraces(params);
   const active = FILTER_KEYS.filter((k) => g(k)).length;
   return (
@@ -97,6 +109,23 @@ function TraceList() {
             <option value="">Tüm türler</option>
             <option value="analysis">Analiz</option>
             <option value="chat_turn">Sohbet turu</option>
+            <option value="custom_agent">Özel agent</option>
+          </Select>
+          <Select aria-label="agent" value={g("agent_id")} onChange={(e) => set("agent_id", e.target.value)} className="w-44">
+            <option value="">Tüm agent'lar</option>
+            {(agents.data?.items ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </Select>
+          <Input aria-label="agent sürümü" placeholder="sürüm (v1, builtin)" value={g("agent_version")} onChange={(e) => set("agent_version", e.target.value.trim())} className="w-36" />
+          <Select aria-label="agent modu" value={g("agent_mode")} onChange={(e) => set("agent_mode", e.target.value)} className="w-36">
+            <option value="">Tüm modlar</option>
+            <option value="chat">Soru-Cevap</option>
+            <option value="scheduled">Zamanlanmış</option>
+            <option value="test">Test</option>
+            <option value="manual">Manuel</option>
           </Select>
           <Select aria-label="durum" value={g("status")} onChange={(e) => set("status", e.target.value)} className="w-36">
             <option value="">Tüm durumlar</option>
@@ -142,6 +171,7 @@ function TraceList() {
                         <div className="text-2xs text-muted">
                           {KIND_TR[r.kind]}
                           {r.parent_run_id && " · alt çalıştırma"}
+                          {r.agent_version && r.agent_version !== "builtin" && ` · ${r.agent_version}`}
                         </div>
                       </td>
                       <td className="text-xs">{r.trigger ?? "—"}</td>

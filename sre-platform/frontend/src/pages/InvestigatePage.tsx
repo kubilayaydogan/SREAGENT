@@ -2,14 +2,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, Loader2, PanelLeft, RotateCcw, Search, WifiOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { toast } from "sonner";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { Markdown } from "@/components/Markdown";
-import { Button, Skeleton } from "@/components/ui/primitives";
+import { Button, Select, Skeleton } from "@/components/ui/primitives";
 import { ErrorState } from "@/components/ui/states";
 import { Composer, type TimeChoice } from "@/features/chat/Composer";
 import { ConversationSidebar } from "@/features/chat/ConversationSidebar";
 import { FocusBar } from "@/features/chat/FocusBar";
 import { InvestigationCard } from "@/features/chat/InvestigationCard";
+import { SYSTEM_AGENT_ID, useAgents } from "@/features/agentbuilder/api";
 import { errorToast, useConversation, useMessages } from "@/hooks/queries";
 import type { RunState } from "@/hooks/runReducer";
 import { useAgentRun } from "@/hooks/useAgentRun";
@@ -147,6 +149,8 @@ export default function InvestigatePage() {
   const [pendingUser, setPendingUser] = useState<string | null>(null);
   const [app, setApp] = useState("");
   const [showSide, setShowSide] = useState(false);
+  // Agent seçimi: yeni konuşmada seçilen agent (boş = platform varsayılanı); mevcut konuşma kendi agent'ına bağlıdır
+  const [pick, setPick] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
   const attachedFor = useRef<string | null>(null);
   const runFailed = useRef(false);
@@ -212,6 +216,7 @@ export default function InvestigatePage() {
       const r = await api.post<RunOut>("/agent/chat", {
         message: text,
         conversation_id: conversationId ?? null,
+        agent_id: conversationId ? null : pick || null,
         application_id: app || null,
         time_range: time,
       });
@@ -248,6 +253,51 @@ export default function InvestigatePage() {
     setShowSide(false);
     nav("/investigate");
   }
+
+  const canRunAgents = can("sre");
+  const agentList = useAgents({ mode: "chat", runnable: true }, canRunAgents);
+  const choices = agentList.data?.items ?? [];
+  const defaultAgent = agentList.data?.default_chat_agent_id ?? SYSTEM_AGENT_ID;
+  const convAgent = conversationId ? (conv.data?.agent_id ?? (conv.data ? SYSTEM_AGENT_ID : null)) : null;
+  const current = convAgent ?? (pick || defaultAgent);
+  const currentAgent = choices.find((a) => a.id === current);
+
+  function changeAgent(v: string) {
+    if (conversationId && v !== convAgent) {
+      setPick(v);
+      nav("/investigate");
+      toast.info("Agent değişti: yeni konuşma başlatıldı", { description: "Önceki konuşma kendi agent'ıyla kayıtlı kalır." });
+      return;
+    }
+    setPick(v === defaultAgent ? "" : v);
+  }
+
+  const agentSlot = canRunAgents && choices.length > 1 && (
+    <Select
+      aria-label="agent seçimi"
+      title="Soru-Cevap agent'ı. Değiştirmek yeni konuşma başlatır."
+      value={current}
+      onChange={(e) => changeAgent(e.target.value)}
+      disabled={busy}
+      className="h-8 w-44 text-xs"
+    >
+      {!currentAgent && convAgent && <option value={convAgent}>kullanılamayan agent</option>}
+      {choices.map((a) => (
+        <option key={a.id} value={a.id}>
+          {a.name}
+          {a.id === defaultAgent ? " (varsayılan)" : ""}
+        </option>
+      ))}
+    </Select>
+  );
+  const agentNote =
+    convAgent && !currentAgent && agentList.data ? (
+      <p className="mt-1 text-2xs text-st-warning-ink">Bu konuşmanın agent'ı artık çalıştırılamıyor (yayından kaldırılmış ya da arşivlenmiş); yeni konuşma başlatın.</p>
+    ) : currentAgent && currentAgent.kind === "custom" ? (
+      <p className="mt-1 text-2xs text-muted">
+        Agent: <b>{currentAgent.name}</b> {currentAgent.published_version_label} · {currentAgent.model?.model ?? ""}
+      </p>
+    ) : null;
 
   const items = msgs.data?.items ?? [];
   const lastAssistant = [...items].reverse().find((m) => m.role === "assistant");
@@ -323,6 +373,8 @@ export default function InvestigatePage() {
           disabledReason="İzleyici rolü agent çalıştıramaz"
           app={app}
           onApp={setApp}
+          agentSlot={agentSlot}
+          footnote={agentNote}
         />
       </section>
     </div>

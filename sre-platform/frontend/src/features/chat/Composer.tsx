@@ -1,5 +1,5 @@
 import { SendHorizontal, Square } from "lucide-react";
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { AppSelect } from "@/components/filters";
 import { Button, Input, Select } from "@/components/ui/primitives";
 
@@ -27,7 +27,7 @@ function toIso(local: string): string | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
-export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app, onApp }: {
+export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app, onApp, agentSlot, footnote }: {
   onSend: (text: string, time: TimeChoice | null) => void;
   onCancel: () => void;
   busy: boolean;
@@ -35,6 +35,9 @@ export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app
   disabledReason?: string;
   app: string;
   onApp: (v: string) => void;
+  /** Gönder düğmesinin yanında agent seçici (Agent Builder). */
+  agentSlot?: ReactNode;
+  footnote?: ReactNode;
 }) {
   const [text, setText] = useState("");
   const [preset, setPreset] = useState("");
@@ -95,6 +98,7 @@ export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app
             placeholder={disabled ? disabledReason : "Örn. Reservation uygulaması neden yavaşladı?  (Enter: gönder, Shift+Enter: satır)"}
             className="max-h-40 flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] text-ink placeholder:text-muted focus:outline-none"
           />
+          {agentSlot}
           {busy ? (
             <Button variant="outline" size="md" onClick={onCancel} aria-label="durdur">
               <Square /> Durdur
@@ -105,6 +109,7 @@ export function Composer({ onSend, onCancel, busy, disabled, disabledReason, app
             </Button>
           )}
         </div>
+        {footnote}
         <p className="mt-1.5 text-2xs text-muted">
           Agent yalnız okuma yapar (Dynatrace MCP query'leri). Sonuçlar correlation temelli hipotezdir; kritik aksiyonlar onay akışından geçer.{" "}
           Sorunuz ve oluşan analiz (investigation) ekipteki tüm kullanıcılara görünür; sohbet mesajları yalnız size aittir.

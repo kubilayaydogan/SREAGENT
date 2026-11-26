@@ -118,6 +118,7 @@ export interface Conversation {
   thread_id: string;
   application_id: string | null;
   archived: boolean;
+  agent_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -586,6 +587,8 @@ export type AgentEventType =
   | "message_saved"
   | "memory_recalled"
   | "suggestions"
+  | "agent_node"
+  | "agent_result"
   | "done";
 
 export interface AgentEvent<T = Record<string, unknown>> {
@@ -678,7 +681,7 @@ export interface LlmObservability {
 }
 
 // ---------------------------------------------------------------- Agent Trace
-export type TraceKind = "analysis" | "chat_turn";
+export type TraceKind = "analysis" | "chat_turn" | "custom_agent";
 export type TraceCapture = "complete" | "truncated" | "partial" | "failed" | "none";
 export type TraceEventType =
   | "run_start" | "run_end" | "node_start" | "node_end" | "state_out" | "transition" | "routing" | "stream"
@@ -700,6 +703,9 @@ export interface TraceRunRow {
   recorded: boolean;
   problems: number;
   truncated_count: number;
+  agent_id?: string | null;
+  agent_version?: string | null;
+  agent_mode?: string | null;
 }
 
 export interface TraceRun {

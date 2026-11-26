@@ -124,6 +124,7 @@ class ConversationOut(Out):
     thread_id: str
     application_id: str | None
     archived: bool
+    agent_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -161,6 +162,7 @@ class TimeRangeIn(In):
 class ChatIn(In):
     message: str = Field(min_length=1, max_length=4000)
     conversation_id: uuid.UUID | None = None
+    agent_id: uuid.UUID | None = None            # boş: konuşmanın agent'ı / platform soru-cevap varsayılanı
     application_id: str | None = None
     time_range: TimeRangeIn | None = None
 

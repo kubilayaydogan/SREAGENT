@@ -15,7 +15,7 @@ def test_my_permissions_reflect_role(api_settings, tmp_path):
         me = (await c.get("/api/auth/permissions", headers=v)).json()
         assert me == {"role": "viewer", "permissions": ["record:read"]}
         adm = (await c.get("/api/auth/permissions", headers=h)).json()
-        assert "user:manage" in adm["permissions"] and len(adm["permissions"]) == 18      # + memory:write, memory:approve (0015), middleware:manage (0016)
+        assert "user:manage" in adm["permissions"] and len(adm["permissions"]) == 20      # + memory:write, memory:approve (0015), middleware:manage (0016), agent:build, agent:publish (0018)
         assert (await c.get("/api/auth/permissions")).status_code == 401
     with_client(api_settings, tmp_path, fn)
 

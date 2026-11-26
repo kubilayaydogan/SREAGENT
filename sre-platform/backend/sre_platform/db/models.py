@@ -203,6 +203,8 @@ class Conversation(Base):
     thread_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)   # LangGraph checkpoint thread
     application_id: Mapped[str | None] = mapped_column(ForeignKey(f"{SCHEMA}.applications.id", ondelete="SET NULL"))
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    # Agent Builder: konuşmanın agent'ı (NULL = gömülü SRE Agent). Agent değişirse yeni konuşma açılır.
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(f"{SCHEMA}.agents.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
     messages: Mapped[list[Message]] = relationship(back_populates="conversation", cascade="all, delete-orphan",
@@ -935,7 +937,7 @@ class AgentTraceRun(Base):
     __table_args__ = (Index("ix_agent_trace_runs_started", text("started_at DESC")),
                       Index("ix_agent_trace_runs_investigation", "investigation_id"),
                       Index("ix_agent_trace_runs_conversation", "conversation_id"),
-                      CheckConstraint("kind IN ('analysis', 'chat_turn')", name="ck_agent_trace_runs_kind"),
+                      CheckConstraint("kind IN ('analysis', 'chat_turn', 'custom_agent')", name="ck_agent_trace_runs_kind"),
                       CheckConstraint("status IN ('running', 'completed', 'failed', 'interrupted')",
                                       name="ck_agent_trace_runs_status"),
                       {"schema": SCHEMA})
@@ -961,6 +963,10 @@ class AgentTraceRun(Base):
     capture_errors: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
     lost_events: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
     error: Mapped[str | None] = mapped_column(Text)
+    # Agent Builder: NULL = gömülü SRE Agent. agent_version: "v3" | "draft" | "builtin"
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    agent_version: Mapped[str | None] = mapped_column(String(32))
+    agent_mode: Mapped[str | None] = mapped_column(String(16))
     created_at: Mapped[datetime] = _created()
 
 
@@ -1283,3 +1289,89 @@ class LlmContextCall(Base):
     request_id: Mapped[str | None] = mapped_column(String(80))
     trace_call_id: Mapped[str | None] = mapped_column(String(64))
     middleware_execution_id: Mapped[str | None] = mapped_column(String(64))
+
+
+# ---------------------------------------------------------------- Agent Builder
+SYSTEM_AGENT_ID = uuid.UUID("5be00000-0000-4000-8000-000000000001")
+
+
+class Agent(Base):
+    """Agent kaydı. `system` = gömülü SRE Agent (davranışı kodda); `custom` = Agent Builder workflow'u.
+    `draft` düzenlenebilir taslaktır; çalıştırmalar `active_version`'daki değişmez sürümü kullanır."""
+    __tablename__ = "agents"
+    __table_args__ = (CheckConstraint("kind IN ('system', 'custom')", name="ck_agents_kind"),
+                      CheckConstraint("status IN ('draft', 'published', 'archived')", name="ck_agents_status"),
+                      Index("uq_agents_name_live", text("lower(name)"), unique=True,
+                            postgresql_where=text("status <> 'archived'")),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", server_default=text("'draft'"))
+    modes: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
+    draft: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
+                                                  server_default=text("'{}'::jsonb"))
+    draft_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    active_version: Mapped[int | None] = mapped_column(Integer)
+    source: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
+                                                   server_default=text("'{}'::jsonb"))
+    created_by: Mapped[str | None] = mapped_column(String(64))
+    updated_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AgentVersion(Base):
+    """Yayımlanmış, değiştirilemez agent sürümü (uygulama yalnız INSERT eder)."""
+    __tablename__ = "agent_versions"
+    __table_args__ = (UniqueConstraint("agent_id", "version", name="uq_agent_versions"), {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    agent_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(f"{SCHEMA}.agents.id", ondelete="CASCADE"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    draft_revision: Mapped[int | None] = mapped_column(Integer)
+    note: Mapped[str | None] = mapped_column(Text)
+    published_by: Mapped[str | None] = mapped_column(String(64))
+    published_at: Mapped[datetime] = _created()
+
+
+class AgentRun(Base):
+    """Agent çalıştırma kaydı (sohbet turu, zamanlanmış çalışma, taslak testi). Prompt / API anahtarı tutulmaz;
+    `output` maskeli ve boyutu sınırlıdır."""
+    __tablename__ = "agent_runs"
+    __table_args__ = (CheckConstraint("mode IN ('chat', 'scheduled', 'test')", name="ck_agent_runs_mode"),
+                      CheckConstraint("status IN ('running', 'completed', 'failed', 'rejected', 'cancelled')",
+                                      name="ck_agent_runs_status"),
+                      Index("ix_agent_runs_agent_started", "agent_id", text("started_at DESC")),
+                      Index("ix_agent_runs_started", text("started_at DESC")),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    run_id: Mapped[str] = mapped_column(String(160), unique=True, nullable=False)
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(f"{SCHEMA}.agents.id", ondelete="CASCADE"))
+    agent_key: Mapped[str | None] = mapped_column(String(64))
+    agent_version: Mapped[int | None] = mapped_column(Integer)
+    version_label: Mapped[str] = mapped_column(String(32), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    trigger: Mapped[str | None] = mapped_column(String(32))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    investigation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    schedule_name: Mapped[str | None] = mapped_column(String(100))
+    retry_of: Mapped[str | None] = mapped_column(String(160))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="running",
+                                        server_default=text("'running'"))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error: Mapped[str | None] = mapped_column(Text)
+    models: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    nodes: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    usage: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
+                                                  server_default=text("'{}'::jsonb"))
+    output: Mapped[Any | None] = mapped_column(JSONB)
+    inputs: Mapped[Any | None] = mapped_column(JSONB)              # maskeli girdi (retry aynı girdiyle)
+    started_at: Mapped[datetime] = _created()
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duration_ms: Mapped[int | None] = mapped_column(Integer)

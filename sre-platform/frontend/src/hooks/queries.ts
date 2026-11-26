@@ -377,6 +377,9 @@ export interface TraceListParams {
   status?: string;
   q?: string;
   recorded?: string;
+  agent_id?: string;
+  agent_version?: string;
+  agent_mode?: string;
   page?: number;
   size?: number;
 }

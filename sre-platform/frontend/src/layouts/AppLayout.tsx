@@ -19,6 +19,7 @@ import {
   Brain,
   Layers,
   PanelsTopLeft,
+  Workflow,
   Settings,
   Siren,
   Sun,
@@ -65,6 +66,7 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
   {
     group: "Platform",
     items: [
+      { to: "/agent-builder", label: "Agent Builder", icon: Workflow, role: "sre" },
       { to: "/llm", label: "LLM Monitoring", icon: Gauge, role: "sre" },
       { to: "/mcp-calls", label: "MCP Çağrıları", icon: Plug, role: "sre" },
       { to: "/agent-trace", label: "Agent Trace", icon: Network, role: "sre" },

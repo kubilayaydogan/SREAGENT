@@ -18,7 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from airlab_agent.agent_trace import state_diff
 
-from ...db.models import AgentTraceEvent, AgentTraceRun, Investigation, Role, User
+from ...db.models import SYSTEM_AGENT_ID, AgentTraceEvent, AgentTraceRun, Investigation, Role, User
 from ...db.session import transaction
 from ...security import sessions as sec_sessions
 from ...security.permissions import P
@@ -38,7 +38,8 @@ def _visible(u: User):
     """chat_turn: yalnız sahibi (admin hepsini görür)."""
     if u.role == Role.ADMIN:
         return true()
-    return or_(AgentTraceRun.kind != "chat_turn", AgentTraceRun.user_id == u.id)
+    return or_(AgentTraceRun.kind != "chat_turn", AgentTraceRun.user_id == u.id) & \
+        or_(AgentTraceRun.agent_mode.is_(None), AgentTraceRun.agent_mode != "chat", AgentTraceRun.user_id == u.id)
 
 
 async def _run(s: AsyncSession, u: User, key: str) -> AgentTraceRun:
@@ -62,6 +63,8 @@ def _run_out(r: AgentTraceRun) -> dict:
             "started_at": r.started_at, "finished_at": r.finished_at, "duration_ms": r.duration_ms,
             "event_count": r.event_count, "truncated_count": r.truncated_count, "capture_errors": r.capture_errors,
             "lost_events": r.lost_events, "error": r.error,
+            "agent_id": str(r.agent_id) if r.agent_id else None, "agent_version": r.agent_version or "builtin",
+            "agent_mode": r.agent_mode,
             "capture": ("failed" if r.lost_events and r.lost_events >= max(1, r.event_count) else
                         "partial" if (r.lost_events or r.capture_errors or st == "interrupted") else
                         "truncated" if r.truncated_count else "complete")}
@@ -69,9 +72,11 @@ def _run_out(r: AgentTraceRun) -> dict:
 
 # ---------------------------------------------------------------- liste
 @router.get("/agent-traces")
-async def list_traces(kind: str | None = Query(None, pattern="^(analysis|chat_turn)$"),
+async def list_traces(kind: str | None = Query(None, pattern="^(analysis|chat_turn|custom_agent)$"),
                       status: str | None = Query(None, max_length=16), trigger: str | None = Query(None, max_length=16),
                       q: str | None = Query(None, max_length=160), recorded: bool | None = None,
+                      agent_id: uuid.UUID | None = None, agent_version: str | None = Query(None, max_length=32),
+                      agent_mode: str | None = Query(None, pattern="^(chat|scheduled|test|manual|watch|import)$"),
                       page: int = 1, size: int = 50,
                       u: User = Depends(perm(P.OBSERVABILITY_READ)), s: AsyncSession = Depends(db)) -> dict:
     """Kayıtlı trace run'ları + trace'i olmayan (eski) investigation'lar (`recorded: false`)."""
@@ -80,14 +85,22 @@ async def list_traces(kind: str | None = Query(None, pattern="^(analysis|chat_tu
                AgentTraceRun.event_count, cast(AgentTraceRun.investigation_id, String).label("investigation_id"),
                AgentTraceRun.thread_id, AgentTraceRun.parent_run_id, true().label("recorded"),
                (AgentTraceRun.lost_events + AgentTraceRun.capture_errors).label("problems"),
-               AgentTraceRun.truncated_count).where(_visible(u))
+               AgentTraceRun.truncated_count,
+               # Agent Builder: NULL = gömülü SRE Agent (sürüm builtin; mod tetikleyiciden)
+               func.coalesce(cast(AgentTraceRun.agent_id, String), str(SYSTEM_AGENT_ID)).label("agent_id"),
+               func.coalesce(AgentTraceRun.agent_version, "builtin").label("agent_version"),
+               func.coalesce(AgentTraceRun.agent_mode, case((AgentTraceRun.kind == "chat_turn", "chat"),
+                                                            else_=func.lower(AgentTraceRun.trigger))).label("agent_mode")
+               ).where(_visible(u))
     legacy = select(null().cast(String).label("trace_id"), Investigation.run_id, literal("analysis").label("kind"),
                     cast(Investigation.trigger, String).label("trigger"),
                     func.lower(cast(Investigation.status, String)).label("status"),
                     Investigation.created_at.label("started_at"), Investigation.duration_ms,
                     literal(0).label("event_count"), cast(Investigation.id, String).label("investigation_id"),
                     Investigation.run_id.label("thread_id"), null().cast(String).label("parent_run_id"),
-                    false().label("recorded"), literal(0).label("problems"), literal(0).label("truncated_count")
+                    false().label("recorded"), literal(0).label("problems"), literal(0).label("truncated_count"),
+                    literal(str(SYSTEM_AGENT_ID)).label("agent_id"), literal("builtin").label("agent_version"),
+                    func.lower(cast(Investigation.trigger, String)).label("agent_mode")
                     ).where(~select(AgentTraceRun.id).where(AgentTraceRun.investigation_id == Investigation.id)
                             .exists())
     u_all = union_all(t, legacy).subquery()
@@ -102,6 +115,12 @@ async def list_traces(kind: str | None = Query(None, pattern="^(analysis|chat_tu
         stmt = stmt.where(u_all.c.run_id.ilike(f"%{q}%"))
     if recorded is not None:
         stmt = stmt.where(u_all.c.recorded == recorded)
+    if agent_id:
+        stmt = stmt.where(u_all.c.agent_id == str(agent_id))
+    if agent_version:
+        stmt = stmt.where(u_all.c.agent_version == agent_version)
+    if agent_mode:
+        stmt = stmt.where(u_all.c.agent_mode == agent_mode)
     page, size = max(1, page), max(1, min(size, 200))
     total = (await s.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
     rows = (await s.execute(stmt.order_by(u_all.c.started_at.desc(), u_all.c.run_id.desc())

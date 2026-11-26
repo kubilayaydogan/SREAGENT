@@ -50,7 +50,8 @@ async def get_conversation(conv_id: uuid.UUID, request: Request, u: User = Depen
                            s: AsyncSession = Depends(db)):
     c = await conversations.get(s, conv_id, u.id)
     active = request.app.state.runs.active_for_conversation(c.id)
-    pending = await ChatOrchestrator(request.app.state.rt).pending(c.thread_id) if not active else []
+    # özel agent konuşmasının checkpoint'i farklı bir graph'a aittir; yarım tur sürdürme yalnız gömülü agent'ta
+    pending = await ChatOrchestrator(request.app.state.rt).pending(c.thread_id) if not active and not c.agent_id else []
     return {**ConversationOut.model_validate(c).model_dump(mode="json"),
             "active_run_id": active.id if active else None, "resumable": bool(pending), "pending_steps": pending}
 
@@ -75,6 +76,10 @@ async def get_working_memory(conv_id: uuid.UUID, request: Request, u: User = Dep
                              s: AsyncSession = Depends(db)):
     """Working memory görünümü: konuşma odağı, tur özetleri, state'teki mesaj sayısı (yalnız konuşma sahibi)."""
     c = await conversations.get(s, conv_id, u.id)
+    if c.agent_id:
+        from ...agent.working_memory import MAX_DIGESTS
+        return {"focus": None, "digests": [], "messages_in_state": 0, "max_messages": 0, "max_digests": MAX_DIGESTS,
+                "pending": [], "agent_builder": True}
     return await ChatOrchestrator(request.app.state.rt).working_memory(c.thread_id)
 
 
@@ -121,26 +126,60 @@ def _run_out(run: Run, **kw) -> RunOut:
 
 @router.post("/agent/chat", response_model=RunOut, status_code=202)
 async def chat(body: ChatIn, request: Request, u: User = Depends(perm(P.AGENT_RUN)), s: AsyncSession = Depends(db)):
+    from ...builder import runs as agent_runs
+    from ...builder import service as agents
+    from ...db.models import SYSTEM_AGENT_ID
     decision = settings_runtime.check_allowed(await settings_service.effective(request.app.state.rt, s), "manual")
     await _admit(request, u, s, "chat")
     if body.application_id:
         await applications.get(s, body.application_id)
     if body.conversation_id:
         conv = await conversations.get(s, body.conversation_id, u.id)
+        conv_agent = conv.agent_id or SYSTEM_AGENT_ID
+        if body.agent_id and body.agent_id != conv_agent:
+            raise HTTPException(status.HTTP_409_CONFLICT, "bu konuşma başka bir agent ile başladı; agent değiştirmek "
+                                                          "için yeni konuşma başlatın")
+        agent_id = conv_agent
     else:
+        conv, agent_id = None, body.agent_id or await agents.default_chat(s)
+    # Koşu başında agent + aktif yayımlanmış sürüm çözülür (yayımlanmamış / arşivli / mod yok → 409, geçiş yok)
+    agent, ver = await agents.resolve(s, agent_id, "chat")
+    if conv is None:
         conv = await conversations.create(s, u.id, body.message[:80], body.application_id)
+        conv.agent_id = agent.id if agent.kind == "custom" else None
     _check_limits(request, u, conv.id)
     await s.commit()                                           # konuşma, çalıştırma başlamadan görünür olsun
     rt = request.app.state.rt
     tr = body.time_range
     conv_id, thread_id, uid = conv.id, conv.thread_id, u.id
 
-    async def go(run: Run):
-        ctx = TurnContext(user_id=uid, conversation_id=conv_id, thread_id=thread_id, emit=run.emit,
-                          application_id=body.application_id, cancel=run.cancel,
-                          minutes=tr.minutes if tr else None, start=tr.start if tr else None,
-                          end=tr.end if tr else None)
-        await ChatOrchestrator(rt).turn(ctx, body.message)
+    if agent.kind == "custom":
+        async def go(run: Run):
+            await agent_runs.chat_turn(rt, agent=agent, ver=ver, conversation_id=conv_id, thread_id=thread_id,
+                                       user_id=uid, question=body.message, emit=run.emit, cancel=run.cancel)
+    else:
+        async def go(run: Run):
+            ctx = TurnContext(user_id=uid, conversation_id=conv_id, thread_id=thread_id, emit=run.emit,
+                              application_id=body.application_id, cancel=run.cancel,
+                              minutes=tr.minutes if tr else None, start=tr.start if tr else None,
+                              end=tr.end if tr else None)
+            started, status_, err = agents.now(), "completed", None
+            try:
+                await ChatOrchestrator(rt).turn(ctx, body.message)
+            except BaseException as e:
+                status_, err = ("cancelled" if type(e).__name__ == "CancelledError" else "failed"), \
+                    f"{type(e).__name__}: {e}"
+                raise
+            finally:
+                mid = ctx.result.get("user_message_id")
+                inv = ctx.result.get("investigation") or {}
+                await agents.record_system_run(rt.sm, run_id=f"chat-{mid}" if mid else run.id, mode="chat",
+                                               trigger="chat", user_id=uid, conversation_id=conv_id,
+                                               investigation_id=inv.get("investigation_id"), status=status_,
+                                               error=err, started_at=started,
+                                               models=[{"node_id": "chat-turn", "provider": "anthropic",
+                                                        "model": getattr(rt.llm, "model_name", None),
+                                                        "source": "platform"}] if rt.llm is not None else [])
 
     run = request.app.state.runs.start("chat", u.id, go, conversation_id=conv_id)
     await _started(request, u, run, "chat", str(conv_id), decision)
@@ -150,6 +189,8 @@ async def chat(body: ChatIn, request: Request, u: User = Depends(perm(P.AGENT_RU
 @router.post("/conversations/{conv_id}/resume", response_model=RunOut, status_code=202)
 async def resume(conv_id: uuid.UUID, request: Request, u: User = Depends(perm(P.AGENT_RUN)), s: AsyncSession = Depends(db)):
     conv = await conversations.get(s, conv_id, u.id)
+    if conv.agent_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "özel agent turları sürdürülemez; soruyu yeniden gönderin")
     # P0.3: resume de yeni bir LLM/MCP çalıştırmasıdır → chat ile aynı policy kapısı (agent devre dışı / mod)
     decision = settings_runtime.check_allowed(await settings_service.effective(request.app.state.rt, s), "manual")
     await _admit(request, u, s, "resume")

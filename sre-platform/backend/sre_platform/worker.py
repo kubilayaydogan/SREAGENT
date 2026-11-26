@@ -54,6 +54,64 @@ class WatchJob:
 
 
 async def health_check(rt, params: dict) -> dict[str, Any]:
+    """Health check: schedule'da seçili agent (varsayılan gömülü SRE Agent). Özel agent seçildiyse onun yayımlanmış
+    sürümü zamanlanmış modda çalışır; çalıştırılamıyorsa koşu nedeniyle kaydedilir (başka agent'a geçilmez)."""
+    from .builder import service as agents
+    from .db.models import SYSTEM_AGENT_ID
+    async with transaction(rt.sm) as s:
+        aid = await agents.health_check_agent(s)
+    if aid != SYSTEM_AGENT_ID:
+        return await _custom_agent(rt, {"agent_id": str(aid), "created_by": "system:scheduler",
+                                        "input": f"Son {int(params.get('window_minutes', 15))} dakikanın sağlık "
+                                                 f"kontrolü"}, schedule_name="health-check")
+    started = agents.now()
+    try:
+        out = await _system_health_check(rt, params)
+    except Exception as e:
+        await agents.record_system_run(rt.sm, run_id=f"hc-job-{started:%Y%m%d%H%M%S}", mode="scheduled",
+                                       trigger="schedule", status="failed", started_at=started,
+                                       schedule_name="health-check", error=f"{type(e).__name__}: {e}")
+        raise
+    if not out.get("skipped"):
+        await agents.record_system_run(rt.sm, run_id=f"hc-job-{started:%Y%m%d%H%M%S}", mode="scheduled",
+                                       trigger="schedule", status="completed", started_at=started,
+                                       schedule_name="health-check", investigation_id=out.get("investigation_id"))
+    return out
+
+
+async def _custom_agent(rt, params: dict, *, schedule_name: str) -> dict[str, Any]:
+    from .builder import runs as agent_runs
+    from .builder import service as agents
+    from .settings import runtime as srt
+    eff = await srt.effective(rt)
+    try:
+        srt.check_allowed(eff, "scheduled")            # platform agent kapısı tüm agent'lara uygulanır
+    except srt.RunNotAllowed as e:
+        from .security import audit
+        await audit.record_separate(rt.sm, actor="system:scheduler", action="run.denied", section="agent",
+                                    target=schedule_name, result="denied", reason_code=e.reason_code, detail=str(e))
+        return {"skipped": str(e)}
+    try:
+        res = await agent_runs.scheduled_run(rt, agent_id=params.get("agent_id"), schedule_name=schedule_name,
+                                             input_=params.get("input") or "", variables=params.get("variables") or {},
+                                             created_by=params.get("created_by"))
+    except agents.NotRunnable as e:
+        raise RuntimeError(f"agent çalıştırılamadı ({e.code}): {e.message}") from None
+    out = {"agent_run_id": res["run_id"], "agent_id": res["agent_id"], "agent_version": res["version_label"],
+           "status": res["status"], "duration_ms": res["duration_ms"],
+           "models": [m.get("model") for m in res.get("models") or []]}
+    if res["status"] != "completed":
+        e = res.get("error") or {}
+        raise RuntimeError(f"agent koşusu başarısız ({e.get('code')}): {e.get('message')}"[:1500])
+    return out
+
+
+async def agent_run(rt, params: dict) -> dict[str, Any]:
+    """Agent Builder schedule'ı (job_type=agent_run)."""
+    return await _custom_agent(rt, params, schedule_name=params.get("_job_name") or "agent")
+
+
+async def _system_health_check(rt, params: dict) -> dict[str, Any]:
     from airlab_agent.graph import new_run_id
 
     from .agent.investigation import InvestigationRunner
@@ -160,7 +218,7 @@ async def security_ops(rt, params: dict) -> dict[str, Any]:
 
 
 HANDLERS = {"health_check": health_check, "retention": retention, "langsmith_sync": langsmith_sync,
-            "security_ops": security_ops}
+            "security_ops": security_ops, "agent_run": agent_run}
 
 
 JOB_TYPES = {"watch": "watch", "health-check": "health_check", "langsmith-sync": "langsmith_sync"}
@@ -185,7 +243,7 @@ async def run_due(rt, worker_id: str, handlers: dict, *, lease_s: int) -> list[d
     done = []
     async with transaction(rt.sm) as s:
         claimed = await jobs.claim(s, worker_id, lease_s, n=5)
-        todo = [(j.id, j.name, j.job_type, dict(j.params or {})) for j in claimed]
+        todo = [(j.id, j.name, j.job_type, {**dict(j.params or {}), "_job_name": j.name}) for j in claimed]
     for job_id, name, jtype, params in todo:
         fn = handlers.get(jtype)
         token = correlation_id.set(new_correlation_id())

@@ -15,6 +15,7 @@ import {
   type SectionView,
   type TestResult,
 } from "./api";
+import { AgentSchedulesCard } from "@/features/agentbuilder/SchedulesCard";
 import { ConfirmDialog } from "./common";
 import { SectionForm, type Draft, type FieldRenderer } from "./SectionForm";
 
@@ -177,8 +178,23 @@ export function SchedulingSection() {
         return <Notice tone="info">Cron ifadesi desteklenmiyor: {cron.reason}.</Notice>;
       }}
     >
-      {() => <JobsTable />}
+      {() => (
+        <>
+          <JobsTable />
+          <SchedulingAgents />
+        </>
+      )}
     </SectionForm>
+  );
+}
+
+/** Schedule başına agent seçimi (Agent Builder). Yazma: Settings yazma yetkisi (admin). */
+function SchedulingAgents() {
+  const { can } = useAuth();
+  return (
+    <div className="mt-3">
+      <AgentSchedulesCard canEdit={can("admin")} />
+    </div>
   );
 }
 

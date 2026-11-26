@@ -23,6 +23,7 @@ const AgentTrace = lazy(() => import("@/pages/AgentTracePage"));
 const AgentMemory = lazy(() => import("@/pages/AgentMemoryPage"));
 const AgentMiddleware = lazy(() => import("@/pages/AgentMiddlewarePage"));
 const ContextWindows = lazy(() => import("@/pages/ContextWindowsPage"));
+const AgentBuilder = lazy(() => import("@/pages/AgentBuilderPage"));
 const Settings = lazy(() => import("@/pages/SettingsPage"));
 const Account = lazy(() => import("@/pages/AccountPage"));
 
@@ -71,6 +72,7 @@ const router = createBrowserRouter([
       { path: "agent-memory", element: s(<AgentMemory />) },
       { path: "agent-middleware", element: s(<AgentMiddleware />) },
       { path: "context-windows", element: s(<ContextWindows />) },
+      { path: "agent-builder/:id?", element: s(<AgentBuilder />) },
       { path: "settings/:section?", element: s(<Settings />) },
       { path: "account", element: s(<Account />) },
       { path: "*", element: <EmptyState title="Sayfa bulunamadı" description="Adres hatalı olabilir." /> },

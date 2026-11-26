@@ -111,7 +111,8 @@ class TraceSession:
 async def start(rt, *, run_id: str, kind: str, graph: str, trigger: str | None = None,
                 investigation_id: uuid.UUID | None = None, conversation_id: uuid.UUID | None = None,
                 user_id: uuid.UUID | None = None, thread_id: str | None = None, parent_run_id: str | None = None,
-                platform_run_id: str | None = None, attempt: int = 1) -> TraceSession | None:
+                platform_run_id: str | None = None, attempt: int = 1, agent_id: uuid.UUID | None = None,
+                agent_version: str | None = None, agent_mode: str | None = None) -> TraceSession | None:
     """Run satırını açar ve kaydediciyi döner. Kapalıysa ya da açılamazsa None (agent kayıtsız çalışır)."""
     if not enabled():
         return None
@@ -120,7 +121,8 @@ async def start(rt, *, run_id: str, kind: str, graph: str, trigger: str | None =
             row = AgentTraceRun(run_id=run_id, kind=kind, graph=graph, trigger=trigger,
                                 investigation_id=investigation_id, conversation_id=conversation_id, user_id=user_id,
                                 thread_id=thread_id, parent_run_id=parent_run_id, platform_run_id=platform_run_id,
-                                attempt=attempt, status="running")
+                                attempt=attempt, status="running", agent_id=agent_id, agent_version=agent_version,
+                                agent_mode=agent_mode)
             s.add(row)
             await s.flush()
             row_id = row.id

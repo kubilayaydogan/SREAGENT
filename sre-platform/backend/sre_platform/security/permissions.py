@@ -29,12 +29,14 @@ class P(str, Enum):
     MEMORY_APPROVE = "memory:approve"           # procedural memory onayı (four-eyes), memory export
     MIDDLEWARE_MANAGE = "middleware:manage"     # agent middleware yapılandırması (etkinlik, order, kapsam, parametre)
     KNOWLEDGE_MANAGE = "knowledge:manage"       # runbook
+    AGENT_BUILD = "agent:build"                 # Agent Builder: oluşturma, taslak düzenleme, test, import / export
+    AGENT_PUBLISH = "agent:publish"             # yayımlama, sürüm aktifleştirme, arşivleme, varsayılan agent
     USER_MANAGE = "user:manage"
 
 
 _VIEWER = {P.RECORD_READ}
 _SRE = _VIEWER | {P.AGENT_RUN, P.INCIDENT_WRITE, P.APPROVAL_REQUEST, P.SETTINGS_READ, P.AUDIT_READ,
-                  P.OBSERVABILITY_READ, P.MEMORY_WRITE}
+                  P.OBSERVABILITY_READ, P.MEMORY_WRITE, P.AGENT_BUILD}
 _ADMIN = set(P)
 
 ROLE_PERMISSIONS: dict[Role, frozenset[P]] = {Role.VIEWER: frozenset(_VIEWER), Role.SRE: frozenset(_SRE),

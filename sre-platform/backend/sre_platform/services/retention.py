@@ -43,6 +43,7 @@ ROW_RULES: tuple[tuple[str, str, str, Any], ...] = (
     ("llm_runs", "sre.llm_runs", "start_time < :cut", "llm_runs_days"),
     ("llm_usage", "sre.llm_usage", "ts < :cut", "llm_runs_days"),
     ("llm_context_calls", "sre.llm_context_calls", "started_at < :cut", "llm_runs_days"),
+    ("agent_runs", "sre.agent_runs", "started_at < :cut AND status <> 'running'", "job_runs_days"),
     ("auth_login_failures", "sre.auth_login_failures", "ts < :cut", LOGIN_FAILURE_KEEP),
     # investigation'a bağlı eşlemeler investigation'la (CASCADE) silinir; sohbet turu eşlemeleri LLM süresiyle
     ("trace_links", "sre.trace_links", "created_at < :cut AND investigation_id IS NULL", "llm_runs_days"),
