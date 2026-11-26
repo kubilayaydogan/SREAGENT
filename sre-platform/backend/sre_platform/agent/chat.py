@@ -127,6 +127,18 @@ def _inject(rc, section: str, block: dict | None, task: str, *, llm_=None, obser
                          llm_task=task, model=getattr(llm_, "model_name", None))
     except Exception:  # noqa: BLE001
         log.debug("context injection kaydı yazılamadı", exc_info=True)
+    try:                                     # Context Windows: bu bölümün dahil / çıkarılan referansları
+        from airlab_agent.context_window import note_context
+        sent = (block if observe_only else out) if llm_ is not None else None
+        note_context(section.strip("<>"), status="injected" if sent else "not_injected",
+                     included=mctx.refs(sent) if isinstance(sent, dict) else [],
+                     dropped=[{"ref": d.get("ref"), "reason": d.get("reason")} for d in (dropped or [])
+                              if isinstance(d, dict)],
+                     reason=None if sent else ("Settings: Context Injection kapalı" if not on else
+                                               "LLM kullanılmadı" if llm_ is None else "boş blok"),
+                     token_estimate=mctx.estimate_tokens(prompts.dump(sent)) if sent else 0)
+    except Exception:  # noqa: BLE001
+        log.debug("context window kararı yazılamadı", exc_info=True)
     return out if not observe_only else block
 
 
@@ -317,6 +329,8 @@ class ChatOrchestrator:
                 if report:
                     system = prompts.ANALYSIS_SYSTEM
                     hist = _inject(rc, "<history_data>", _hist_block(mem), "rca", llm_=rca_llm)
+                    from airlab_agent.context_window import note_analysis_payload
+                    note_analysis_payload(prompts.analysis_payload(report))
                     human = prompts.analysis_human(q, prompts.analysis_payload(report), hist)
                     fallback = deterministic_explanation(report)
                     if mem:
@@ -338,6 +352,20 @@ class ChatOrchestrator:
                             "earlier_turns": (state.get("digests") or [])[-8:] if short_term else []}
                 _inject(rc, "<context_data>", {"last_investigation": ctx_data["last_investigation"]}
                         if ctx_data["last_investigation"] else None, "chat", llm_=chat_llm, observe_only=True)
+                try:
+                    from airlab_agent.context_window import note_context
+                    turns = state.get("digests") or []
+                    note_context("context_data", status="windowed",
+                                 included=[k for k, v in ctx_data.items() if v],
+                                 dropped=([{"ref": "previous_answer kısmen", "reason": "6000 karakter sonrası kırpıldı",
+                                            "chars": len(prev) - 6000}] if prev and len(prev) > 6000 else []) +
+                                 ([{"ref": f"en eski {len(turns) - 8} tur özeti", "reason": "yalnız son 8 tur özeti",
+                                    "count": len(turns) - 8}] if short_term and len(turns) > 8 else []),
+                                 summarized=[{"ref": f"{min(len(turns), 8)} önceki tur", "reason":
+                                              "tur metni yerine özet (digest)"}] if short_term and turns else [],
+                                 reason="follow-up: önceki yanıt + odak + tur özetleri")
+                except Exception:  # noqa: BLE001
+                    log.debug("context window kararı yazılamadı", exc_info=True)
                 system, human = prompts.FOLLOWUP_SYSTEM, prompts.followup_human(q, ctx_data)
                 fallback = prev or "Önceki bir yanıt bulunamadı."
             else:

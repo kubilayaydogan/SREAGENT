@@ -225,8 +225,25 @@ class Llm:
                                   output_config={"effort": p["effort"] or "medium"},
                                   betas=["server-side-fallback-2026-07-01"],
                                   model_kwargs={"fallbacks": "default"}, **kw)
+                from . import context_window
+                context_window.instrument(c)          # SDK retry denemeleri ayrı kayıt (davranış aynı)
                 self._clients[key] = c
             return c
+
+    def model_info(self, model: str) -> dict | None:
+        """Context window kapasitesi: Anthropic Models API (`max_input_tokens`, `max_tokens`). Bloklar; yalnız
+        context_window arka plan thread'inden çağrılır. İçerik gönderilmez."""
+        import anthropic
+        kind = "rca" if model == self.rca_model_name and model != self.model_name else "chat"
+        p = self._params(kind)
+        if not p["api_key"]:
+            return None
+        kw = {"base_url": p["base_url"]} if p["base_url"] else {}
+        cl = anthropic.Anthropic(api_key=p["api_key"], max_retries=0, timeout=10, **kw)
+        m = cl.models.retrieve(model)
+        cap = getattr(m, "max_input_tokens", None)
+        return {"capacity": cap, "max_output": getattr(m, "max_tokens", None),
+                "source": "Models API (max_input_tokens)"} if cap else None
 
     @property
     def chat(self):
@@ -251,6 +268,8 @@ class Llm:
         for h in (history or [])[-6:]:
             msgs.append((h["role"], redact_text(h["content"][:1500], "llm")))
         msgs.append(("human", redact_text(question, "llm")))
+        from .context_window import note_history_window
+        note_history_window(history or [], keep=6, max_chars=1500)
         try:
             from . import middleware as mw          # before_model / wrap_model_call / after_model (client wrapper)
             call = mw.Call(kind="model", target=self.model_name, task="interpret_question", request={"messages": msgs})
@@ -274,6 +293,8 @@ class Llm:
 
     def explain(self, analysis: dict, question: str | None = None) -> str:
         payload = data_json(redact(analysis, "llm"))
+        from .context_window import note_analysis_payload
+        note_analysis_payload(analysis)
         human = (f"Kullanıcı sorusu: {redact_text(question, 'llm')}\n\n" if question else "") + \
             f"<analysis_data>\n{payload}\n</analysis_data>\n\nBu bulguları açıkla."
         try:

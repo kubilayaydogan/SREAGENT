@@ -223,7 +223,11 @@ function TraceDetailView({ traceKey }: { traceKey: string }) {
   if (isLoading) return <Page><Skeleton className="h-64" /></Page>;
   if (error || !data) return <Page><ErrorState error={error} onRetry={() => refetch()} /></Page>;
   const run = data.run;
-  const selected = events.find((e) => e.event_id === sel) ?? null;
+  // ?call=<call_id> (Context Windows bağlantısı): o LLM çağrısının istek olayı seçilir
+  const callParam = sp.get("call");
+  const selected =
+    events.find((e) => e.event_id === sel) ??
+    (callParam ? (events.find((e) => e.call_id === callParam && e.event_type === "llm_request") ?? null) : null);
   return (
     <Page wide>
       <PageHeader

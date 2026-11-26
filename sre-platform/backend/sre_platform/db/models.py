@@ -1224,3 +1224,62 @@ class MiddlewareExecution(Base):
     after: Mapped[Any | None] = mapped_column(JSONB)
     truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     extra: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class LlmContextCall(Base):
+    """Context Windows: tek bir LLM çağrısı (SDK retry'larında her HTTP denemesi ayrı satır; `logical_call_id` ortak).
+    İçerik tutulmaz: yalnız token sayıları, kaynak türleri ve güvenli referanslar. Değer yoksa NULL (sıfır değil)."""
+    __tablename__ = "llm_context_calls"
+    __table_args__ = (Index("ix_llm_ctx_started", text("started_at DESC")),
+                      Index("ix_llm_ctx_run", "run_id", "call_seq"),
+                      Index("ix_llm_ctx_logical", "logical_call_id"),
+                      Index("ix_llm_ctx_fill", text("actual_fill DESC NULLS LAST")),
+                      CheckConstraint("status IN ('ok', 'error', 'context_limit', 'retried', 'cancelled')",
+                                      name="ck_llm_ctx_status"),
+                      CheckConstraint("usage_source IN ('provider', 'missing')", name="ck_llm_ctx_usage_source"),
+                      {"schema": SCHEMA})
+    call_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    logical_call_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    run_id: Mapped[str | None] = mapped_column(String(160))
+    run_kind: Mapped[str | None] = mapped_column(String(16))
+    thread_id: Mapped[str | None] = mapped_column(String(160))
+    user_id: Mapped[str | None] = mapped_column(String(64))           # chat_turn: yalnız sahibi görür (admin hepsini)
+    node: Mapped[str | None] = mapped_column(String(64))
+    task: Mapped[str | None] = mapped_column(String(64))
+    call_seq: Mapped[int | None] = mapped_column(Integer)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(128))
+    served_model: Mapped[str | None] = mapped_column(String(128))
+    streaming: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duration_ms: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(String(300))
+    http_status: Mapped[int | None] = mapped_column(Integer)
+    stop_reason: Mapped[str | None] = mapped_column(String(48))
+    capacity: Mapped[int | None] = mapped_column(Integer)
+    capacity_source: Mapped[str | None] = mapped_column(String(64))
+    capacity_note: Mapped[str | None] = mapped_column(String(160))
+    model_max_output: Mapped[int | None] = mapped_column(Integer)
+    reserved_output: Mapped[int | None] = mapped_column(Integer)
+    estimated_input: Mapped[int | None] = mapped_column(Integer)
+    estimate_method: Mapped[str | None] = mapped_column(String(96))
+    estimate_over: Mapped[int | None] = mapped_column(Integer)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    cache_read_tokens: Mapped[int | None] = mapped_column(Integer)
+    cache_creation_tokens: Mapped[int | None] = mapped_column(Integer)
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
+    usage_source: Mapped[str] = mapped_column(String(16), nullable=False, default="missing")
+    planned_fill: Mapped[float | None] = mapped_column(Float)
+    actual_fill: Mapped[float | None] = mapped_column(Float)
+    components: Mapped[Any | None] = mapped_column(JSONB)
+    context_decisions: Mapped[Any | None] = mapped_column(JSONB)
+    stream: Mapped[Any | None] = mapped_column(JSONB)
+    request_id: Mapped[str | None] = mapped_column(String(80))
+    trace_call_id: Mapped[str | None] = mapped_column(String(64))
+    middleware_execution_id: Mapped[str | None] = mapped_column(String(64))

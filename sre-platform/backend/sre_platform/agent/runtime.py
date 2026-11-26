@@ -33,6 +33,7 @@ class AgentRuntime:
     store: object = None                              # AsyncPostgresStore (uzun vadeli kapsamlı notlar)
     memory: MemoryService | None = None
     mem_events: object = None                         # memory.events.MemoryEventPublisher
+    cw_writer: object = None                          # context_window.writer.ContextWindowWriter
     sem: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(2))
     callbacks: list = field(default_factory=list)      # LangSmith tracer (redakte eder); tracing kapalıysa boş
     settings_started: dict | None = None              # süreç açılışındaki etkili ayarlar ("restart gerekli" tespiti)
@@ -124,6 +125,13 @@ async def create_runtime(ps: PlatformSettings, *, agent: Settings | None = None,
         if mem_events.publisher() is rt.mem_events:
             mem_events.install(None)
     rt._closers.append(_stop_events)
+    # Context Windows: LLM çağrısı başına kayıt (yazma hatası agent çalışmasını kesmez)
+    from ..context_window import writer as cw_writer
+    rt.cw_writer = await cw_writer.install(rt.sm, core)
+
+    async def _stop_cw():
+        await cw_writer.uninstall(rt.cw_writer)
+    rt._closers.append(_stop_cw)
     return rt
 
 

@@ -600,6 +600,11 @@ def traced_chat_anthropic_cls():
     class TracedChatAnthropic(ChatAnthropic):
         def _get_request_payload(self, input_, *, stop=None, **kwargs):
             payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+            try:                                    # Context Windows: gerçekte gönderilen payload (yalnız sayım)
+                from . import context_window
+                context_window.on_payload(payload)
+            except Exception:  # noqa: BLE001
+                pass
             cur = _CALL.get()
             if cur is not None:
                 rec, rid, streaming = cur

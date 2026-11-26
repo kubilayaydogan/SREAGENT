@@ -3,7 +3,7 @@
 Kategoriler ve varsayılanlar (Settings › Retention):
 * investigations / watch_events / llm_runs / job_runs — mevcut süreler (incident'a bağlı, RCA'lı, feedback'li ya da
   sohbette olan investigation saklanır).
-* llm_usage — LLM Monitoring süresiyle aynı (`llm_runs_days`).
+* llm_usage, llm_context_calls — LLM Monitoring süresiyle aynı (`llm_runs_days`).
 * auth_login_failures — 1 gün (throttle penceresi 5 dk; daha eskisinin işlevi yok).
 * trace_links (sohbet turu eşlemeleri) — LLM Monitoring süresiyle aynı; investigation eşlemeleri investigation'la.
 * agent_trace_runs (+ olayları) — Agent Trace kayıtları; LLM Monitoring süresiyle.
@@ -42,6 +42,7 @@ ROW_RULES: tuple[tuple[str, str, str, Any], ...] = (
     ("job_runs", "sre.job_runs", "started_at < :cut", "job_runs_days"),
     ("llm_runs", "sre.llm_runs", "start_time < :cut", "llm_runs_days"),
     ("llm_usage", "sre.llm_usage", "ts < :cut", "llm_runs_days"),
+    ("llm_context_calls", "sre.llm_context_calls", "started_at < :cut", "llm_runs_days"),
     ("auth_login_failures", "sre.auth_login_failures", "ts < :cut", LOGIN_FAILURE_KEEP),
     # investigation'a bağlı eşlemeler investigation'la (CASCADE) silinir; sohbet turu eşlemeleri LLM süresiyle
     ("trace_links", "sre.trace_links", "created_at < :cut AND investigation_id IS NULL", "llm_runs_days"),

@@ -77,7 +77,7 @@ class FakePort:
             raise LlmUnavailable("simulated")
         return heuristic_route(question, apps, app)
 
-    async def astream(self, system, human, *, rca=False):
+    async def astream(self, system, human, *, rca=False, task="answer"):
         self.humans.append(human)
         self.rca_flags.append(rca)
         if self.crash_once:

@@ -74,7 +74,7 @@ class LlmPort(Protocol):
     async def route(self, question: str, history: list[dict], *, apps: list[str], app: str | None,
                     focus: str | None = None) -> ChatRoute: ...
 
-    def astream(self, system: str, human: str, *, rca: bool = False) -> AsyncIterator[str]: ...
+    def astream(self, system: str, human: str, *, rca: bool = False, task: str = "answer") -> AsyncIterator[str]: ...
 
 
 class ClaudePort:
@@ -94,13 +94,20 @@ class ClaudePort:
     async def route(self, question, history, *, apps, app=None, focus=None) -> ChatRoute:
         sys = ROUTE_SYSTEM.format(now=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                                   apps=", ".join(apps), app=app or "yok")
-        if focus:
-            sys += ROUTE_FOCUS.format(focus=focus)
+        hint = ROUTE_FOCUS.format(focus=focus) if focus else None
+        if hint:
+            sys += hint
         msgs = [("system", sys)] + [(h["role"] if h["role"] != "user" else "human", redact_text(h["content"][:1500], "llm"))
                                     for h in history[-6:]] + [("human", redact_text(question, "llm"))]
+        from airlab_agent.context_window import note_context, note_history_window
+        note_history_window(history, keep=6, max_chars=1500)
+        if focus:
+            note_context("focus", status="included", included=[{"ref": "konuşma odağı (working memory)"}],
+                         reason="eksik uygulama / zaman bilgisini tamamlamak için")
         try:
             from airlab_agent import middleware as mw   # before_model / wrap_model_call / after_model (client wrapper)
-            call = mw.Call(kind="model", target=self.model_name, task="route_question", request={"messages": msgs})
+            call = mw.Call(kind="model", target=self.model_name, task="route_question", request={"messages": msgs},
+                           context_hints=[("state", hint)] if hint else [])
 
             async def go(req):
                 r = self.llm.chat.with_structured_output(ChatRoute, include_raw=True, method="json_schema")
@@ -119,18 +126,18 @@ class ClaudePort:
         except Exception as e:  # noqa: BLE001
             raise LlmUnavailable(f"{type(e).__name__}: {str(e)[:300]}") from None
 
-    async def astream(self, system: str, human: str, *, rca: bool = False) -> AsyncIterator[str]:
+    async def astream(self, system: str, human: str, *, rca: bool = False, task: str = "answer") -> AsyncIterator[str]:
         # Merkezi garanti: kullanıcıya akan her yanıtın system prompt'unda terminology policy bulunur (idempotent).
         system = with_policy(system)
         chat = getattr(self.llm, "rca_chat", self.llm.chat) if rca else self.llm.chat
         try:
             from airlab_agent import middleware as mw   # streaming: chunk'lar buffer'lanmadan anında iletilir
             model = self.rca_model_name if rca else self.model_name
-            call = mw.Call(kind="model", target=model, task="answer",
+            call = mw.Call(kind="model", target=model, task=task,
                            request={"messages": [("system", system), ("human", human)], "stream": True})
 
             def go(req):
-                return chat.astream(req["messages"], config=child_config(self.llm.callbacks, "answer",
+                return chat.astream(req["messages"], config=child_config(self.llm.callbacks, task,
                                                                          metadata={"model": model, "rca": rca}))
             last = None
             async for chunk in mw.stream_model(call, go):
@@ -147,7 +154,7 @@ class ClaudePort:
                 if (getattr(last, "response_metadata", None) or {}).get("stop_reason") == "refusal":
                     raise LlmUnavailable("model yanıtı reddetti (refusal)")
                 self.llm._track(last)
-                budget_add("answer", self.rca_model_name if rca else self.model_name, last)
+                budget_add(task, self.rca_model_name if rca else self.model_name, last)
                 _log_terminology(last.text if isinstance(getattr(last, "text", None), str) else str(last.content),
                                  "answer_stream")
         except LlmUnavailable:

@@ -41,6 +41,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from . import context_window as _cw
+
 HOOKS = ("before_agent", "before_model", "wrap_model_call", "after_model", "wrap_tool_call", "after_agent")
 KINDS = ("logging", "authorization", "validation", "retry", "limit", "redaction", "context", "custom")
 DECISIONS = ("allow", "block", "modify", "short_circuit", "not_applicable")
@@ -104,6 +106,7 @@ class Call:
     state: dict = field(default_factory=dict)   # çağıranın sağladığı sayaçlar (ör. queries_used, max_queries)
     attempts: list[dict] = field(default_factory=list)
     stream: dict | None = None
+    context_hints: list = field(default_factory=list)   # context window: [(bileşen, istemdeki alt metin)]
 
 
 class Scope(BaseModel):
@@ -622,13 +625,16 @@ def run_model_sync(call: Call, fn: Callable[[dict], Any]) -> Any:
             return d.result
         ex.raise_blocked()
     t = time.perf_counter()
+    tok = _cw.begin(call, envelope_id=ex.env_id)        # context window: yalnız sağlayıcıya giden çağrı
     try:
         out = fn(call.request)
     except BaseException as e:
         ex.call_ms = (time.perf_counter() - t) * 1000
+        _cw.end(tok, error=e)
         ex.exit(e)
         raise
     ex.call_ms = (time.perf_counter() - t) * 1000
+    _cw.end(tok, result=out)
     ex.exit(None)
     return out
 
@@ -642,13 +648,16 @@ async def run_model_async(call: Call, fn: Callable[[dict], Awaitable[Any]]) -> A
             return d.result
         ex.raise_blocked()
     t = time.perf_counter()
+    tok = _cw.begin(call, envelope_id=ex.env_id)
     try:
         out = await fn(call.request)
     except BaseException as e:
         ex.call_ms = (time.perf_counter() - t) * 1000
+        _cw.end(tok, error=e)
         ex.exit(e)
         raise
     ex.call_ms = (time.perf_counter() - t) * 1000
+    _cw.end(tok, result=out)
     ex.exit(None)
     return out
 
@@ -663,11 +672,13 @@ async def stream_model(call: Call, fn: Callable[[dict], AsyncIterator[Any]]) -> 
     t = time.perf_counter()
     call.stream = {"chunks": 0, "first_chunk_ms": None, "completed": False}
     err: BaseException | None = None
+    tok = _cw.begin(call, envelope_id=ex.env_id, streaming=True)
     try:
         async for chunk in fn(call.request):
             if call.stream["first_chunk_ms"] is None:
                 call.stream["first_chunk_ms"] = round((time.perf_counter() - t) * 1000, 1)
             call.stream["chunks"] += 1
+            _cw.on_chunk(chunk)                        # final usage (içerik tutulmaz)
             yield chunk
         call.stream["completed"] = True
     except GeneratorExit:
@@ -678,6 +689,7 @@ async def stream_model(call: Call, fn: Callable[[dict], AsyncIterator[Any]]) -> 
         raise
     finally:
         ex.call_ms = (time.perf_counter() - t) * 1000
+        _cw.end(tok, error=err, stream=dict(call.stream))
         ex.exit(err)
 
 

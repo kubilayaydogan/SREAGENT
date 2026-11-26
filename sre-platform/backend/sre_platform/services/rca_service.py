@@ -143,7 +143,8 @@ async def generate(s, inv: Investigation, *, llm=None, incident_id: uuid.UUID | 
     if llm is not None:
         try:
             txt = ""
-            async for tok in llm.astream(SUMMARY_SYSTEM, f"<rca_data>\n{prompts.dump(sec)}\n</rca_data>"):
+            async for tok in llm.astream(SUMMARY_SYSTEM, f"<rca_data>\n{prompts.dump(sec)}\n</rca_data>",
+                                         task="rca_summary"):
                 txt += tok
             if txt.strip():
                 summary, source = txt.strip(), f"Claude ({llm.model_name}) — yalnız yönetici özeti"
