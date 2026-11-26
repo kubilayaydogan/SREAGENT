@@ -153,6 +153,8 @@ export function runReducer(s: RunState, a: RunAction): RunState {
       return { ...s, memoryCounts: d.counts ?? null, steps: setStep(s.steps, "memory", "done") };
     case "token":
       return { ...s, text: s.text + String(d.text ?? "") };
+    case "answer_replaced":
+      return { ...s, text: String(d.text ?? s.text) };
     case "suggestions":
       return { ...s, suggestions: Array.isArray(d.items) ? d.items : [] };
     case "message_saved":

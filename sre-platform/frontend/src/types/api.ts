@@ -581,6 +581,7 @@ export type AgentEventType =
   | "tool_failed"
   | "agent_thinking"
   | "token"
+  | "answer_replaced"
   | "evidence_found"
   | "investigation_completed"
   | "error"

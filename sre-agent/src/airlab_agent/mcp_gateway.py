@@ -303,11 +303,36 @@ class McpGateway:
             return self._end(r, elapsed_ms=0, traced=traced, outcome="rejected", sent=False, preview=preview)
 
         async def send(_req) -> QueryResult:
+            # Guardrails before_tool / before_mcp_request: zorunlu middleware'ler geçtikten sonra, tools/call'dan önce
+            from .guardrails import runtime as gr
+            from .guardrails.model import GuardrailBlocked, GuardrailTerminated
+            try:
+                gr.mcp_request(server=SERVER, tool=DQL_TOOL, args=args, dql=dql if isinstance(dql, str) else None,
+                               call_id=call_id, view={"query_key": key, "preview": preview})
+            except GuardrailTerminated:
+                raise
+            except GuardrailBlocked as e:
+                r = QueryResult(key, str(dql)[:MAX_DQL_CHARS], "ERROR", error=f"guardrail engelledi: {e}"[:600],
+                                call_id=call_id)
+                call.response = {"status": "ERROR", "outcome": "rejected", "guardrail": e.code}
+                return self._end(r, elapsed_ms=0, traced=traced, outcome="rejected", sent=False, preview=preview)
             try:
                 r = await self._send(session, key, dql, call_id, traced, args, preview)
             except McpUnavailable as e:
                 call.attempts = list(getattr(e, "attempts", []))
                 raise
+            if r.status in ("OK", "EMPTY"):
+                # after MCP response: güvenilmeyen veri (boyut, biçim, talimat, secret) persist / LLM öncesi
+                try:
+                    r.records = gr.mcp_response(server=SERVER, tool=DQL_TOOL, status=r.status, records=r.records,
+                                                call_id=call_id)
+                except GuardrailTerminated:
+                    raise
+                except GuardrailBlocked as e:
+                    r.status, r.records, r.error = "ERROR", [], f"guardrail yanıtı reddetti: {e}"[:600]
+                    r.outcome = "rejected"
+                if r.status == "OK" and not r.records:
+                    r.status = "EMPTY"
             call.attempts = list(r.attempts)
             call.response = {"status": r.status, "outcome": r.outcome, "records": len(r.records),
                              "query_id": r.query_id}

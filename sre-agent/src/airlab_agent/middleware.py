@@ -42,6 +42,8 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from . import context_window as _cw
+from .guardrails import runtime as _gr
+from .guardrails.model import GuardrailBlocked
 
 HOOKS = ("before_agent", "before_model", "wrap_model_call", "after_model", "wrap_tool_call", "after_agent")
 KINDS = ("logging", "authorization", "validation", "retry", "limit", "redaction", "context", "custom")
@@ -544,6 +546,7 @@ class _CallExec:
                 b, _ = _payload(run, _req_view(call)) if m.kind in ("redaction", "context") else (None, False)
                 d, err, ms = _run_step(m, m.pre, before, call, p, run)
                 self.mw_ms += ms
+                _observe(m, d, call, ms, self.env_id)
                 a, tr = _payload(run, _req_view(call)) if d.decision == "modify" else (None, False)
                 self._rec(rid=rid, seq=seq, parent=self.env_id, depth=1, entry="middleware", call=call, hook=before,
                           m=m, conf=c, t0=t0, t1=_now(), overhead_ms=ms, wrapped_ms=None, d=d, error=err,
@@ -557,12 +560,20 @@ class _CallExec:
             b, _ = _payload(run, _req_view(call)) if run.settings.get("capture_payloads") else (None, False)
             d, err, ms = _run_step(m, m.pre, wrap, call, p, run)
             self.mw_ms += ms
+            _observe(m, d, call, ms, self.env_id)
             self.stack.append((m, c, p, rid, seq, t0, parent, depth, d, err, ms, time.perf_counter(), b))
             parent, depth = rid, depth + 1
             if d.stops:
                 self.blocked = d
                 return d
         self.inner_parent, self.inner_depth = parent, depth
+        if call.kind == "model":
+            # Guardrails before_model: zorunlu middleware'lerden SONRA (maskelenmiş mesajlar üzerinde), sağlayıcıdan önce
+            try:
+                _gr.llm_request(call, envelope_id=self.env_id)
+            except GuardrailBlocked as e:
+                self.blocked = Decision("block", reason=str(e)[:300], code=e.code, policy="guardrails", exc=e)
+                return self.blocked
         return None
 
     def exit(self, error: BaseException | None) -> None:
@@ -615,6 +626,59 @@ class _CallExec:
         raise MiddlewareBlocked(d)
 
 
+# Güvenlik middleware'i → guardrail policy (kural middleware'de uygulanır; burada yalnız kaydedilir)
+_MW_DECISION = {"allow": "passed", "modify": "redacted", "block": "blocked", "short_circuit": "blocked"}
+
+
+def _observe(m: Middleware, d: Decision, call: Call, ms: float, envelope_id: str) -> None:
+    if not m.security or d.decision not in _MW_DECISION:
+        return
+    key = None
+    if m.name == "call_limit":
+        key = "llm_call_budget" if call.kind == "model" else "tool_call_budget"
+    try:
+        _gr.observe(f"middleware:{m.name}", policy_key=key, decision=_MW_DECISION[d.decision],
+                    stage="llm_request" if call.kind == "model" else "mcp_request", reason=d.reason, code=d.code,
+                    duration_ms=ms, model=call.target if call.kind == "model" else None,
+                    tool=call.target if call.kind == "tool" else None, mcp_server=call.connector,
+                    llm_call_id=envelope_id if call.kind == "model" else None,
+                    mcp_call_id=call.tool_call_id if call.kind == "tool" else None)
+    except Exception:  # noqa: BLE001 — kayıt hatası çağrıyı etkilemez
+        pass
+
+
+def _guard_output(call: Call, out: Any) -> Any:
+    """after_model: model yanıtındaki metin guardrail'den geçer (sızıntı, hassas veri). Yapılandırılmış çıktı
+    (structured) yalnız değerlendirilir; dönüşüm uygulanmaz (iç yönlendirme verisidir, kullanıcıya gitmez)."""
+    content = getattr(out, "content", None)
+    if isinstance(content, str):
+        new = _gr.llm_response_text(call, content)
+        if new != content:
+            try:
+                out.content = new
+            except Exception:  # noqa: BLE001
+                pass
+        return out
+    if isinstance(content, list):
+        parts = [p for p in content if isinstance(p, dict) and p.get("type") == "text" and isinstance(p.get("text"), str)]
+        if parts:
+            joined = "".join(p["text"] for p in parts)
+            new = _gr.llm_response_text(call, joined)
+            if new != joined:
+                parts[0]["text"] = new
+                for p in parts[1:]:
+                    p["text"] = ""
+        return out
+    if isinstance(out, dict) and "raw" in out:
+        raw = out.get("raw")
+        text = getattr(raw, "content", None)
+        if isinstance(text, (str, list)):
+            import json as _json
+            _gr.check("llm_response", {"text": text if isinstance(text, str) else _json.dumps(text, default=str)[:20000],
+                                       "structured": True}, enforce=True, model=call.target)
+    return out
+
+
 # ------------------------------------------------------------------------------------------------ çağrı API'leri
 def run_model_sync(call: Call, fn: Callable[[dict], Any]) -> Any:
     ex = _CallExec(call, "before_model", "wrap_model_call", "after_model")
@@ -635,6 +699,11 @@ def run_model_sync(call: Call, fn: Callable[[dict], Any]) -> Any:
         raise
     ex.call_ms = (time.perf_counter() - t) * 1000
     _cw.end(tok, result=out)
+    try:
+        out = _guard_output(call, out)
+    except BaseException as e:
+        ex.exit(e)
+        raise
     ex.exit(None)
     return out
 
@@ -658,6 +727,11 @@ async def run_model_async(call: Call, fn: Callable[[dict], Awaitable[Any]]) -> A
         raise
     ex.call_ms = (time.perf_counter() - t) * 1000
     _cw.end(tok, result=out)
+    try:
+        out = _guard_output(call, out)
+    except BaseException as e:
+        ex.exit(e)
+        raise
     ex.exit(None)
     return out
 

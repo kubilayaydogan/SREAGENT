@@ -51,6 +51,22 @@ def settings(db_url, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _guardrail_state():
+    """Guardrail süreç durumu testler arasında taşınmaz (rate limit penceresi, snapshot cache, kill switch)."""
+    from airlab_agent.guardrails import runtime as gr
+    gr._RATE.clear()
+    yield
+    gr._RATE.clear()
+    gr.set_fallback(None)
+    try:
+        from sre_platform.guardrails import runtime as g_rt
+        g_rt._CACHE.update(rev=None, engine=None)
+        g_rt._KILL.update(state={}, at=0.0)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@pytest.fixture(autouse=True)
 def _clean(request):
     yield
     if "db_url" not in request.fixturenames:
@@ -66,9 +82,14 @@ def _clean(request):
                 "select 1 from pg_trigger where tgname = 'audit_events_no_truncate'")).first() is not None
             if guarded:
                 c.execute(sa.text("ALTER TABLE sre.audit_events DISABLE TRIGGER USER"))
+            g_audit = "guardrail_audit_events" in tables
+            if g_audit:
+                c.execute(sa.text("ALTER TABLE sre.guardrail_audit_events DISABLE TRIGGER USER"))
             c.execute(sa.text("TRUNCATE " + ", ".join(f"sre.{t}" for t in tables) + " RESTART IDENTITY CASCADE"))
             if guarded:
                 c.execute(sa.text("ALTER TABLE sre.audit_events ENABLE TRIGGER USER"))
+            if g_audit:
+                c.execute(sa.text("ALTER TABLE sre.guardrail_audit_events ENABLE TRIGGER USER"))
     eng.dispose()
 
 

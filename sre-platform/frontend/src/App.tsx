@@ -22,6 +22,7 @@ const McpCalls = lazy(() => import("@/pages/McpCallsPage"));
 const AgentTrace = lazy(() => import("@/pages/AgentTracePage"));
 const AgentMemory = lazy(() => import("@/pages/AgentMemoryPage"));
 const AgentMiddleware = lazy(() => import("@/pages/AgentMiddlewarePage"));
+const Guardrails = lazy(() => import("@/pages/GuardrailsPage"));
 const ContextWindows = lazy(() => import("@/pages/ContextWindowsPage"));
 const AgentBuilder = lazy(() => import("@/pages/AgentBuilderPage"));
 const Settings = lazy(() => import("@/pages/SettingsPage"));
@@ -71,6 +72,7 @@ const router = createBrowserRouter([
       { path: "agent-trace/:key?", element: s(<AgentTrace />) },
       { path: "agent-memory", element: s(<AgentMemory />) },
       { path: "agent-middleware", element: s(<AgentMiddleware />) },
+      { path: "guardrails", element: s(<Guardrails />) },
       { path: "context-windows", element: s(<ContextWindows />) },
       { path: "agent-builder/:id?", element: s(<AgentBuilder />) },
       { path: "settings/:section?", element: s(<Settings />) },

@@ -116,11 +116,26 @@ def decide(action: str, ctx: dict) -> Decision:
             return Decision(Outcome.DENY, "unknown_action", f"tanımsız policy eylemi: {action}",
                             version({"action": action}), action)
         outcome, reason, msg, facts = rule(ctx)
-        return Decision(outcome, reason, msg, version({"action": action, **_inputs(action, ctx)}), action, facts)
+        d = Decision(outcome, reason, msg, version({"action": action, **_inputs(action, ctx)}), action, facts)
+        if action == "tool.call":
+            _guardrail_observe(d, ctx)
+        return d
     except Exception as e:  # noqa: BLE001
         log.exception("policy değerlendirme hatası", extra={"policy_action": action})
         return Decision(Outcome.DENY, "policy_error", f"policy değerlendirilemedi ({type(e).__name__})",
                         f"{RULES_VERSION}:error", action)
+
+
+def _guardrail_observe(d: Decision, ctx: dict) -> None:
+    """Guardrails: connector yetkilendirme kararı (bound policy) koşu kaydına eklenir; karar burada verilir."""
+    try:
+        from airlab_agent.guardrails import runtime as gr
+        c = ctx.get("connector") or {}
+        gr.observe("policy:tool.call", decision="passed" if d.outcome.value == "allow" else "blocked",
+                   stage="mcp_request", reason=None if d.outcome.value == "allow" else d.message,
+                   code=d.reason_code, mcp_server=c.get("name"), tool=ctx.get("tool"))
+    except Exception:  # noqa: BLE001 — kayıt hatası kararı değiştirmez
+        log.debug("guardrail observe başarısız", exc_info=True)
 
 
 def connector_view(c) -> dict | None:

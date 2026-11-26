@@ -148,8 +148,33 @@ def validate_write(*, title: str, content: str, structured_data: dict | None, me
         if (t2, c2) != (title, content) or sd2 != sd:
             red.append("pii")
         title, content, sd = t2, c2, sd2
+    title, content = _guardrail(title, content, memory_type, source, v)
     return PolicyResult(ok=not v, title=title, content=content, structured_data=sd, violations=v, redactions=red,
                         content_hash=content_hash(title, content, sd), trust=trust)
+
+
+def _guardrail(title: str, content: str, memory_type: str, source: str, v: list[dict]) -> tuple[str, str]:
+    """Guardrails › memory: validator kararı kaydedilir (bound policy) ve memory_write policy'leri değerlendirilir.
+    Rol koşu bağlamından gelir; koşu dışı yazma (API, RBAC ile yetkilendirilmiş) ve agent extraction 'system'dir."""
+    try:
+        from airlab_agent.guardrails import runtime as gr
+        from airlab_agent.guardrails.model import GuardrailBlocked
+    except Exception:  # noqa: BLE001
+        return title, content
+    gr.observe("memory:validate_write", decision="blocked" if v else "passed", stage="memory_write",
+               reason="; ".join(x["detail"] for x in v)[:300] if v else None, code=v[0]["code"] if v else None)
+    if v:
+        return title, content
+    run = gr.current()
+    role = run.ctx.user_role if run is not None and source in TRUSTED_SOURCES else "system"
+    try:
+        out = gr.memory_write(title=title, content=content, memory_type=memory_type, source=source, user_role=role)
+    except GuardrailBlocked as e:
+        v.append({"code": e.code, "detail": f"guardrail: {str(e)[:300]}"})
+        return title, content
+    if isinstance(out.payload, dict) and out.changed:
+        return str(out.payload.get("title", title)), str(out.payload.get("content", content))
+    return title, content
 
 
 def retrievable(rec: dict, cfg: dict) -> tuple[bool, str | None]:

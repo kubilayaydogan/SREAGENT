@@ -24,6 +24,9 @@ from .llm import RUN_BUDGET, LlmBudgetExceeded, LlmUnavailable
 from .mcp_gateway import OUTCOME, McpUnavailable, QueryResult
 from .redact import strip_fields
 from .scoring import score_all
+from .guardrails.model import GuardrailBlocked
+from .guardrails.runtime import final_output as guard_final_output
+from .guardrails.runtime import guard_node
 from .signals import CATALOG, EXTRA, Window, build_queries, iso, parse_ts
 
 
@@ -93,6 +96,27 @@ def _llm_outcome(e: Exception) -> str:
         return "budget_exceeded"
     m = str(e)
     return "refusal" if "refusal" in m else "empty_response" if "boş yanıt" in m else "llm_unavailable"
+
+
+def guard_facts(draft: dict) -> dict:
+    """final_output guardrail'leri için doğrulanmış olgular (deterministik rapordan; LLM'den değil)."""
+    o = (draft.get("risk") or {}).get("overall") or {}
+    apps = (draft.get("risk") or {}).get("apps") or {}
+    win = next((w for w in draft.get("windows") or [] if w.get("name") == "window"), None)
+    facts = {"evidence": draft.get("evidence") or [],
+             "evidence_ids": [e.get("id") for e in draft.get("evidence") or []],
+             "risk": {"score": o.get("score"), "band": o.get("band"), "coverage": o.get("coverage"),
+                      "allowed_scores": [o.get("score")] + [a.get("score") for a in apps.values()],
+                      "allowed_bands": [o.get("band")] + [a.get("band") for a in apps.values()]},
+             "window": win}
+    return facts
+
+
+def _guard_explanation(text: str, draft: dict) -> str:
+    """Before final output: evidence ID / provenance, yetersiz evidence, risk skoru tutarlılığı, hassas veri.
+    Scoring'e dokunmaz; yalnız LLM metnini düzeltir (sanitize) ya da engeller (deterministik açıklamaya düşülür)."""
+    out = guard_final_output(text, guard_facts(draft), node="explain")
+    return out.payload.get("text", text) if isinstance(out.payload, dict) else text
 
 
 def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_files: bool = True):
@@ -270,8 +294,14 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
                                          "features_summary", "status")}
         try:
             text = llm.explain(payload, state.get("question"))
+            text = _guard_explanation(text, draft)
             return {"explanation": text, "explanation_source": f"Claude ({getattr(llm, 'rca_model_name', settings.claude_rca_model)})",
                     "step_summary": info("ok")}
+        except GuardrailBlocked as e:
+            return {"explanation": rpt.deterministic_explanation(draft),
+                    "explanation_source": "deterministik (guardrail)",
+                    "errors": list(state.get("errors", [])) + [f"Guardrail LLM açıklamasını engelledi: {e}"],
+                    "step_summary": info("guardrail_blocked")}
         except LlmUnavailable as e:
             return {"explanation": rpt.deterministic_explanation(draft),
                     "explanation_source": "deterministik (Claude erişilemedi)",
@@ -312,7 +342,7 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
     g = StateGraph(AgentState)
     for name, fn in [("plan", plan), ("collect", collect), ("analyze", analyze), ("extra_evidence", extra_evidence),
                      ("explain", explain), ("finalize", finalize)]:
-        g.add_node(name, fn)
+        g.add_node(name, guard_node(name, fn))     # Guardrails: before / after node execution
     g.add_edge(START, "plan")
     g.add_edge("plan", "collect")
     g.add_edge("collect", "analyze")

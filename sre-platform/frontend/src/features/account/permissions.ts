@@ -17,6 +17,8 @@ export const PERM_LABEL: Record<string, string> = {
   "memory:approve": "Procedural memory onayı, memory export",
   "middleware:manage": "Agent middleware yapılandırması (etkinlik, sıra, kapsam, parametre)",
   "knowledge:manage": "Runbook yönetimi",
+  "guardrail:manage": "Guardrail policy, kapsam, rollback ve yapılandırma (kill switch dahil)",
+  "guardrail:triage": "Guardrail ihlal yönetimi ve Policy Tester",
   "user:manage": "Kullanıcı ve oturum yönetimi",
 };
 

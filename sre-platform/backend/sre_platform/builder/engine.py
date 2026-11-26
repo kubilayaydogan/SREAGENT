@@ -28,6 +28,8 @@ from typing import Annotated, Any, TypedDict
 
 from sqlalchemy import update
 
+from airlab_agent.guardrails import runtime as gr
+from airlab_agent.guardrails.model import GuardrailBlocked
 from airlab_agent.llm import RUN_BUDGET, LlmUnavailable, RunBudget, _usage_view, budget_add, data_json
 from airlab_agent.redact import redact, redact_text
 
@@ -323,9 +325,14 @@ class Runner:
             await self._emit("agent_thinking", {"step": n.id, "message": f"{n.label or n.type} çalışıyor"})
             await self._emit("agent_node", {**rec})
             try:
+                gr.node_start(n.id)
                 upd, extra = await fn(n, dict(state.get("vars") or {}))
+                gr.node_end(n.id)
                 rec.update(status=extra.pop("status", "ok"), **extra)
                 return upd
+            except GuardrailBlocked as e:
+                rec.update(status="failed", error_code=e.code, error=redact_text(str(e))[:500])
+                raise AgentRunError(e.code, f"guardrail engelledi: {redact_text(str(e))[:300]}", n.id) from None
             except AgentRunError as e:
                 e.node_id = e.node_id or n.id
                 rec.update(status="failed", error_code=e.code, error=redact_text(e.message)[:500])
@@ -400,13 +407,22 @@ class Runner:
                   and self.spec.emit is not None)
         call = mw.Call(kind="model", target=model, task=task, request={"messages": msgs, **({"stream": True} if stream else {})})
         if stream:
+            from airlab_agent.guardrails.stream import StreamGuard
+            sg = StreamGuard()          # hassas veri doğrulanmadan token iletilmez
             last, parts = None, []
             async for chunk in mw.stream_model(call, lambda req: chat.astream(req["messages"], config=cfg)):
                 last = chunk if last is None else last + chunk
                 for t in _texts(chunk):
-                    parts.append(t)
-                    self.streamed = True
-                    await self._emit("token", {"text": t})
+                    safe = sg.feed(t)
+                    if safe:
+                        parts.append(safe)
+                        self.streamed = True
+                        await self._emit("token", {"text": safe})
+            rest = sg.flush()
+            if rest:
+                parts.append(rest)
+                self.streamed = True
+                await self._emit("token", {"text": rest})
             msg = last
             text = "".join(parts)
         else:
@@ -518,6 +534,16 @@ class Runner:
                     raise AgentRunError("output_schema", f"çıktı şemaya uymuyor: {err}", n.id)
         else:
             out = render(tpl, v, data_blocks=False)
+        # Before final output: hassas veri, output schema, desteklenmeyen kesin ifade (engellenirse koşu başarısız)
+        facts = {"data": out, "schema": io.output_schema} if not isinstance(out, str) else \
+            ({"schema": io.output_schema, "data": None} if io.output_schema else {})
+        g = gr.final_output(out if isinstance(out, str) else "", facts, node=n.id)
+        if isinstance(g.payload, dict) and g.changed:
+            new = g.payload.get("text") if isinstance(out, str) else g.payload.get("data", out)
+            if new is not None and new != out:
+                out = new
+                if self.streamed and isinstance(out, str):
+                    await self._emit("answer_replaced", {"text": out, "reason": "guardrail"})
         return {"output": out}, {}
 
     def _callbacks(self) -> list:
@@ -609,7 +635,7 @@ async def execute(rt, spec: RunSpec, *, checkpointer=None) -> dict:
     result: dict[str, Any] = {"run_id": spec.run_id, "agent_id": str(spec.agent_id), "agent_version": spec.version,
                               "version_label": spec.version_label, "mode": spec.mode}
     status, err = "completed", None
-    tsess = msess = None
+    tsess = msess = gsess = None
     budget_token = None
     try:
         rc = await srt.run_config(rt, trigger="scheduled" if spec.semantics == "scheduled" else "manual")
@@ -632,6 +658,18 @@ async def execute(rt, spec: RunSpec, *, checkpointer=None) -> dict:
                                       trace_id=spec.run_id, user_id=str(spec.user_id) if spec.user_id else None)
         except Exception:  # noqa: BLE001 — zorunlu middleware'ler kod varsayılanıyla çalışır
             log.exception("middleware run bağlamı başlatılamadı")
+        from ..guardrails import runtime as g_rt
+        try:
+            gsess = await g_rt.start(rt, kind="custom_agent", run_id=spec.run_id, thread_id=spec.thread_id or spec.run_id,
+                                     trace_id=spec.run_id, user_id=spec.user_id, agent_id=str(spec.agent_id),
+                                     agent_key=spec.agent_key, agent_version=spec.version_label,
+                                     input_text=str(spec.input or ""),
+                                     input_schema=spec.definition.settings.io.input_schema,
+                                     variables=spec.variables or None, self_counted=True)
+        except GuardrailBlocked as e:
+            raise AgentRunError(e.code, "guardrail engelledi: " + g_rt.blocked_message(e)) from None
+        except Exception:  # noqa: BLE001 — hook'lar süreç snapshot'ıyla (kayıtsız) çalışır
+            log.exception("guardrail run bağlamı başlatılamadı")
         graph = r.build(checkpointer)
         config = {"configurable": {"thread_id": spec.thread_id or spec.run_id},
                   "recursion_limit": lim.max_steps + 5, "run_name": f"agent-{spec.agent_key}",
@@ -676,6 +714,11 @@ async def execute(rt, spec: RunSpec, *, checkpointer=None) -> dict:
         if msess is not None:
             await msess.finish("completed" if status == "completed" else "cancelled" if status == "cancelled"
                                else "failed", emsg)
+        if gsess is not None:
+            try:
+                gsess.finish(status)
+            except Exception:  # noqa: BLE001
+                log.exception("guardrail run kapanışı başarısız")
         dur = int((time.monotonic() - r.t0) * 1000)
         result.update(status=status, error=err, duration_ms=dur, nodes=r.nodes_log, models=r.models, usage=usage)
         await _row(rt, spec, status=status, error_code=err["code"] if err else None,

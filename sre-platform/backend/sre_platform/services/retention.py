@@ -108,6 +108,8 @@ async def purge(s: AsyncSession, ret: dict, now: datetime | None = None) -> dict
     out["checkpoint_threads_ttl"] = p["checkpoint_threads_ttl"]
     store_cond, params = p.pop("_store")
     out["store_items"] = (await s.execute(text(f"DELETE FROM langgraph.store WHERE {store_cond}"), params)).rowcount or 0
+    from ..guardrails.retention import prune as guardrail_prune      # Guardrails › Settings › retention
+    out.update(await guardrail_prune(s, now))
     return out
 
 

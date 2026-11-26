@@ -41,6 +41,7 @@ class InvestigationTimeout(Exception):
 
 
 _MW_SESSION: ContextVar = ContextVar("sre_mw_session", default=None)
+_GR_SESSION: ContextVar = ContextVar("sre_gr_session", default=None)
 
 
 class InvestigationRunner:
@@ -55,7 +56,10 @@ class InvestigationRunner:
         from ..memory import events as mem_events
         token = mem_events.CTX.set(mem_events.CTX.get())
         mw_token = mw.RUN.set(mw.RUN.get())             # middleware run bağlamı koşu sonunda çağırana geri döner
+        from airlab_agent.guardrails import runtime as gr
+        gr_token = gr.RUN.set(gr.RUN.get())             # guardrail run bağlamı da çağırana geri döner
         sess_token = _MW_SESSION.set(None)
+        gsess_token = _GR_SESSION.set(None)
         failed: tuple[str, str] | None = None
         try:
             return await self._run(inv_id, **kw)
@@ -71,6 +75,15 @@ class InvestigationRunner:
                     await msess.finish(*(getattr(msess, "final", None) or failed or ("completed", None)))
                 except BaseException:  # noqa: BLE001 — kayıt kapanışı koşu sonucunu değiştirmez
                     log.exception("middleware run kapanışı başarısız")
+            gsess = _GR_SESSION.get()
+            if gsess is not None:
+                try:
+                    msess_final = getattr(msess, "final", None) if msess is not None else None
+                    gsess.finish((msess_final or failed or ("completed", None))[0])
+                except BaseException:  # noqa: BLE001
+                    log.exception("guardrail run kapanışı başarısız")
+            _GR_SESSION.reset(gsess_token)
+            gr.RUN.reset(gr_token)
             _MW_SESSION.reset(sess_token)
             mw.RUN.reset(mw_token)
             mem_events.CTX.reset(token)
@@ -153,6 +166,29 @@ class InvestigationRunner:
             _MW_SESSION.set(msess)
         except Exception:  # noqa: BLE001 — kayıt başlatılamadı; zorunlu middleware'ler kod varsayılanıyla çalışır
             log.exception("middleware run bağlamı başlatılamadı")
+        # Guardrails: koşu bağlamı + before_agent (girdi, eşzamanlılık, kill switch). Sohbet içinden gelen analizde
+        # soru sohbet turunda zaten değerlendirildi (tekrar ihlal üretilmez).
+        from airlab_agent.guardrails import runtime as gr
+        from airlab_agent.guardrails.model import GuardrailBlocked
+        from ..guardrails import runtime as g_rt
+        try:
+            _GR_SESSION.set(await g_rt.start(
+                self.rt, kind="investigation", run_id=tsess.run_id if tsess else run_id, thread_id=run_id,
+                trace_id=str(inv_id), user_id=_mc.user_id, input_text=question or "",
+                environment=trace_meta.get("environment"), check_input=gr.RUN.get() is None, self_counted=True))
+        except GuardrailBlocked as e:
+            msg = "guardrail engelledi: " + g_rt.blocked_message(e)
+            if tsess is not None:
+                await tsess.finish("failed", msg)
+            if msess is not None:
+                msess.final = ("failed", msg)
+            async with transaction(sm) as s:
+                await investigations.fail(s, await investigations.get(s, inv_id), msg)
+            await emit("error", {"code": e.code, "message": msg, "investigation_id": str(inv_id)})
+            async with transaction(sm) as s:
+                return await investigations.get(s, inv_id), None
+        except Exception:  # noqa: BLE001 — bağlam kurulamadı: hook'lar süreç snapshot'ıyla (kayıtsız) çalışır
+            log.exception("guardrail run bağlamı başlatılamadı")
         use_llm = core_llm is not None
         gw_factory = rc.gateway_factory
         callbacks = (self.rt.callbacks or getattr(core_llm, "callbacks", None)) if rc.trace else []

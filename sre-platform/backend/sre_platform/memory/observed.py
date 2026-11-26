@@ -207,6 +207,7 @@ class ObservedMemoryService(MemoryService):
         stages.append({"stage": "validation", "status": "ok", "output": {
             "excluded": excluded, "notes": ["rejected outcome'lu episode'lar bilinçli olarak döner (hipotezin yanlış "
                                             "çıktığı bilgi değerlidir)"]}})
+        out = _guard_recall(out)          # Guardrails › memory_read: tenant, poisoning, indirect injection
         sel = mctx.refs(out)
         for r in sel:
             events.publish("MEMORY_RETRIEVED", memory_id=r["ref"], memory_type=r["memory_type"],
@@ -337,12 +338,67 @@ def _on_err(op: str, config, e):
                    thread_id=ids["thread_id"], status="error", error=e, payload={"operation": op, **ids})
 
 
+_RECALL_KEYS = ("episodes", "investigations", "runbooks", "known_issues", "incidents", "rca", "semantic")
+_TRUSTED = ("manual", "import", "platform")
+
+
+def _guard_recall(out: dict) -> dict:
+    """Agent bağlamına girecek memory kayıtları guardrail'lerden geçer. Platformun kendi ürettiği kayıtlar (episode,
+    investigation, runbook…) 'platform' kaynaklıdır; semantic kayıtlar kendi source / verification bilgisini taşır.
+    Guardrail engine'i yüklenemezse kayıtlar değişmeden döner (mevcut Memory Policy Manager filtreleri geçerli)."""
+    try:
+        from airlab_agent.guardrails import runtime as gr
+    except Exception:  # noqa: BLE001
+        return out
+    items = []
+    for k in _RECALL_KEYS:
+        for x in out.get(k) or []:
+            if isinstance(x, dict):
+                # provenance yalnız semantic kayıtlarda anlamlı; diğerleri platformun kendi kayıtlarıdır
+                src = (x.get("source") or "platform") if k == "semantic" else "platform"
+                items.append({"_k": k, "source": src, "tenant_id": x.get("tenant_id") or "default",
+                              "verified": src in _TRUSTED or x.get("verification_status") == "verified"
+                              or x.get("source_trust") == "trusted", "record": x})
+    if not items:
+        return out
+    try:
+        kept = gr.memory_read(items)
+    except Exception:  # noqa: BLE001 — engellenirse (block aksiyonu) geçmiş kayıt kullanılmaz
+        log.warning("memory_read guardrail engelledi; kayıtlar bağlama alınmadı")
+        kept = []
+    if kept is items:
+        return out
+    out = dict(out)
+    counts = dict(out.get("counts") or {})
+    for k in _RECALL_KEYS:
+        if k in out:
+            out[k] = [it["record"] for it in kept if it.get("_k") == k]
+            if k in counts:
+                counts[k] = len(out[k])
+    out["counts"] = counts
+    return out
+
+
+def _guard_checkpoint(checkpoint):
+    """Before checkpoint persistence: checkpoint'e secret / PII yazılmaz (zorunlu redaction)."""
+    try:
+        from airlab_agent.guardrails import runtime as gr
+        return gr.checkpoint(checkpoint)
+    except Exception as e:  # noqa: BLE001 — engellendi / hata: checkpoint yazılmaz (fail-closed)
+        from airlab_agent.guardrails.model import GuardrailBlocked
+        if isinstance(e, GuardrailBlocked):
+            raise
+        log.exception("checkpoint guardrail değerlendirmesi başarısız")
+        raise
+
+
 def observed_savers():
     from langgraph.checkpoint.postgres import PostgresSaver
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
     class ObservedPostgresSaver(PostgresSaver):
         def put(self, config, checkpoint, metadata, new_versions):
+            checkpoint = _guard_checkpoint(checkpoint)
             t0 = time.perf_counter()
             try:
                 out = super().put(config, checkpoint, metadata, new_versions)
@@ -364,6 +420,7 @@ def observed_savers():
 
     class ObservedAsyncPostgresSaver(AsyncPostgresSaver):
         async def aput(self, config, checkpoint, metadata, new_versions):
+            checkpoint = _guard_checkpoint(checkpoint)
             t0 = time.perf_counter()
             try:
                 out = await super().aput(config, checkpoint, metadata, new_versions)

@@ -319,8 +319,8 @@ class ChatOrchestrator:
             intent = r["intent"]
             system = human = None
             fallback = banner = ""
+            report = None
             if intent in ("analyze", "compare"):
-                report = None
                 if inv and inv.get("investigation_id"):
                     async with transaction(rt.sm) as s:
                         row = await investigations.get(s, uuid.UUID(inv["investigation_id"]))
@@ -377,17 +377,27 @@ class ChatOrchestrator:
             llm_ = rca_llm if rca else chat_llm
             if system and llm_ is not None:
                 await ctx.emit("agent_thinking", {"step": "rca", "message": "Yanıt hazırlanıyor."})
+                from airlab_agent.guardrails.stream import StreamGuard
+                sg = StreamGuard()          # hassas veri doğrulanmadan token iletilmez (son 256 karakter tutulur)
                 try:
                     async for tok in llm_.astream(system, human, rca=rca):
                         if ctx.cancel.is_set():
                             break
-                        answer += tok
-                        await ctx.emit("token", {"text": tok})
+                        safe = sg.feed(tok)
+                        if safe:
+                            answer += safe
+                            await ctx.emit("token", {"text": safe})
+                    rest = sg.flush()
+                    if rest:
+                        answer += rest
+                        await ctx.emit("token", {"text": rest})
                     source = f"Claude ({getattr(rt.llm, 'rca_model_name', rt.llm.model_name) if rca else rt.llm.model_name})"
                 except LlmUnavailable as e:
                     await ctx.emit("agent_thinking", {"step": "rca", "message":
                                                       f"Claude erişilemedi; deterministik özet kullanıldı ({e})."})
                     answer = ""
+            if answer.strip():
+                answer, source = await _guard_answer(ctx, answer, source, report, fallback, banner)
             if not answer.strip():
                 answer, source = fallback, "deterministik" + (" (Claude devre dışı)" if llm_ is None else "")
                 await ctx.emit("token", {"text": answer})
@@ -469,6 +479,14 @@ class ChatOrchestrator:
         tsess = await self._trace_start(ctx, attempt=1)
         msess = await self._mw_start(ctx, tsess, rid)
         err, status = None, "completed"
+        gsess, blocked = await self._gr_start(ctx, tsess, rid, question)
+        if blocked is not None:                 # before_agent guardrail: tur LLM / MCP çalışmadan yanıtlanır
+            await ctx.emit("token", {"text": blocked})
+            for sess in (tsess, msess):
+                if sess is not None:
+                    await sess.finish("failed", blocked)
+            return await self._finish(ctx, {"route": {"intent": "guardrail_blocked"}, "answer": blocked,
+                                            "answer_source": "guardrail", "suggestions": []})
         try:
             with self._mem_bind(ctx, tsess, rid):
                 state = await self._invoke(ctx, graph, {"question": question,
@@ -479,6 +497,11 @@ class ChatOrchestrator:
             status = _mw_status(e)
             raise
         finally:
+            if gsess is not None:
+                try:
+                    gsess.finish(status)
+                except Exception:  # noqa: BLE001
+                    log.exception("guardrail run kapanışı başarısız")
             await self._link(ctx, rid)
             if tsess is not None:
                 await tsess.finish("failed" if err else "completed", err)
@@ -497,6 +520,23 @@ class ChatOrchestrator:
         except Exception:  # noqa: BLE001
             log.exception("middleware run bağlamı başlatılamadı")
             return None
+
+    async def _gr_start(self, ctx: TurnContext, tsess, rid, question: str):
+        """Guardrail run bağlamı + before_agent (girdi). Engellenirse (None, kullanıcıya gösterilecek mesaj)."""
+        from airlab_agent.guardrails.model import GuardrailBlocked
+        from ..guardrails import runtime as g_rt
+        try:
+            env = ((getattr(ctx.rc, "effective", None) or {}).get("observability") or {}).get("environment_tag")
+            return await g_rt.start(self.rt, kind="chat_turn", run_id=tsess.run_id if tsess is not None else
+                                    f"chat-{ctx.result.get('user_message_id') or rid}", thread_id=ctx.thread_id,
+                                    trace_id=str(rid), user_id=ctx.user_id, input_text=question,
+                                    environment=env), None
+        except GuardrailBlocked as e:
+            return None, ("Bu istek bir güvenlik policy'si nedeniyle işlenmedi: " + g_rt.blocked_message(e) +
+                          "\n\nAyrıntı: Guardrails › Evaluation Logs.")
+        except Exception:  # noqa: BLE001 — bağlam kurulamadı: hook'lar süreç snapshot'ıyla (kayıtsız) çalışır
+            log.exception("guardrail run bağlamı başlatılamadı")
+            return None, None
 
     async def _trace_start(self, ctx: TurnContext, *, attempt: int):
         """Agent Trace run'ı: platform run_id = turun kullanıcı mesajı; sürdürülen tur yeni girişim."""
@@ -625,6 +665,28 @@ class ChatOrchestrator:
                           investigation=inv, suggestions=state.get("suggestions", []),
                           answer_source=state.get("answer_source"))
         return ctx.result
+
+
+async def _guard_answer(ctx, answer: str, source: str, report: dict | None, fallback: str,
+                        banner: str) -> tuple[str, str]:
+    """Before final output: LLM yanıtı guardrail'lerden geçer (evidence / risk tutarlılığı, hassas veri, schema).
+    Düzeltilirse istemciye son metin `answer_replaced` olayıyla gönderilir; engellenirse deterministik yanıt."""
+    from airlab_agent.graph import guard_facts
+    from airlab_agent.guardrails import runtime as gr
+    from airlab_agent.guardrails.model import GuardrailBlocked
+    try:
+        out = gr.final_output(answer, guard_facts(report) if report else {}, node="respond")
+    except GuardrailBlocked as e:
+        text = fallback or ("Yanıt bir güvenlik policy'si nedeniyle gösterilmedi: " + str(e)[:300])
+        await ctx.emit("answer_replaced", {"text": banner + text, "reason": "guardrail"})
+        return text, "deterministik (guardrail)"
+    except Exception:  # noqa: BLE001 — değerlendirme hatası engine içinde fail-open/closed'a göre işlenir
+        log.exception("final output guardrail değerlendirmesi başarısız")
+        return answer, source
+    text = out.payload.get("text", answer) if isinstance(out.payload, dict) else answer
+    if text != answer:
+        await ctx.emit("answer_replaced", {"text": banner + text, "reason": "guardrail"})
+    return text, source
 
 
 async def _noop(*_a, **_k):

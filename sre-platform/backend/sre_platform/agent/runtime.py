@@ -34,6 +34,7 @@ class AgentRuntime:
     memory: MemoryService | None = None
     mem_events: object = None                         # memory.events.MemoryEventPublisher
     cw_writer: object = None                          # context_window.writer.ContextWindowWriter
+    gr_writer: object = None                          # guardrails.runtime.GuardrailWriter
     sem: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(2))
     callbacks: list = field(default_factory=list)      # LangSmith tracer (redakte eder); tracing kapalıysa boş
     settings_started: dict | None = None              # süreç açılışındaki etkili ayarlar ("restart gerekli" tespiti)
@@ -132,6 +133,13 @@ async def create_runtime(ps: PlatformSettings, *, agent: Settings | None = None,
     async def _stop_cw():
         await cw_writer.uninstall(rt.cw_writer)
     rt._closers.append(_stop_cw)
+    # Guardrails: policy seed + snapshot + değerlendirme / ihlal / onay yazıcısı (yazma hatası agent'ı kesmez)
+    from ..guardrails import runtime as g_rt
+    rt.gr_writer = await g_rt.install(rt.sm)
+
+    async def _stop_gr():
+        await g_rt.uninstall(rt.gr_writer)
+    rt._closers.append(_stop_gr)
     return rt
 
 

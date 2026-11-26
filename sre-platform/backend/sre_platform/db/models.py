@@ -1375,3 +1375,236 @@ class AgentRun(Base):
     started_at: Mapped[datetime] = _created()
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     duration_ms: Mapped[int | None] = mapped_column(Integer)
+
+
+# ================================================================================================= Guardrails (0019)
+class GuardrailPolicy(Base):
+    """Guardrail policy (aktif sürümün açılmış hali). Tanım geçmişi guardrail_policy_versions'tadır."""
+    __tablename__ = "guardrail_policies"
+    __table_args__ = (Index("ix_guardrail_policies_category", "category"), {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    key: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default", server_default="default")
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    policy_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", server_default="active")
+    mandatory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stages: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    action: Mapped[str] = mapped_column(String(24), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    params: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    bound_to: Mapped[str | None] = mapped_column(String(64))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    latest_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by: Mapped[str | None] = mapped_column(String(64))
+    updated_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _created()
+    last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class GuardrailPolicyVersion(Base):
+    __tablename__ = "guardrail_policy_versions"
+    __table_args__ = (UniqueConstraint("policy_id", "version", name="uq_guardrail_policy_version"), {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    policy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(f"{SCHEMA}.guardrail_policies.id", ondelete="CASCADE"),
+                                                 nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    change: Mapped[str] = mapped_column(String(24), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = _created()
+
+
+class GuardrailPolicyAssignment(Base):
+    __tablename__ = "guardrail_policy_assignments"
+    __table_args__ = (UniqueConstraint("policy_id", "scope", "value", name="uq_guardrail_assignment"),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    policy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(f"{SCHEMA}.guardrail_policies.id", ondelete="CASCADE"),
+                                                 nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default", server_default="default")
+    scope: Mapped[str] = mapped_column(String(24), nullable=False)
+    value: Mapped[str | None] = mapped_column(String(160))
+
+
+class GuardrailEvaluation(Base):
+    """Bir guardrail değerlendirmesi. Geçen (passed) değerlendirmeler koşu başına (policy, stage) tek satırda toplanır
+    (`count`, ortalama / en yüksek süre, `latency_buckets`); diğerleri tek tek ve güvenli snapshot'larla yazılır."""
+    __tablename__ = "guardrail_evaluations"
+    __table_args__ = (Index("ix_guardrail_eval_ts", text("ts DESC")),
+                      Index("ix_guardrail_eval_run", "run_id"),
+                      Index("ix_guardrail_eval_policy_ts", "policy_key", text("ts DESC")),
+                      Index("ix_guardrail_eval_decision_ts", "decision", text("ts DESC")),
+                      Index("ix_guardrail_eval_agent_ts", "agent_id", text("ts DESC")),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    environment: Mapped[str | None] = mapped_column(String(64))
+    run_id: Mapped[str | None] = mapped_column(String(160))
+    thread_id: Mapped[str | None] = mapped_column(String(160))
+    run_kind: Mapped[str | None] = mapped_column(String(24))
+    agent_id: Mapped[str | None] = mapped_column(String(64))
+    agent_key: Mapped[str | None] = mapped_column(String(64))
+    agent_version: Mapped[str | None] = mapped_column(String(32))
+    user_id: Mapped[str | None] = mapped_column(String(64))
+    user_role: Mapped[str | None] = mapped_column(String(16))
+    node: Mapped[str | None] = mapped_column(String(64))
+    stage: Mapped[str] = mapped_column(String(24), nullable=False)
+    policy_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    policy_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    policy_version: Mapped[int | None] = mapped_column(Integer)
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    decision: Mapped[str] = mapped_column(String(24), nullable=False)
+    enforced: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    severity: Mapped[str | None] = mapped_column(String(16))
+    action: Mapped[str | None] = mapped_column(String(24))
+    reason: Mapped[str | None] = mapped_column(String(300))
+    code: Mapped[str | None] = mapped_column(String(64))
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    duration_ms: Mapped[float | None] = mapped_column(Float)
+    duration_max_ms: Mapped[float | None] = mapped_column(Float)
+    latency_buckets: Mapped[Any | None] = mapped_column(JSONB)
+    matched: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    thresholds: Mapped[Any] = mapped_column(JSONB, nullable=False, default=dict)
+    changed_fields: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    snapshot: Mapped[Any | None] = mapped_column(JSONB)
+    context: Mapped[Any | None] = mapped_column(JSONB)
+    error: Mapped[str | None] = mapped_column(String(200))
+    mcp_server: Mapped[str | None] = mapped_column(String(64))
+    tool: Mapped[str | None] = mapped_column(String(128))
+    model: Mapped[str | None] = mapped_column(String(128))
+    provider: Mapped[str | None] = mapped_column(String(32))
+    correlation_id: Mapped[str | None] = mapped_column(String(64))
+    trace_id: Mapped[str | None] = mapped_column(String(64))
+    parent_span_id: Mapped[str | None] = mapped_column(String(64))
+    mcp_call_id: Mapped[str | None] = mapped_column(String(64))
+    llm_call_id: Mapped[str | None] = mapped_column(String(64))
+    approval_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    violation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    bound_to: Mapped[str | None] = mapped_column(String(64))
+
+
+class GuardrailViolation(Base):
+    """Benzer ihlaller fingerprint ile tek kayıtta toplanır (açık kayıt varken yeni oluşum sayacı artırır)."""
+    __tablename__ = "guardrail_violations"
+    __table_args__ = (Index("ix_guardrail_violation_last", text("last_seen DESC")),
+                      Index("uq_guardrail_violation_open", "tenant_id", "fingerprint", unique=True,
+                            postgresql_where=text("status IN ('open','acknowledged','investigating')")),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    policy_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    policy_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    agent_id: Mapped[str | None] = mapped_column(String(64))
+    agent_key: Mapped[str | None] = mapped_column(String(64))
+    run_id: Mapped[str | None] = mapped_column(String(160))
+    node: Mapped[str | None] = mapped_column(String(64))
+    stage: Mapped[str | None] = mapped_column(String(24))
+    mcp_server: Mapped[str | None] = mapped_column(String(64))
+    tool: Mapped[str | None] = mapped_column(String(128))
+    reason: Mapped[str | None] = mapped_column(String(300))
+    code: Mapped[str | None] = mapped_column(String(64))
+    decision: Mapped[str] = mapped_column(String(24), nullable=False)
+    action_taken: Mapped[str | None] = mapped_column(String(24))
+    enforced: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open", server_default="open")
+    assigned_to: Mapped[str | None] = mapped_column(String(64))
+    history: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    last_evaluation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_by: Mapped[str | None] = mapped_column(String(64))
+
+
+class GuardrailApproval(Base):
+    """İnsan onayı. Onay eylem + kaynak + tenant + değişmez parametre özetine (action_hash) bağlıdır; tek kullanımlıktır."""
+    __tablename__ = "guardrail_approvals"
+    __table_args__ = (Index("ix_guardrail_approval_status", "status", text("requested_at DESC")), {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    evaluation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    agent_id: Mapped[str | None] = mapped_column(String(64))
+    agent_key: Mapped[str | None] = mapped_column(String(64))
+    run_id: Mapped[str | None] = mapped_column(String(160))
+    thread_id: Mapped[str | None] = mapped_column(String(160))
+    requested_action: Mapped[str] = mapped_column(String(200), nullable=False)
+    target_resource: Mapped[str] = mapped_column(String(200), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(16), nullable=False)
+    requested_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    required_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", server_default="pending")
+    reason: Mapped[str | None] = mapped_column(String(300))
+    decision_reason: Mapped[str | None] = mapped_column(String(1000))
+    decided_by: Mapped[str | None] = mapped_column(String(64))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    action_params: Mapped[Any] = mapped_column(JSONB, nullable=False, default=dict)
+    action_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_key: Mapped[str | None] = mapped_column(String(80))
+    policy_version: Mapped[int | None] = mapped_column(Integer)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consumed_by: Mapped[str | None] = mapped_column(String(64))
+    result: Mapped[str | None] = mapped_column(String(300))
+
+
+class GuardrailTestRun(Base):
+    """Policy Tester (dry-run) sonucu. Üretim değerlendirme metriklerinden ayrıdır."""
+    __tablename__ = "guardrail_test_runs"
+    __table_args__ = (Index("ix_guardrail_test_created", text("created_at DESC")), {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    created_at: Mapped[datetime] = _created()
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    test_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    stage: Mapped[str] = mapped_column(String(24), nullable=False)
+    policy_keys: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    input: Mapped[Any] = mapped_column(JSONB, nullable=False, default=dict)
+    context: Mapped[Any] = mapped_column(JSONB, nullable=False, default=dict)
+    result: Mapped[Any] = mapped_column(JSONB, nullable=False, default=dict)
+    decision: Mapped[str] = mapped_column(String(24), nullable=False)
+    duration_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    expected_decision: Mapped[str | None] = mapped_column(String(24))
+    is_attack: Mapped[bool | None] = mapped_column(Boolean)
+
+
+class GuardrailConfiguration(Base):
+    __tablename__ = "guardrail_config"
+    __table_args__ = ({"schema": SCHEMA},)
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    updated_by: Mapped[str | None] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = _created()
+
+
+class GuardrailAuditEvent(Base):
+    """Guardrail yönetim olayları: append-only (DB tetikleyicisi) ve hash zinciri (tamper-evident)."""
+    __tablename__ = "guardrail_audit_events"
+    __table_args__ = (Index("ix_guardrail_audit_ts", text("ts DESC")), {"schema": SCHEMA})
+    seq: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    actor: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(48), nullable=False)
+    target: Mapped[str | None] = mapped_column(String(160))
+    before: Mapped[Any | None] = mapped_column(JSONB)
+    after: Mapped[Any | None] = mapped_column(JSONB)
+    detail: Mapped[str | None] = mapped_column(String(1000))
+    correlation_id: Mapped[str | None] = mapped_column(String(64))
+    prev_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    hash: Mapped[str] = mapped_column(String(64), nullable=False)

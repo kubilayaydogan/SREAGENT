@@ -32,11 +32,13 @@ class P(str, Enum):
     AGENT_BUILD = "agent:build"                 # Agent Builder: oluşturma, taslak düzenleme, test, import / export
     AGENT_PUBLISH = "agent:publish"             # yayımlama, sürüm aktifleştirme, arşivleme, varsayılan agent
     USER_MANAGE = "user:manage"
+    GUARDRAIL_MANAGE = "guardrail:manage"       # guardrail policy, kapsam, rollback, yapılandırma, kill switch
+    GUARDRAIL_TRIAGE = "guardrail:triage"       # ihlal durumu / atama, Policy Tester (dry-run)
 
 
 _VIEWER = {P.RECORD_READ}
 _SRE = _VIEWER | {P.AGENT_RUN, P.INCIDENT_WRITE, P.APPROVAL_REQUEST, P.SETTINGS_READ, P.AUDIT_READ,
-                  P.OBSERVABILITY_READ, P.MEMORY_WRITE, P.AGENT_BUILD}
+                  P.OBSERVABILITY_READ, P.MEMORY_WRITE, P.AGENT_BUILD, P.GUARDRAIL_TRIAGE}
 _ADMIN = set(P)
 
 ROLE_PERMISSIONS: dict[Role, frozenset[P]] = {Role.VIEWER: frozenset(_VIEWER), Role.SRE: frozenset(_SRE),

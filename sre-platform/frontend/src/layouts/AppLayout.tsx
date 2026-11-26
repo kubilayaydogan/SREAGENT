@@ -21,6 +21,7 @@ import {
   PanelsTopLeft,
   Workflow,
   Settings,
+  ShieldCheck,
   Siren,
   Sun,
   X,
@@ -75,6 +76,10 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
       { to: "/context-windows", label: "Context Windows", icon: PanelsTopLeft, role: "sre" },
       { to: "/settings", label: "Settings", icon: Settings, role: "sre" },
     ],
+  },
+  {
+    group: "Security & Governance",
+    items: [{ to: "/guardrails", label: "Guardrails", icon: ShieldCheck, role: "sre" }],
   },
 ];
 

@@ -7,7 +7,7 @@ from typing import Any, Literal, Protocol
 
 EventType = Literal["investigation_started", "tool_started", "tool_completed", "tool_failed", "agent_thinking", "token",
                     "evidence_found", "investigation_completed", "error", "message_saved", "memory_recalled",
-                    "suggestions", "done", "agent_node", "agent_result"]     # agent_*: Agent Builder
+                    "suggestions", "done", "agent_node", "agent_result", "answer_replaced"]  # agent_*: Agent Builder
 
 # Agent Activity ekranındaki adımlar (sinyal → adım)
 STEPS = [

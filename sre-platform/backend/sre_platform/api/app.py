@@ -206,6 +206,12 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
         code = {403: "forbidden", 404: "not_found", 409: "conflict"}.get(e.status, "middleware_config_invalid")
         return _err(e.status, code, e.message, e.detail or None)
 
+    from ..guardrails.service import GuardrailError
+
+    @app.exception_handler(GuardrailError)
+    async def _gre(_, e: GuardrailError):
+        return _err(e.status, e.code, e.message, e.details or None)
+
     from ..builder.package import PackageInvalid, SensitiveContent
     from ..builder.service import Invalid as AgentInvalid
     from ..builder.service import NotRunnable
@@ -233,8 +239,10 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
         return _err(422, "validation_error", "istek doğrulanamadı", details)
 
     from .routes import agent, agents, auth, catalog, agent_traces, context_windows, mcp_calls, memory, middleware, records
+    from .routes import guardrails as guardrail_routes
     from .routes import settings as settings_routes
     for r in (auth.router, catalog.router, catalog.system, agent.router, records.router, mcp_calls.router, agent_traces.router,
-              memory.router, middleware.router, context_windows.router, agents.router, settings_routes.router):
+              memory.router, middleware.router, context_windows.router, agents.router, guardrail_routes.router,
+              settings_routes.router):
         app.include_router(r, prefix="/api")
     return app
