@@ -150,10 +150,15 @@ export default function InvestigatePage() {
   const bottom = useRef<HTMLDivElement>(null);
   const attachedFor = useRef<string | null>(null);
   const runFailed = useRef(false);
+  // Ekrandaki bekleyen soru ve canlı yanıt hangi konuşmaya ait (yeni konuşmada null). Kullanıcı başka konuşmaya
+  // geçince bu durum taşınmaz; aksi halde yeni sorunun canlı yanıtı listedeki diğer konuşmada da görünür.
+  const owner = useRef<string | null>(conversationId ?? null);
+  const gen = useRef(0);
 
   const run = useAgentRun((e) => {
     if (e.type === "error") runFailed.current = true;
     if (e.type === "done") {
+      const g = gen.current;
       Promise.all([
         qc.invalidateQueries({ queryKey: ["messages"] }),
         qc.invalidateQueries({ queryKey: ["conversations"] }),
@@ -161,6 +166,7 @@ export default function InvestigatePage() {
         qc.invalidateQueries({ queryKey: ["dashboard"] }),
         qc.invalidateQueries({ queryKey: ["wm"] }),
       ]).then(() => {
+        if (g !== gen.current) return; // bu arada başka konuşmaya geçildi
         setPendingUser(null);
         if (!runFailed.current) run.detach(); // hata/iptal mesajı ekranda kalsın
         runFailed.current = false;
@@ -169,14 +175,27 @@ export default function InvestigatePage() {
   });
   const busy = run.state.phase === "streaming";
 
+  // konuşma değişti: önceki konuşmanın bekleyen sorusu ve canlı yanıtı ekrandan kalkar (run backend'de sürer;
+  // o konuşmaya dönülünce active_run_id üzerinden yeniden bağlanılır)
+  useEffect(() => {
+    const id = conversationId ?? null;
+    if (owner.current === id) return;
+    owner.current = id;
+    gen.current += 1;
+    run.detach();
+    setPendingUser(null);
+    runFailed.current = false;
+    attachedFor.current = null;
+  }, [conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // sayfa yenilendiyse / başka sekmede başlatıldıysa süren çalıştırmaya yeniden bağlan
   useEffect(() => {
-    const id = conv.data?.active_run_id;
-    if (id && !busy && attachedFor.current !== id) {
+    const id = conv.data?.id === conversationId ? conv.data?.active_run_id : null;
+    if (id && attachedFor.current !== id) {
       attachedFor.current = id;
       void run.attach(id);
     }
-  }, [conv.data?.active_run_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [conv.data?.id, conv.data?.active_run_id, conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (conv.data?.application_id) setApp(conv.data.application_id);
@@ -187,6 +206,7 @@ export default function InvestigatePage() {
   }, [msgs.data?.items.length, run.state.text.length, pendingUser, run.state.tools.length]);
 
   async function send(text: string, time: TimeChoice | null) {
+    const g = gen.current;
     setPendingUser(text);
     try {
       const r = await api.post<RunOut>("/agent/chat", {
@@ -195,14 +215,20 @@ export default function InvestigatePage() {
         application_id: app || null,
         time_range: time,
       });
+      if (g !== gen.current) {
+        // yanıt gelmeden başka konuşmaya geçildi; run kendi konuşmasında sürer, liste yenilensin
+        qc.invalidateQueries({ queryKey: ["conversations"] });
+        return;
+      }
       attachedFor.current = r.run_id;
       if (!conversationId && r.conversation_id) {
+        owner.current = r.conversation_id; // aynı soru yeni konuşmanın sayfasında kalır
         nav(`/investigate/${r.conversation_id}`, { replace: true });
         qc.invalidateQueries({ queryKey: ["conversations"] });
       }
       void run.attach(r.run_id, r.stream_url);
     } catch (e) {
-      setPendingUser(null);
+      if (g === gen.current) setPendingUser(null);
       errorToast(e, "Soru gönderilemedi");
     }
   }
@@ -219,8 +245,6 @@ export default function InvestigatePage() {
   }
 
   function newConversation() {
-    run.detach();
-    setPendingUser(null);
     setShowSide(false);
     nav("/investigate");
   }
