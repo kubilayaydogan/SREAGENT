@@ -275,10 +275,73 @@ class RetentionSettings(_Section):
         return v
 
 
+# ------------------------------------------------------------------------------------------------ memory
+class MemorySettings(_Section):
+    """Agent Memory (agent: sre-agent). Varsayılanlar mevcut davranışı korur: sohbet retrieval + context injection
+    açık; analiz akışına memory, otomatik extraction kapalı. Risk skoru memory'den hiçbir zaman etkilenmez."""
+    memory_enabled: bool = Field(True, json_schema_extra=_meta(
+        help="Ana anahtar. Kapalıyken long-term memory okunmaz/yazılmaz ve context'e eklenmez; "
+             "checkpoint (durable execution) etkilenmez"))
+    memory_observability_enabled: bool = Field(True, json_schema_extra=_meta(
+        help="Memory event'leri ve retrieval kayıtları (yalnız gözlem; agent davranışını değiştirmez)"))
+    short_term_enabled: bool = Field(True, json_schema_extra=_meta(
+        help="Sohbette konuşma odağı ve önceki tur özetleri (working memory) takip sorularında kullanılır"))
+    long_term_enabled: bool = Field(True, json_schema_extra=_meta(
+        help="Geçmiş kayıtlar (episode, investigation, incident, RCA, runbook, known issue, semantic) okunur"))
+    semantic_enabled: bool = Field(True, json_schema_extra=_meta(help="Semantic memory (known issue + doğrulanmış olgular)"))
+    episodic_enabled: bool = Field(True, json_schema_extra=_meta(
+        help="Episodic memory (episode, geçmiş investigation / incident / RCA)"))
+    procedural_enabled: bool = Field(True, json_schema_extra=_meta(help="Procedural memory (onaylı runbook'lar)"))
+    auto_extraction_enabled: bool = Field(False, json_schema_extra=_meta(
+        help="Feedback ile doğrulanmış investigation'lardan servis bağımlılığı olgusu çıkar (unverified; "
+             "doğrulanana kadar retrieval dışı)"))
+    memory_retrieval_enabled: bool = Field(True, json_schema_extra=_meta(
+        help="Sohbetin recall adımı memory'de arama yapar"))
+    context_injection_enabled: bool = Field(True, json_schema_extra=_meta(
+        help="Bulunan kayıtlar LLM isteğine (history/memory bölümü) eklenir. Kapalıyken retrieval yine kaydedilir"))
+    analysis_memory_enabled: bool = Field(False, json_schema_extra=_meta(
+        help="Investigation sonunda benzer episode, semantic topology ve onaylı runbook'lar rapora 'historical "
+             "context' olarak eklenir (evidence değildir, risk skorunu değiştirmez)"))
+    retrieval_strategy: Literal["fts_fingerprint"] = Field("fts_fingerprint", json_schema_extra=_meta(
+        help="Agent'ın kullandığı strateji: tam metin araması + belirti parmak izi benzerliği. Semantic (vector) "
+             "search implement edilmedi"))
+    top_k: int = Field(5, ge=1, le=20, json_schema_extra=_meta(help="Kaynak başına en çok kayıt"))
+    similarity_threshold: float = Field(0.35, ge=0.0, le=1.0, json_schema_extra=_meta(
+        help="Episode parmak izi benzerliği alt sınırı (Jaccard tabanlı; confidence değildir)"))
+    max_retrieved_records: int = Field(0, ge=0, le=200, json_schema_extra=_meta(
+        help="Context'e eklenecek toplam kayıt sınırı. 0 = sınır yok"))
+    max_context_tokens: int = Field(0, ge=0, le=100000, json_schema_extra=_meta(
+        help="Memory bölümü için tahmini token bütçesi (karakter/4). 0 = sınır yok; aşılırsa kayıtlar kırpılır"))
+    memory_retention_days: int = Field(0, ge=0, le=3650, json_schema_extra=_meta(
+        apply="next_tick", help="Arşivlenmiş / süresi dolmuş memory kayıtlarını bu süreden sonra sil. 0 = silme",
+        unit="gün"))
+    memory_event_retention_days: int = Field(90, ge=7, le=3650, json_schema_extra=_meta(
+        apply="next_tick", help="Memory event ve retrieval kayıtları", unit="gün"))
+    default_ttl_days: int = Field(0, ge=0, le=3650, json_schema_extra=_meta(
+        help="Yeni semantic kayıtlara varsayılan expires_at. 0 = süresiz", unit="gün"))
+    consolidation_policy: Literal["off"] = Field("off", json_schema_extra=_meta(
+        help="Consolidation implement edilmedi (otomatik birleştirme yok)"))
+    deduplication_policy: Literal["content_hash"] = Field("content_hash", json_schema_extra=_meta(
+        help="Aynı agent + namespace içinde normalize içerik hash'i aynı olan aktif kayıt ikinci kez yazılmaz"))
+    auto_archive_expired: bool = Field(True, json_schema_extra=_meta(
+        apply="next_tick", help="expires_at geçen kayıtlar 'expired' olur ve retrieval dışı kalır"))
+    require_validation: bool = Field(True, json_schema_extra=_meta(
+        help="Yazmadan önce prompt injection / poisoning kontrolü; eşleşen kayıt reddedilir"))
+    require_evidence_verification: bool = Field(True, json_schema_extra=_meta(
+        help="Güvenilmeyen kaynaktan (agent extraction) gelen kayıt doğrulanana kadar retrieval dışı"))
+    require_procedural_approval: Literal[True] = Field(True, json_schema_extra=_meta(
+        help="Procedural memory her zaman onay ister (four-eyes); kapatılamaz"))
+    pii_redaction_enabled: bool = Field(True, json_schema_extra=_meta(help="Yazılan içerikte PII maskelenir"))
+    secret_redaction_enabled: Literal[True] = Field(True, json_schema_extra=_meta(
+        help="Secret içeren içerik reddedilir; kapatılamaz"))
+    poisoning_protection_enabled: bool = Field(True, json_schema_extra=_meta(
+        help="Güvenilmeyen kaynak procedural memory'ye yazamaz ve kendini 'verified' işaretleyemez"))
+
+
 SECTIONS: dict[str, type[_Section]] = {
     "general": GeneralSettings, "agent": AgentSettings, "scheduling": SchedulingSettings, "risk": RiskSettings,
     "llm": LlmSettings, "observability": ObservabilitySettings, "notifications": NotificationSettings,
-    "retention": RetentionSettings,
+    "retention": RetentionSettings, "agent_memory": MemorySettings,
 }
 
 
@@ -310,6 +373,21 @@ LABELS = {
     "llm_runs_days": "LLM Monitoring özetleri", "job_runs_days": "İş geçmişi",
     "orphan_checkpoints_cleanup": "Sahipsiz checkpoint temizliği", "checkpoints_days": "Checkpoint TTL",
     "store_days": "Store TTL",
+    "memory_enabled": "Enable Memory", "memory_observability_enabled": "Enable Memory Observability",
+    "short_term_enabled": "Enable Short-Term Memory", "long_term_enabled": "Enable Long-Term Memory",
+    "semantic_enabled": "Enable Semantic Memory", "episodic_enabled": "Enable Episodic Memory",
+    "procedural_enabled": "Enable Procedural Memory", "auto_extraction_enabled": "Enable Automatic Memory Extraction",
+    "memory_retrieval_enabled": "Enable Memory Retrieval", "context_injection_enabled": "Enable Context Injection",
+    "analysis_memory_enabled": "Memory in Incident Analysis", "retrieval_strategy": "Retrieval Strategy",
+    "top_k": "Top K", "similarity_threshold": "Similarity Threshold",
+    "max_retrieved_records": "Maximum Retrieved Records", "max_context_tokens": "Maximum Memory Context Tokens",
+    "memory_retention_days": "Memory Retention Period", "memory_event_retention_days": "Memory Event Retention Period",
+    "default_ttl_days": "TTL", "consolidation_policy": "Consolidation Policy",
+    "deduplication_policy": "Deduplication Policy", "auto_archive_expired": "Automatic Archiving",
+    "require_validation": "Require Memory Validation", "require_evidence_verification": "Require Evidence Verification",
+    "require_procedural_approval": "Require Procedural Memory Approval", "pii_redaction_enabled": "Enable PII Redaction",
+    "secret_redaction_enabled": "Enable Secret Redaction",
+    "poisoning_protection_enabled": "Enable Memory Poisoning Protection",
 }
 
 

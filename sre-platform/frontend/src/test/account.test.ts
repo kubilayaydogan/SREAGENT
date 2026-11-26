@@ -10,8 +10,8 @@ describe("account", () => {
     expect(uaLabel("Mozilla/5.0 (Windows NT 10.0) Chrome/131.0 Safari/537.36 Edg/131.0")).toBe("Edge · Windows");
     expect(uaLabel("python-httpx/0.28")).toBe("API istemcisi");
   });
-  it("backend'deki 15 permission'ın hepsinin etiketi var", () => {
-    expect(Object.keys(PERM_LABEL)).toHaveLength(15);
+  it("backend'deki 17 permission'ın hepsinin etiketi var", () => {
+    expect(Object.keys(PERM_LABEL)).toHaveLength(17);
   });
   it("API anahtarı form doğrulaması", () => {
     expect(keyFormProblem("github-actions", ["record:read"], 90, 365)).toBeNull();

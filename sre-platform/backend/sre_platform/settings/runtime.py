@@ -116,6 +116,7 @@ async def run_config(rt, *, trigger: str = "manual") -> RunConfig:
         "llm": {"enabled": has_llm, "chat": prof_snap.get("chat"), "rca": prof_snap.get("rca"),
                 "model_override": llm_eff.get("model_override")},
         "tracing": {"langsmith": trace, "sampling_rate": o["sampling_rate"]},
+        "memory": eff.get("agent_memory", {}),
     }
     snapshot["hash"] = _hash({k: v for k, v in snapshot.items() if k != "trigger"})
     return RunConfig(agent=agent, timeout_s=int(a["run_timeout_s"]), recursion_limit=int(a["recursion_limit"]),

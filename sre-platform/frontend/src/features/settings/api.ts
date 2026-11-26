@@ -13,7 +13,8 @@ export type SectionId =
   | "llm"
   | "observability"
   | "notifications"
-  | "retention";
+  | "retention"
+  | "agent_memory";
 export type FieldSource = "locked" | "admin" | "env" | "default";
 export type ApplyMode = "next_run" | "next_tick" | "restart";
 export type FieldKind = "bool" | "int" | "float" | "string" | "enum" | "object";

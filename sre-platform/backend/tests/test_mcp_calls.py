@@ -288,7 +288,7 @@ def test_migration_0013_scrubs_legacy_raw_dql(db_url):
         rows = {r.signal: r for r in c.execute(sa.text(
             "SELECT signal, tool_arguments, request_preview FROM sre.agent_tool_executions"))}
     eng.dispose()
-    assert migrate.current_revision(db_url) == "0014"
+    assert migrate.current_revision(db_url) == "0015"
     blob = json.dumps({k: [r.tool_arguments, r.request_preview] for k, r in rows.items()}, ensure_ascii=False)
     assert PLAIN not in blob and dql not in blob and "dqlQueryString" not in blob
     a, p = rows["pg_lock_logs"].tool_arguments, rows["pg_lock_logs"].request_preview

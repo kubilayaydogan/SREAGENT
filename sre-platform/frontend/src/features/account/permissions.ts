@@ -12,7 +12,9 @@ export const PERM_LABEL: Record<string, string> = {
   "connector:manage": "MCP connector yönetimi",
   "llm:manage": "LLM profili ve model yönetimi",
   "secret:manage": "Secret yönetimi",
-  "memory:delete": "Checkpoint / memory silme",
+  "memory:delete": "Checkpoint / memory kaydı silme",
+  "memory:write": "Memory kaydı oluşturma, düzenleme, arşivleme, verify",
+  "memory:approve": "Procedural memory onayı, memory export",
   "knowledge:manage": "Runbook yönetimi",
   "user:manage": "Kullanıcı ve oturum yönetimi",
 };

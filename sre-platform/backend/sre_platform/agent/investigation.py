@@ -43,10 +43,20 @@ class InvestigationRunner:
     def __init__(self, rt):
         self.rt = rt
 
-    async def run(self, inv_id: uuid.UUID, *, emit, cancel: threading.Event | None = None,
-                  question: str | None = None, mode: str = "chat", core_llm=None,
-                  notes: list[str] | None = None, rc=None,
-                  window_source: str | None = None) -> tuple[Investigation, dict | None]:
+    async def run(self, inv_id: uuid.UUID, **kw) -> tuple[Investigation, dict | None]:
+        """Memory event korelasyonu (run_id, thread_id, ayar snapshot'ı) koşu boyunca bağlanır ve koşu bitince
+        çağıranın bağlamına (ör. sohbet turu) geri döner."""
+        from ..memory import events as mem_events
+        token = mem_events.CTX.set(mem_events.CTX.get())
+        try:
+            return await self._run(inv_id, **kw)
+        finally:
+            mem_events.CTX.reset(token)
+
+    async def _run(self, inv_id: uuid.UUID, *, emit, cancel: threading.Event | None = None,
+                   question: str | None = None, mode: str = "chat", core_llm=None,
+                   notes: list[str] | None = None, rc=None,
+                   window_source: str | None = None) -> tuple[Investigation, dict | None]:
         cancel = cancel or threading.Event()
         sm = self.rt.sm
         from ..settings import runtime as srt
@@ -107,6 +117,11 @@ class InvestigationRunner:
                                    conversation_id=conversation_id, thread_id=run_id,
                                    parent_run_id=parent.run_id if parent else None, platform_run_id=run_id,
                                    attempt=att)
+        from ..memory import events as mem_events
+        _mc = mem_events.current()
+        mem_events.CTX.set(mem_events.MemCtx(
+            run_id=tsess.run_id if tsess else run_id, thread_id=run_id, trace_id=str(inv_id), node=None,
+            correlation_id=run_id, user_id=_mc.user_id, cfg=(rc.effective or {}).get("agent_memory") or {}))
         use_llm = core_llm is not None
         gw_factory = rc.gateway_factory
         callbacks = (self.rt.callbacks or getattr(core_llm, "callbacks", None)) if rc.trace else []
@@ -175,6 +190,8 @@ class InvestigationRunner:
                 await investigations.complete(s, inv, report)
             else:
                 await investigations.fail(s, inv, error or "rapor üretilmedi", cancelled=cancelled)
+        if report and not error:
+            await self._memory_context(inv_id, rc)
         if mode != "chat":                          # sohbette tur sonunda (chat._finish) tek seferde yazılır
             from ..security import llm_usage
             await llm_usage.persist(sm, run_id=run_id, trigger=trace_meta["trigger"], investigation_id=inv_id)
@@ -194,6 +211,43 @@ class InvestigationRunner:
             await emit("error", {"code": "cancelled" if cancelled else "timeout" if timed_out else "analysis_failed",
                                  "message": error, "investigation_id": str(inv_id)})
         return inv, report
+
+    async def _memory_context(self, inv_id: uuid.UUID, rc) -> None:
+        """SRE incident analizi memory akışı (Settings: analysis_memory_enabled, varsayılan KAPALI).
+
+        Güncel telemetry analizi BİTTİKTEN sonra benzer episode'lar, ilgili semantic olgular (topology) ve onaylı
+        runbook'lar aranır ve rapora `memory_context` olarak eklenir. Bu bölüm evidence DEĞİLDİR: risk skoru,
+        mechanism ve LLM açıklama girdisi (analysis_payload) değişmez. Hata analizi etkilemez."""
+        cfg = (rc.effective or {}).get("agent_memory") or {}
+        if not (cfg.get("memory_enabled", True) and cfg.get("analysis_memory_enabled", False)
+                and cfg.get("long_term_enabled", True) and self.rt.memory is not None):
+            return
+        from ..memory import events as mem_events
+        try:
+            async with transaction(self.rt.sm) as s:
+                inv = await investigations.get(s, inv_id)
+                apps = sorted(set(inv.source_apps) | set(inv.affected_apps))
+                mech = inv.primary_mechanism
+            with mem_events.bind(node="memory_context"):
+                kw = {"origin": "analysis"} if hasattr(self.rt.memory, "semantic_records") else {}
+                mem = await self.rt.memory.recall(user_id=None, question=f"investigation {inv_id}",
+                                                  scope=["investigations", "incidents", "runbooks", "known_issues"],
+                                                  apps=apps, mechanism=mech, exclude_investigation=inv_id, **kw)
+            keep = {k: mem[k] for k in ("episodes", "current_symptoms", "runbooks", "known_issues", "semantic",
+                                        "incidents") if mem.get(k)}
+            async with transaction(self.rt.sm) as s:
+                inv = await investigations.get(s, inv_id)
+                rep = dict(inv.report or {})
+                rep["memory_context"] = {"note": "Historical context — evidence değildir; risk skoru ve mechanism "
+                                                 "güncel telemetriden hesaplandı.", **keep}
+                inv.report = rep
+            from ..memory.observed import record_injection
+            record_injection(section="report.memory_context", before=keep, after=keep, formatted=None, dropped=[],
+                             budget={}, injected=False, reason="rapora eklendi (LLM isteğine eklenmedi)",
+                             llm_task=None)
+        except Exception as e:  # noqa: BLE001 — memory hatası analizi etkilemez (kontrollü degradation)
+            log.warning("analysis memory context eklenemedi: %s", type(e).__name__)
+            mem_events.publish("MEMORY_BACKEND_ERROR", status="error", error=e, node="memory_context")
 
     async def _correlate(self, inv_id: uuid.UUID, start, end, emit, rc=None) -> None:
         """Yavaş trace kimlikleri + Davis problemleri → ek kanıt (puanlamayı değiştirmez)."""

@@ -92,8 +92,42 @@ def _hist_block(memory: dict | None) -> dict | None:
     if not memory:
         return None
     keep = {k: memory[k] for k in ("episodes", "current_symptoms", "investigations", "incidents", "rca", "runbooks",
-                                   "known_issues") if memory.get(k)}
+                                   "known_issues", "semantic") if memory.get(k)}
     return keep or {"note": "benzer kayıt bulunamadı"}
+
+
+def _mem_cfg(rc) -> dict:
+    return ((getattr(rc, "effective", None) or {}).get("agent_memory") or {}) if rc is not None else {}
+
+
+def _mem_flag(rc, name: str) -> bool:
+    c = _mem_cfg(rc)
+    return bool(c.get("memory_enabled", True)) and bool(c.get(name, True))
+
+
+def _inject(rc, section: str, block: dict | None, task: str, *, llm_=None, observe_only: bool = False):
+    """Memory Context Builder: bütçe + Context Injection anahtarı. Varsayılan ayarlarda blok DEĞİŞMEZ.
+    Ne eklendiği Context Injection Inspector için kaydedilir (gözlem hatası yanıtı etkilemez)."""
+    from ..memory import context as mctx
+    from ..memory.observed import record_injection
+    c = _mem_cfg(rc)
+    on = _mem_flag(rc, "context_injection_enabled")
+    out, dropped = mctx.apply_budget(block, max_records=int(c.get("max_retrieved_records") or 0),
+                                     max_tokens=int(c.get("max_context_tokens") or 0)) if on else (None, [])
+    if observe_only:
+        out = block if on else None
+    try:
+        record_injection(section=section, before=block, after=out, formatted=prompts.dump(out) if out else None,
+                         dropped=dropped, injected=bool(out) and llm_ is not None,
+                         budget={"max_retrieved_records": int(c.get("max_retrieved_records") or 0),
+                                 "max_context_tokens": int(c.get("max_context_tokens") or 0)},
+                         reason=None if (out and llm_ is not None) else
+                         ("Settings: Context Injection kapalı" if not on else
+                          "LLM kullanılmadı (deterministik yanıt)" if llm_ is None else "boş blok"),
+                         llm_task=task, model=getattr(llm_, "model_name", None))
+    except Exception:  # noqa: BLE001
+        log.debug("context injection kaydı yazılamadı", exc_info=True)
+    return out if not observe_only else block
 
 
 OUTCOME_TR = {"confirmed": "feedback ile doğrulandı", "partially_confirmed": "kısmen doğrulandı",
@@ -168,8 +202,9 @@ class ChatOrchestrator:
 
         async def route(state: ChatState) -> dict:
             q = state["question"]
-            history = [m for m in state.get("messages", [])[:-1]]
-            focus = state.get("focus")
+            short_term = _mem_flag(rc, "short_term_enabled")
+            history = [m for m in state.get("messages", [])[:-1]] if short_term else []
+            focus = state.get("focus") if short_term else None
             r: ChatRoute | None = None
             if chat_llm is not None:
                 try:
@@ -247,10 +282,12 @@ class ChatOrchestrator:
             if r["intent"] in ("analyze", "compare"):
                 scope = ["investigations", "incidents", "rca", "runbooks", "known_issues"]
             exclude = uuid.UUID(inv["investigation_id"]) if inv.get("investigation_id") else None
-            mem = await rt.memory.recall(user_id=ctx.user_id, question=state["question"], scope=scope, apps=apps_,
-                                         mechanism=mech, terms=r.get("search_terms") if not mech else None,
-                                         since_days=r.get("since_days"), exclude_investigation=exclude,
-                                         conversation_id=ctx.conversation_id)
+            from ..memory import events as mem_events
+            with mem_events.bind(node="recall"):
+                mem = await rt.memory.recall(user_id=ctx.user_id, question=state["question"], scope=scope, apps=apps_,
+                                             mechanism=mech, terms=r.get("search_terms") if not mech else None,
+                                             since_days=r.get("since_days"), exclude_investigation=exclude,
+                                             conversation_id=ctx.conversation_id)
             if exclude:
                 async with transaction(rt.sm) as s:
                     await investigations.record_tool(s, exclude, "sre-db:recall", ok=True, step="memory",
@@ -274,7 +311,8 @@ class ChatOrchestrator:
                 banner = data_banner(report)
                 if report:
                     system = prompts.ANALYSIS_SYSTEM
-                    human = prompts.analysis_human(q, prompts.analysis_payload(report), _hist_block(mem))
+                    hist = _inject(rc, "<history_data>", _hist_block(mem), "rca", llm_=rca_llm)
+                    human = prompts.analysis_human(q, prompts.analysis_payload(report), hist)
                     fallback = deterministic_explanation(report)
                     if mem:
                         fallback += "\n\n**Geçmişle karşılaştırma.**\n" + _det_history(_hist_block(mem) or {})
@@ -282,15 +320,19 @@ class ChatOrchestrator:
                     fallback = ("Analiz tamamlanamadı: " + ((inv or {}).get("error") or "bilinmeyen hata") +
                                 ". Dynatrace verisi alınamadığı için sonuç üretilmedi; sahte veri gösterilmez.")
             elif intent == "history":
-                system, human = prompts.HISTORY_SYSTEM, prompts.history_human(q, mem or {})
+                system, human = prompts.HISTORY_SYSTEM, prompts.history_human(
+                    q, _inject(rc, "<memory_data>", mem or {}, "chat", llm_=chat_llm) or {})
                 fallback = _det_history(mem or {})
             elif intent == "followup":
                 prev = next((m["content"] for m in reversed(state.get("messages", [])[:-1])
                              if m["role"] == "assistant"), None)
+                short_term = _mem_flag(rc, "short_term_enabled")
                 ctx_data = {"previous_answer": (prev or "")[:6000],
                             "last_investigation": (mem or {}).get("last_investigation"),
-                            "focus": state.get("focus"),
-                            "earlier_turns": (state.get("digests") or [])[-8:]}
+                            "focus": state.get("focus") if short_term else None,
+                            "earlier_turns": (state.get("digests") or [])[-8:] if short_term else []}
+                _inject(rc, "<context_data>", {"last_investigation": ctx_data["last_investigation"]}
+                        if ctx_data["last_investigation"] else None, "chat", llm_=chat_llm, observe_only=True)
                 system, human = prompts.FOLLOWUP_SYSTEM, prompts.followup_human(q, ctx_data)
                 fallback = prev or "Önceki bir yanıt bulunamadı."
             else:
@@ -374,6 +416,13 @@ class ChatOrchestrator:
                           resumed=resumed)
 
     # ------------------------------------------------------------ dış arayüz
+    def _mem_bind(self, ctx: TurnContext, tsess, rid):
+        from ..memory import events as mem_events
+        return mem_events.bind(run_id=tsess.run_id if tsess is not None else f"chat-{ctx.result.get('user_message_id')}",
+                               thread_id=ctx.thread_id, trace_id=str(rid) if rid else None,
+                               correlation_id=ctx.result.get("user_message_id"), user_id=str(ctx.user_id),
+                               cfg=_mem_cfg(ctx.rc))
+
     async def turn(self, ctx: TurnContext, question: str) -> dict:
         question = question.strip()
         if not question:
@@ -387,9 +436,10 @@ class ChatOrchestrator:
         tsess = await self._trace_start(ctx, attempt=1)
         err = None
         try:
-            state = await self._invoke(ctx, graph, {"question": question,
-                                                    "messages": [{"role": "user", "content": question}]},
-                                       self._config(ctx, run_id=rid), tsess)
+            with self._mem_bind(ctx, tsess, rid):
+                state = await self._invoke(ctx, graph, {"question": question,
+                                                        "messages": [{"role": "user", "content": question}]},
+                                           self._config(ctx, run_id=rid), tsess)
         except BaseException as e:
             err = f"{type(e).__name__}: {e}"
             raise
@@ -466,8 +516,9 @@ class ChatOrchestrator:
         tsess = await self._trace_start(ctx, attempt=max(2, attempt))
         err = None
         try:
-            state = await self._invoke(ctx, graph, None, self._config(ctx, run_id=rid, attempt=attempt, resumed=True),
-                                       tsess)
+            with self._mem_bind(ctx, tsess, rid):
+                state = await self._invoke(ctx, graph, None,
+                                           self._config(ctx, run_id=rid, attempt=attempt, resumed=True), tsess)
         except BaseException as e:
             err = f"{type(e).__name__}: {e}"
             raise

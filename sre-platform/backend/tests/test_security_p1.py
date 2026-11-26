@@ -185,10 +185,11 @@ def test_role_permission_matrix_preserves_previous_behaviour():
     from sre_platform.security.permissions import P, ROLE_PERMISSIONS, has
     assert ROLE_PERMISSIONS[Role.VIEWER] == {P.RECORD_READ}
     sre_only = {P.AGENT_RUN, P.INCIDENT_WRITE, P.APPROVAL_REQUEST, P.SETTINGS_READ, P.AUDIT_READ, P.OBSERVABILITY_READ}
-    assert ROLE_PERMISSIONS[Role.SRE] == {P.RECORD_READ} | sre_only
+    # Agent Memory (0015): SRE yalnız memory:write alır (oluştur/düzenle/arşiv); silme ve onay admin'de kalır
+    assert ROLE_PERMISSIONS[Role.SRE] == {P.RECORD_READ} | sre_only | {P.MEMORY_WRITE}
     assert ROLE_PERMISSIONS[Role.ADMIN] == set(P)
     for p in (P.APPROVAL_DECIDE, P.SETTINGS_WRITE, P.CONNECTOR_MANAGE, P.LLM_MANAGE, P.SECRET_MANAGE, P.MEMORY_DELETE,
-              P.KNOWLEDGE_MANAGE, P.USER_MANAGE):
+              P.KNOWLEDGE_MANAGE, P.USER_MANAGE, P.MEMORY_APPROVE):
         assert not has(Role.SRE, p) and has(Role.ADMIN, p)
 
 

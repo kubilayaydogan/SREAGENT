@@ -24,14 +24,16 @@ class P(str, Enum):
     CONNECTOR_MANAGE = "connector:manage"       # MCP connector kayıt / test / keşif
     LLM_MANAGE = "llm:manage"                   # LLM profilleri
     SECRET_MANAGE = "secret:manage"
-    MEMORY_DELETE = "memory:delete"             # checkpoint thread silme
+    MEMORY_DELETE = "memory:delete"             # checkpoint thread silme, memory kaydı silme
+    MEMORY_WRITE = "memory:write"               # memory kaydı oluşturma / düzenleme / arşiv / verify, procedural öneri
+    MEMORY_APPROVE = "memory:approve"           # procedural memory onayı (four-eyes), memory export
     KNOWLEDGE_MANAGE = "knowledge:manage"       # runbook
     USER_MANAGE = "user:manage"
 
 
 _VIEWER = {P.RECORD_READ}
 _SRE = _VIEWER | {P.AGENT_RUN, P.INCIDENT_WRITE, P.APPROVAL_REQUEST, P.SETTINGS_READ, P.AUDIT_READ,
-                  P.OBSERVABILITY_READ}
+                  P.OBSERVABILITY_READ, P.MEMORY_WRITE}
 _ADMIN = set(P)
 
 ROLE_PERMISSIONS: dict[Role, frozenset[P]] = {Role.VIEWER: frozenset(_VIEWER), Role.SRE: frozenset(_SRE),

@@ -9,6 +9,7 @@ Benzerlik bir ipucudur, aynı Root Cause'un evidence'ı değildir.
 """
 from __future__ import annotations
 
+import contextvars
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -28,6 +29,9 @@ log = logging.getLogger("sre.episodes")
 DONE = (InvestigationStatus.COMPLETED, InvestigationStatus.PARTIAL)
 OUTCOMES = ("unverified", "confirmed", "partially_confirmed", "rejected")
 MIN_SIMILARITY = 0.35
+# Agent Memory Settings (similarity_threshold) koşu bağlamına göre değiştirir; görev-yerel (eşzamanlı koşular etkilenmez)
+THRESHOLD: contextvars.ContextVar[float] = contextvars.ContextVar("episode_similarity_threshold",
+                                                                    default=MIN_SIMILARITY)
 MAX_LOCK_PAIRS = 5
 
 
@@ -148,7 +152,30 @@ async def refresh(s: AsyncSession, inv_id: uuid.UUID, *, inv: Investigation | No
         set_={k: stmt.excluded[k] for k in values if k != "investigation_id"} | {"updated_at": func.now()})
     await s.execute(stmt)
     await s.flush()
-    return await s.get(AgentEpisode, inv.id, populate_existing=True)
+    ep = await s.get(AgentEpisode, inv.id, populate_existing=True)
+    _observe(ep, inv)
+    await _extract(s, ep, inv)
+    return ep
+
+
+def _observe(ep: AgentEpisode, inv: Investigation) -> None:
+    """Episodic memory yazımı → MEMORY_WRITE (gözlem; hata akışı etkilemez)."""
+    from ..memory import events
+    events.publish("MEMORY_WRITE", memory_id=f"ep:{inv.id}", memory_type="episodic", namespace="sre-agent/episodic/"
+                   "investigation", run_id=inv.run_id, thread_id=inv.run_id,
+                   payload={"outcome": ep.outcome, "mechanism": ep.mechanism, "symptoms": ep.symptoms[:20],
+                            "trigger": ep.trigger, "has_resolution": bool(ep.resolution)})
+
+
+async def _extract(s: AsyncSession, ep: AgentEpisode, inv: Investigation) -> None:
+    """Settings: auto_extraction_enabled (varsayılan KAPALI). Doğrulanmış episode → unverified semantic olgu."""
+    from ..memory import events
+    cfg = events.cfg()
+    if not (cfg.get("memory_enabled", True) and cfg.get("auto_extraction_enabled", False)
+            and cfg.get("semantic_enabled", True) and cfg.get("long_term_enabled", True)):
+        return
+    from ..memory import manager
+    await manager.extract_from_episode(s, ep, inv, cfg)
 
 
 async def refresh_for_incident(s: AsyncSession, inc: Incident) -> int:
@@ -217,7 +244,7 @@ async def similar(s: AsyncSession, fp: dict[str, Any], *, apps: list[str], exclu
         conds.append(AgentEpisode.apps.overlap(apps))
     if not conds:
         return []
-    stmt = select(AgentEpisode).where(or_(*conds))
+    stmt = select(AgentEpisode).where(or_(*conds), AgentEpisode.archived_at.is_(None))
     if exclude_id:
         stmt = stmt.where(AgentEpisode.investigation_id != exclude_id)
     if since_days:
@@ -229,7 +256,7 @@ async def similar(s: AsyncSession, fp: dict[str, Any], *, apps: list[str], exclu
     for e in rows:
         sc, shared = similarity(me, {"symptoms": e.symptoms, "mechanism": e.mechanism, "mechanisms": e.mechanisms,
                                      "apps": e.apps})
-        if sc >= MIN_SIMILARITY:
+        if sc >= THRESHOLD.get():
             scored.append((sc, rank.get(e.outcome, 2), e, shared))
     scored.sort(key=lambda x: (-x[0], x[1], -x[2].created_at.timestamp()))
     return [brief(e, score=sc, shared=sh) for sc, _, e, sh in scored[:limit]]
@@ -239,7 +266,7 @@ async def search(s: AsyncSession, *, q: str | None = None, mechanism: str | None
                  since: datetime | None = None, outcomes: list[str] | None = None,
                  limit: int = 5) -> list[dict[str, Any]]:
     """Geçmiş sorularında episode araması (metin / mechanism / uygulama). Önce doğrulanmış ve çözülmüş olanlar."""
-    stmt = select(AgentEpisode)
+    stmt = select(AgentEpisode).where(AgentEpisode.archived_at.is_(None))
     if mechanism:
         stmt = stmt.where(or_(AgentEpisode.mechanism == mechanism, AgentEpisode.mechanisms.contains([mechanism])))
     if apps:

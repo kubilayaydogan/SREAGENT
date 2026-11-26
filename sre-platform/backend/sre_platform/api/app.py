@@ -190,13 +190,20 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
             r.headers[k] = v
         return r
 
+    from ..memory.manager import MemoryError_
+
+    @app.exception_handler(MemoryError_)
+    async def _mem(_, e: MemoryError_):
+        code = {403: "forbidden", 404: "not_found", 409: "conflict"}.get(e.status, "memory_policy")
+        return _err(e.status, code, e.message, e.details or None)
+
     @app.exception_handler(RequestValidationError)
     async def _rv(_, e: RequestValidationError):
         details = [{"loc": list(x.get("loc", [])), "msg": x.get("msg"), "type": x.get("type")} for x in e.errors()]
         return _err(422, "validation_error", "istek doğrulanamadı", details)
 
-    from .routes import agent, auth, catalog, agent_traces, mcp_calls, records, settings as settings_routes
+    from .routes import agent, auth, catalog, agent_traces, mcp_calls, memory, records, settings as settings_routes
     for r in (auth.router, catalog.router, catalog.system, agent.router, records.router, mcp_calls.router, agent_traces.router,
-              settings_routes.router):
+              memory.router, settings_routes.router):
         app.include_router(r, prefix="/api")
     return app

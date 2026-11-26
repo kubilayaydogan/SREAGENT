@@ -120,7 +120,9 @@ async def recommend(s: AsyncSession, *, mechanisms: list[str], apps: list[str], 
         if not conds:
             out[key] = []
             continue
-        stmt = select(model).where(or_(*conds))
+        stmt = select(model).where(or_(*conds), model.archived_at.is_(None))
+        if model is Runbook:                     # procedural memory: agent yalnız onaylı runbook'u görür (0015)
+            stmt = stmt.where(Runbook.approval_status == "approved")
         if apps:
             stmt = stmt.where(or_(model.application_id.in_(apps), model.application_id.is_(None)))
         stmt = stmt.order_by(sum(parts[1:], parts[0]).desc(), model.title).limit(limit)

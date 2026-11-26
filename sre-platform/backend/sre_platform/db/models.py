@@ -16,8 +16,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import (BigInteger, Boolean, CheckConstraint, Computed, DateTime, Enum, ForeignKey, Index, Integer,
-                        Numeric, SmallInteger, String, Text, UniqueConstraint, func, text)
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, Computed, DateTime, Enum, Float, ForeignKey, Index,
+                        Integer, Numeric, SmallInteger, String, Text, UniqueConstraint, func, text)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -489,6 +489,8 @@ class KnownIssue(Base):
     verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     origin: Mapped[str] = mapped_column(String(64), nullable=False, default="manual")  # manual | seed:<kaynak> | rca
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(f"{SCHEMA}.users.id", ondelete="SET NULL"))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))       # 0015
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))                           # 0015
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
     tsv: Mapped[Any] = _tsv("title", "description", "symptoms", "root_cause", "resolution", "mechanism")
@@ -510,6 +512,13 @@ class Runbook(Base):
                                                     server_default=text("false"))
     tags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
     origin: Mapped[str] = mapped_column(String(64), nullable=False, default="manual")
+    # 0015 procedural memory yaşam döngüsü: agent yalnız 'approved' runbook'u görür; düzenleme onaya kadar ayrı revizyon
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    approval_status: Mapped[str] = mapped_column(String(16), nullable=False, default="approved",
+                                                 server_default=text("'approved'"))
+    approved_by: Mapped[str | None] = mapped_column(String(64))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
     tsv: Mapped[Any] = _tsv("title", "description", "procedure", "mechanism")
@@ -855,6 +864,7 @@ class AgentEpisode(Base):
     feedback_note: Mapped[str | None] = mapped_column(Text)
     resolution: Mapped[str | None] = mapped_column(Text)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))       # 0015: retrieval dışı
     updated_at: Mapped[datetime] = _updated()
     tsv: Mapped[Any] = _tsv("summary", "hypothesis", "resolution", "feedback_note", "mechanism")
 
@@ -979,3 +989,159 @@ class AgentTraceEvent(Base):
                                                     server_default=text("'{}'::jsonb"))
     truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+
+
+# ---------------------------------------------------------------- Agent Memory (0015)
+class MemoryRecord(Base):
+    """Long-term memory kaydı (yeni semantic / procedural olgular). Mevcut kaynaklar (episode, known issue, runbook,
+    Store notları) burada KOPYALANMAZ; Memory Manager onları adapter ile aynı görünümde sunar.
+    `confidence_score` doğruluk garantisi değildir; sorguya göre hesaplanan `similarity` ile karıştırılmaz."""
+    __tablename__ = "memory_records"
+    __table_args__ = (Index("ix_memory_records_scope", "tenant_id", "agent_id", "memory_type", "status"),
+                      Index("ix_memory_records_ns", "tenant_id", "agent_id", "namespace"),
+                      Index("ix_memory_records_hash", "tenant_id", "agent_id", "content_hash"),
+                      Index("ix_memory_records_updated", text("updated_at DESC")),
+                      Index("ix_memory_records_tsv", "tsv", postgresql_using="gin"),
+                      CheckConstraint("memory_type IN ('semantic', 'episodic', 'procedural')",
+                                      name="ck_memory_records_type"),
+                      CheckConstraint("verification_status IN ('unverified', 'verified', 'rejected')",
+                                      name="ck_memory_records_verification"),
+                      CheckConstraint("approval_status IN ('not_required', 'pending', 'approved', 'rejected')",
+                                      name="ck_memory_records_approval"),
+                      CheckConstraint("status IN ('active', 'archived', 'expired', 'rejected')",
+                                      name="ck_memory_records_status"),
+                      CheckConstraint("source_trust IN ('trusted', 'untrusted')", name="ck_memory_records_trust"),
+                      CheckConstraint("confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)",
+                                      name="ck_memory_records_confidence"),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    agent_id: Mapped[str] = mapped_column(String(64), nullable=False, default="sre-agent")
+    namespace: Mapped[str] = mapped_column(String(200), nullable=False)
+    memory_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(48))           # topology, ownership, slo, preference…
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    structured_data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
+                                                            server_default=text("'{}'::jsonb"))
+    source: Mapped[str] = mapped_column(String(32), nullable=False)    # manual | agent_extraction | import
+    source_trust: Mapped[str] = mapped_column(String(16), nullable=False, default="trusted")
+    source_run_id: Mapped[str | None] = mapped_column(String(160))
+    source_thread_id: Mapped[str | None] = mapped_column(String(128))
+    source_trace_id: Mapped[str | None] = mapped_column(String(64))
+    evidence_references: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list,
+                                                           server_default=text("'[]'::jsonb"))
+    confidence_score: Mapped[float | None] = mapped_column(Float)
+    verification_status: Mapped[str] = mapped_column(String(16), nullable=False, default="unverified")
+    approval_status: Mapped[str] = mapped_column(String(16), nullable=False, default="not_required")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    created_by: Mapped[str | None] = mapped_column(String(64))
+    approved_by: Mapped[str | None] = mapped_column(String(64))
+    verified_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+    last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    access_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
+    embedding_model: Mapped[str | None] = mapped_column(String(64))
+    embedding_status: Mapped[str] = mapped_column(String(16), nullable=False, default="not_indexed",
+                                                  server_default=text("'not_indexed'"))
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    meta: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict,
+                                                 server_default=text("'{}'::jsonb"))
+    tsv: Mapped[Any] = _tsv("title", "content", "category")
+
+
+class MemoryVersion(Base):
+    """Memory kayıtlarının (memory_record / runbook / known_issue / episode) değişmez versiyon geçmişi.
+    Procedural düzenlemeler onaya kadar burada `pending` revizyon olarak bekler; canlı kayıt değişmez."""
+    __tablename__ = "memory_versions"
+    __table_args__ = (UniqueConstraint("record_kind", "record_id", "version", name="uq_memory_versions"),
+                      Index("ix_memory_versions_record", "record_kind", "record_id", text("version DESC")),
+                      Index("ix_memory_versions_pending", "status", postgresql_where=text("status = 'pending'")),
+                      CheckConstraint("status IN ('applied', 'pending', 'rejected', 'superseded')",
+                                      name="ck_memory_versions_status"),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = _pk()
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    agent_id: Mapped[str] = mapped_column(String(64), nullable=False, default="sre-agent")
+    record_kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    record_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    change: Mapped[str] = mapped_column(String(24), nullable=False)    # create | update | archive | verify …
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="applied")
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    actor: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    decided_by: Mapped[str | None] = mapped_column(String(64))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created()
+
+
+class MemoryEvent(Base):
+    """Memory işlem olayı (MEMORY_READ, MEMORY_WRITE, MEMORY_RETRIEVED, MEMORY_CHECKPOINT_CREATED…).
+    payload maskeli ve boyutu sınırlı kopyadır; checkpoint verisi kopyalanmaz (yalnız kimlikler)."""
+    __tablename__ = "memory_events"
+    __table_args__ = (Index("ix_memory_events_ts", text("ts DESC")),
+                      Index("ix_memory_events_type_ts", "event_type", text("ts DESC")),
+                      Index("ix_memory_events_run", "run_id"),
+                      Index("ix_memory_events_thread", "thread_id"),
+                      Index("ix_memory_events_retrieval", "retrieval_id"),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    agent_id: Mapped[str] = mapped_column(String(64), nullable=False, default="sre-agent")
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    run_id: Mapped[str | None] = mapped_column(String(160))
+    thread_id: Mapped[str | None] = mapped_column(String(128))
+    trace_id: Mapped[str | None] = mapped_column(String(64))
+    node: Mapped[str | None] = mapped_column(String(64))
+    memory_id: Mapped[str | None] = mapped_column(String(200))
+    memory_type: Mapped[str | None] = mapped_column(String(24))
+    namespace: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ok")
+    duration_ms: Mapped[float | None] = mapped_column(Float)
+    error: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    correlation_id: Mapped[str | None] = mapped_column(String(64))
+    retrieval_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    actor: Mapped[str | None] = mapped_column(String(64))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
+                                                    server_default=text("'{}'::jsonb"))
+
+
+class MemoryRetrieval(Base):
+    """Bir retrieval işleminin pipeline kaydı (Query → Namespace Filter → Metadata Filter → Search → Ranking →
+    Validation → Context Injection). Skorlar yalnız sistemin gerçekten ürettikleridir."""
+    __tablename__ = "memory_retrievals"
+    __table_args__ = (Index("ix_memory_retrievals_ts", text("ts DESC")),
+                      Index("ix_memory_retrievals_run", "run_id"),
+                      Index("ix_memory_retrievals_thread", "thread_id"),
+                      {"schema": SCHEMA})
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    agent_id: Mapped[str] = mapped_column(String(64), nullable=False, default="sre-agent")
+    origin: Mapped[str] = mapped_column(String(16), nullable=False)          # agent | analysis | playground
+    run_id: Mapped[str | None] = mapped_column(String(160))
+    thread_id: Mapped[str | None] = mapped_column(String(128))
+    trace_id: Mapped[str | None] = mapped_column(String(64))
+    node: Mapped[str | None] = mapped_column(String(64))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    strategy: Mapped[str] = mapped_column(String(32), nullable=False)
+    query: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    namespaces: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    memory_types: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    filters: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    top_k: Mapped[int | None] = mapped_column(Integer)
+    returned_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    empty: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    selected: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    excluded: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    stages: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    injection: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    duration_ms: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ok")
+    error: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

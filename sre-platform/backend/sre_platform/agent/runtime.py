@@ -32,6 +32,7 @@ class AgentRuntime:
     asaver: object = None                             # AsyncPostgresSaver (sohbet grafiği)
     store: object = None                              # AsyncPostgresStore (uzun vadeli kapsamlı notlar)
     memory: MemoryService | None = None
+    mem_events: object = None                         # memory.events.MemoryEventPublisher
     sem: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(2))
     callbacks: list = field(default_factory=list)      # LangSmith tracer (redakte eder); tracing kapalıysa boş
     settings_started: dict | None = None              # süreç açılışındaki etkili ayarlar ("restart gerekli" tespiti)
@@ -103,13 +104,26 @@ async def create_runtime(ps: PlatformSettings, *, agent: Settings | None = None,
           "application_name": f"{application_name}-lg"}
     pool = ConnectionPool(conninfo, min_size=1, max_size=4, kwargs=kw, open=True, name="lg-sync")
     rt._closers.append(pool.close)
-    rt.saver = PostgresSaver(pool)
+    # Agent Memory gözlemi: checkpointer ve MemoryService alt sınıfları (davranış aynı; olaylar + retrieval kaydı)
+    from ..memory import events as mem_events
+    from ..memory.observed import ObservedMemoryService, observed_savers
+    saver_cls, asaver_cls = observed_savers()
+    rt.saver = saver_cls(pool)
     apool = AsyncConnectionPool(conninfo, min_size=1, max_size=4, kwargs=kw, open=False, name="lg-async")
     await apool.open()
     rt._closers.append(apool.close)
-    rt.asaver = AsyncPostgresSaver(apool)
+    rt.asaver = asaver_cls(apool)
     rt.store = AsyncPostgresStore(apool)
-    rt.memory = MemoryService(rt.sm, rt.store)
+    rt.memory = ObservedMemoryService(rt.sm, rt.store)
+    rt.mem_events = mem_events.MemoryEventPublisher(rt)
+    await rt.mem_events.start()
+    mem_events.install(rt.mem_events)
+
+    async def _stop_events():
+        await rt.mem_events.stop()
+        if mem_events.publisher() is rt.mem_events:
+            mem_events.install(None)
+    rt._closers.append(_stop_events)
     return rt
 
 

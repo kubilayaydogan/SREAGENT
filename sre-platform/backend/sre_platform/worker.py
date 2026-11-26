@@ -115,12 +115,15 @@ async def retention(rt, params: dict) -> dict[str, Any]:
     from .security import audit, sessions
     from .services import retention as ret_svc
     from .settings import runtime as srt
-    ret = (await srt.effective(rt))["retention"]
+    eff = await srt.effective(rt)
+    ret = eff["retention"]
     out: dict[str, Any] = {"retention_days": {k: ret[k] for k in ("investigations_days", "watch_events_days",
                                                                  "llm_runs_days", "job_runs_days", "checkpoints_days",
                                                                  "store_days")}}
     async with transaction(rt.sm) as s:
         counts = await ret_svc.purge(s, ret)
+        from .memory import manager as mem_mgr          # Agent Memory: expire + arşiv/olay saklama süreleri
+        counts.update({f"memory_{k}": v for k, v in (await mem_mgr.retention(s, eff.get("agent_memory", {}))).items()})
         out.update(counts)
         out["approvals_expired"] = await approvals.expire_due(s)
         out["auth_sessions_purged"] = await sessions.purge_expired(s)     # süresi 30+ gün önce dolmuş oturumlar
