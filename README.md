@@ -1,402 +1,200 @@
-# SRE Agent & SRE Operations Platform
+# SRE Agent ve SRE Operations Platform
 
-A read-only SRE agent that investigates application and database incidents through **Dynatrace Remote MCP**, and a
-multi-user operations platform built around it (chat, investigations, incidents, RCA reports, scheduled checks,
-approvals). The repository also contains **airlab**, a Java/PostgreSQL airline laboratory with a chaos controller that
-produces the telemetry the agent analyses.
+Uygulama ve veritabanı olaylarını **Dynatrace Remote MCP** üzerinden inceleyen salt okunur bir SRE Agent ve onun
+çevresine kurulmuş çok kullanıcılı bir operasyon platformu. Repository ayrıca agent'ın analiz ettiği telemetriyi
+üreten **airlab** laboratuvarını (Java / PostgreSQL havayolu örneği ve Chaos Controller) içerir.
 
-> The user interface, agent answers and most documents under `docs/` are written in Turkish. This README is the
-> English entry point.
+![Overview ekranı: risk score trendi, aktif incident'lar ve servis sağlığı](docs/assets/screenshots/overview-dashboard.jpg)
 
-## Contents
+## Dokümantasyon
 
-- [Project overview](#project-overview)
-- [Key features](#key-features)
-- [Tech stack](#tech-stack)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Installation and configuration](#installation-and-configuration)
-- [Quick start](#quick-start)
-- [Project structure](#project-structure)
-- [Tests](#tests)
-- [Troubleshooting](#troubleshooting)
-- [Further documentation](#further-documentation)
-
-## Project overview
-
-| Component | Path | What it is |
+| Doküman | İçerik | Kimin için |
 |---|---|---|
-| **SRE Agent** | `sre-agent/` | Python package `airlab_agent`. A LangGraph flow that runs a fixed catalogue of DQL queries through Dynatrace Remote MCP, derives features, scores risk and attributes a mechanism (row lock, pool saturation, DB CPU, network latency, …) deterministically, then asks Claude only to interpret the question and explain the findings. |
-| **SRE Operations Platform** | `sre-platform/` | FastAPI backend, background worker and React UI. It embeds the agent as a library and adds persistence (PostgreSQL), authentication and roles, live step streaming (SSE), incidents, RCA reports, a knowledge base, approvals, continuous watch and scheduled health checks. |
-| **airlab laboratory** | `lab/`, `db-vm/`, `observability/` | Four Spring Boot services (reservation, check-in, flight operations, baggage) on a shared PostgreSQL 17 database, plus a chaos controller with 20 fault scenarios. It is the *monitored* system. |
+| [Kurulum Kılavuzu](docs/INSTALLATION.md) | Gereksinimler, environment variable'lar, servisleri başlatma, sağlık kontrolü, hata çözümü | Platformu kuran ekip |
+| [Kullanıcı Kılavuzu](docs/USER_GUIDE.md) | Her ekranın amacı, adım adım kullanım, roller ve yetkiler | SRE ve operasyon kullanıcıları |
+| [Teknoloji Yığını](docs/TECH_STACK.md) | Kullanılan teknolojiler, doğrulanmış sürümler ve kaynak dosyaları | Geliştiriciler |
+| [Teknik Mimari](docs/TECHNICAL_ARCHITECTURE.md) | Bileşenler, veri katmanı, entegrasyonlar, deployment, güven sınırları | Mimarlar ve geliştiriciler |
+| [Agent Mimarisi](docs/AGENT_ARCHITECTURE.md) | Graph, state, MCP, LLM, memory, middleware, guardrails, risk scoring | AI ve platform mühendisleri |
+| [Çalışma Akışları](docs/WORKFLOWS.md) | Soru-cevap, zamanlanmış çalışma, RCA, hata ve failover akışları | Tüm teknik okuyucular |
+| [Ekran Görüntüleri](docs/SCREENSHOTS.md) | Platform ekranlarının açıklamalı görselleri | Tüm okuyucular |
 
-The agent is **not** a separate service or CLI: it is installed into the platform image and is used only through the
-platform (`sre-backend` and `sre-worker`).
+Konuya özel ayrıntılı dokümanlar [Ek dokümanlar](#ek-dokümanlar) bölümündedir.
 
-Problems it addresses:
+## İçindekiler
 
-- Collecting the same evidence set for every incident instead of ad-hoc dashboard browsing.
-- Separating *risk severity*, *data coverage* and *causal confidence*, and stating explicitly when data is missing
-  rather than treating gaps as zero.
-- Keeping the agent read-only: any step that would change a system is opened as an approval request for a human.
+- [Proje nedir?](#proje-nedir)
+- [Hangi SRE problemlerini çözer?](#hangi-sre-problemlerini-çözer)
+- [Hedef kullanıcılar](#hedef-kullanıcılar)
+- [Temel özellikler](#temel-özellikler)
+- [Teknoloji özeti](#teknoloji-özeti)
+- [Mimari özeti](#mimari-özeti)
+- [Hızlı başlangıç](#hızlı-başlangıç)
+- [Repository yapısı](#repository-yapısı)
+- [Testler](#testler)
+- [Ek dokümanlar](#ek-dokümanlar)
+- [Güvenlik, lisans ve katkı](#güvenlik-lisans-ve-katkı)
 
-## Key features
+## Proje nedir?
 
-- **Deterministic analysis, LLM explanation.** Scoring and root-cause attribution are plain Python; the LLM cannot
-  change the score and has no tools.
-- **Data-quality aware evidence.** Each signal is marked `OK`, `EMPTY`, `PERMISSION`, `ERROR`, `STALE`,
-  `UNAVAILABLE` or `SKIPPED_BUDGET`. If MCP is unreachable the agent writes a partial report; it does not fall back to
-  another source.
-- **Chat and investigations** with live agent steps over Server-Sent Events, resumable runs (LangGraph PostgreSQL
-  checkpointer) and conversation memory.
-- **Incidents, RCA reports and knowledge base** (known issues, runbooks), with user feedback on results.
-- **Continuous watch and scheduled health checks** run by the worker (PostgreSQL-backed job leasing).
-- **Human-in-the-loop approvals** for anything that is not read-only.
-- **Roles:** `viewer` < `sre` < `admin`.
-- **Operations views:** LLM monitoring, MCP call log, agent trace, agent memory, middleware, guardrails, context
-  windows, agent builder and a settings module (connectors, LLM providers, encrypted secrets, scheduling, audit).
-- **Optional integrations:** LangSmith tracing (inputs/outputs redacted) and Slack notification for high-risk RCAs.
-- **Chaos Controller v2** for the lab: 20 scenarios, adaptive control, safety budget and recovery verification.
+| Bileşen | Dizin | Açıklama |
+|---|---|---|
+| **SRE Agent** | [`sre-agent/`](sre-agent/) | `airlab_agent` Python paketi. Sabit bir DQL (Dynatrace Query Language) kataloğunu Dynatrace Remote MCP üzerinden çalıştıran bir LangGraph akışıdır. Feature çıkarır, risk score hesaplar ve olası mechanism'i (row lock, Connection Pool saturation, DB CPU, network latency vb.) deterministik olarak belirler. LLM yalnızca soruyu yorumlar ve bulguları açıklar. |
+| **SRE Operations Platform** | [`sre-platform/`](sre-platform/) | FastAPI backend, arka plan worker'ı ve React arayüzü. Agent'ı kütüphane olarak içine alır; kalıcı kayıt (PostgreSQL), kimlik doğrulama ve roller, canlı adım akışı (SSE), incident, RCA raporu, bilgi bankası, onay, sürekli izleme (watch) ve zamanlanmış health check ekler. |
+| **airlab laboratuvarı** | [`lab/`](lab/), [`db-vm/`](db-vm/), [`observability/`](observability/) | Ortak bir PostgreSQL 17 veritabanını kullanan dört Spring Boot servisi (reservation, check-in, flight operations, baggage) ve 20 arıza senaryolu Chaos Controller. *İzlenen* sistem budur. |
 
-## Tech stack
+Agent ayrı bir servis ya da komut satırı aracı değildir. Platform imajına Python paketi olarak kurulur ve yalnız
+platform üzerinden (`sre-backend` ve `sre-worker`) çalışır.
 
-Versions are taken from `sre-agent/pyproject.toml`, `sre-platform/backend/pyproject.toml`,
-`sre-platform/frontend/package.json`, `lab/pom.xml`, the Dockerfiles and `app-vm/docker-compose.yml`.
+## Hangi SRE problemlerini çözer?
 
-| Category | Technology | Version | Used for |
-|---|---|---|---|
-| Frontend | React, React DOM | ^19.1 | Platform UI |
-| | TypeScript | ~5.8.3 | Type checking |
-| | Vite | ^6.3.5 | Build and dev server |
-| | Tailwind CSS | ^4.1.8 | Styling |
-| | TanStack Query | ^5.80 | Server state |
-| | React Router | ^7.6 | Routing |
-| | Recharts / @xyflow/react | ^3.1 / ^12.12 | Charts / graph views |
-| | nginx | 1.29 (alpine) | Static files and `/api` reverse proxy |
-| Backend | Python | 3.13 image (`>=3.12` required) | Backend, worker, agent |
-| | FastAPI / Uvicorn | 0.165.0 / 0.54.0 | HTTP API |
-| | sse-starlette | 3.7.0 | Live run streaming |
-| | SQLAlchemy (asyncio) / Alembic | 2.1.9 / 1.20.1 | ORM and migrations |
-| | psycopg | 3.3.9 | PostgreSQL driver |
-| | PyJWT | 2.15.1 | Session tokens |
-| AI / LLM | Anthropic Claude via `langchain-anthropic` | 1.7.12 (default model `claude-opus-5-5`) | Question interpretation, explanation, RCA summary |
-| Agent orchestration | LangGraph | 1.2.24 | Agent `StateGraph` |
-| | LangChain / langchain-core | 1.5.2 / 1.8.4 | Model and tool abstractions |
-| | langgraph-checkpoint-postgres | 3.2.1 | Checkpoints and long-term store |
-| MCP | `mcp` / `langchain-mcp-adapters` | 1.30.0 / 0.3.2 | Dynatrace Remote MCP client (streamable HTTP) |
-| Database | PostgreSQL | 17.7 (alpine) | Platform database (`sre` schema) |
-| | PostgreSQL | 17 | Monitored lab database (`airlab`) |
-| Observability | Dynatrace SaaS (OneAgent, Metrics/Logs API v2) | – | Telemetry source for the agent |
-| | LangSmith | 0.16.0 | Optional tracing |
-| | `pg-lock-collector` | in-repo (Python 3.13) | Lock/statement metrics from the lab DB to Dynatrace |
-| Lab | Java / Spring Boot | 21 / 4.1.3 | Four business services and chaos controller |
-| | Flyway | managed by Spring Boot | Lab schema migrations (`db-migrator`) |
-| | springdoc-openapi | 3.2.0 | Lab OpenAPI |
-| Infrastructure | Docker, Docker Compose | Compose v2 syntax | Build and run all services |
-| | GitHub Actions | – | CI: tests, gitleaks, pip-audit, npm audit |
-| Testing | pytest | 9.2.0 | Agent and backend tests |
-| | Vitest / Testing Library | ^3.2 / ^16.3 | Frontend tests |
-| | JUnit + Testcontainers (PostgreSQL 17) | managed by Spring Boot | Lab integration tests |
+- **Tutarsız inceleme.** Her olayda dashboard'lar arasında elle gezinmek yerine aynı evidence kümesi toplanır.
+- **Eksik verinin sıfır sayılması.** Risk şiddeti, data coverage ve causality confidence ayrı alanlardır. Veri
+  gelmediğinde değer "bilinmiyor" olarak kalır ve rapor bunu açıkça yazar.
+- **Kontrolsüz otomasyon.** Agent salt okunurdur. Bir sistemi değiştirecek her adım, bir insanın karar verdiği onay
+  talebi olarak açılır.
+- **Açıklanamayan AI kararı.** Skor ve mechanism Python kurallarıyla hesaplanır; her LLM çağrısı, MCP çağrısı ve graph
+  adımı platform ekranlarından izlenebilir.
 
-## Architecture
+## Hedef kullanıcılar
 
-### Platform and agent
+- Olay inceleyen **SRE ve operasyon ekipleri**.
+- Agent davranışını izleyen ve yapılandıran **platform yöneticileri**.
+- LangGraph tabanlı bir agent'ın nasıl kurulduğunu çalışan bir örnek üzerinden öğrenmek isteyen **AI ve platform
+  mühendisleri**.
+
+## Temel özellikler
+
+- **Deterministik analiz, LLM açıklaması.** Skorlama ve Root Cause ataması düz Python'dur; LLM skoru değiştiremez ve
+  tool çağıramaz.
+- **Veri kalitesini bilen evidence.** Her signal `OK`, `EMPTY`, `PERMISSION`, `ERROR`, `STALE`, `UNAVAILABLE` ya da
+  `SKIPPED_BUDGET` olarak işaretlenir. MCP'ye ulaşılamazsa agent kısmi rapor yazar; başka bir kaynağa geçmez.
+- **AI Investigation (soru-cevap)** ve canlı agent adımları (Server-Sent Events), yarıda kalan çalışmayı sürdürme
+  (LangGraph PostgreSQL checkpointer) ve konuşma hafızası.
+- **Incident, RCA raporu ve bilgi bankası** (bilinen sorunlar, runbook'lar) ile sonuçlara kullanıcı feedback'i.
+- **Sürekli izleme (watch) ve zamanlanmış health check**; işleri worker yürütür.
+- **Human-in-the-loop onaylar**: salt okunur olmayan her aksiyon için.
+- **Agent Builder**: özel agent'ları görsel workflow olarak oluşturma, test etme, yayımlama, içe ve dışa aktarma.
+- **Agent harness ekranları**: LLM Monitoring, MCP Çağrıları, Agent Trace, Agent Memory, Agent Middleware, Context
+  Windows ve Guardrails.
+- **Settings modülü**: connector'lar, LLM profilleri, şifreli secret'lar, zamanlama, risk scoring ve audit.
+- **İsteğe bağlı entegrasyonlar**: LangSmith tracing (girdi ve çıktı maskelenir) ve yüksek riskli RCA'lar için Slack
+  bildirimi.
+- **Chaos Controller v2** (laboratuvar): 20 senaryo, adaptive control, güvenlik bütçesi ve recovery doğrulaması.
+
+## Teknoloji özeti
+
+| Katman | Teknoloji |
+|---|---|
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, nginx |
+| Backend | Python 3.13, FastAPI, SQLAlchemy (asyncio), Alembic |
+| Agent | LangGraph, LangChain, `langchain-anthropic` (Claude) |
+| MCP | `mcp`, `langchain-mcp-adapters` (Streamable HTTP) |
+| Veri | PostgreSQL 17 (platform), PostgreSQL 17 (izlenen laboratuvar) |
+| Observability | Dynatrace SaaS, LangSmith (isteğe bağlı) |
+| Laboratuvar | Java 21, Spring Boot |
+| Altyapı | Docker Compose, GitHub Actions |
+
+Sürümler ve kaynak dosyaları: [Teknoloji Yığını](docs/TECH_STACK.md).
+
+## Mimari özeti
 
 ```mermaid
 flowchart LR
-    user["Browser"] -->|"HTTP :8090"| fe["sre-frontend<br/>nginx: SPA + /api proxy"]
+    user["Tarayıcı"] -->|"HTTP :8090"| fe["sre-frontend<br/>nginx: SPA + /api proxy"]
     fe -->|"/api, SSE"| be["sre-backend<br/>FastAPI + airlab_agent"]
     wk["sre-worker<br/>watch, health check, retention"]
-    be --> pg[("sre-postgres<br/>PostgreSQL 17<br/>schemas: sre, langgraph")]
+    be --> pg[("sre-postgres<br/>PostgreSQL 17")]
     wk --> pg
-    mig["sre-migrate<br/>Alembic + seed, runs once"] --> pg
-    be -->|"HTTPS, execute-dql"| mcp["Dynatrace Remote MCP"]
-    wk -->|"HTTPS, execute-dql"| mcp
+    be -->|"HTTPS"| mcp["Dynatrace Remote MCP"]
+    wk -->|"HTTPS"| mcp
     be -->|"HTTPS"| llm["Anthropic Claude API"]
     wk -->|"HTTPS"| llm
-    be -.->|"optional"| ls["LangSmith"]
-    be -.->|"optional"| slack["Slack webhook"]
-    wk -.->|"optional"| slack
 ```
 
-`sre-postgres` is on an internal Docker network and publishes no port. Only `sre-frontend` is published
-(`SRE_UI_PORT`, default `8090`).
+Ayrıntılar: [Teknik Mimari](docs/TECHNICAL_ARCHITECTURE.md) ve [Agent Mimarisi](docs/AGENT_ARCHITECTURE.md).
 
-### Agent flow
+## Hızlı başlangıç
 
-```mermaid
-flowchart LR
-    plan["plan"] --> collect["collect<br/>catalogue DQL via MCP"]
-    collect --> analyze["analyze<br/>features, data quality,<br/>score, mechanism"]
-    analyze -->|"needs more evidence"| extra["extra_evidence"]
-    extra --> analyze
-    analyze --> explain["explain<br/>Claude, or deterministic<br/>text if unavailable"]
-    explain --> finalize["finalize<br/>JSON + Markdown report"]
-```
-
-### Monitored lab and telemetry path
-
-```mermaid
-flowchart LR
-    chaos["chaos-controller :8080"] -->|"HTTP load and faults"| apps["reservation :8081<br/>checkin :8082<br/>flightops :8083<br/>baggage :8084"]
-    apps --> labdb[("airlab PostgreSQL 17<br/>separate host or local container")]
-    collector["pg-lock-collector"] -->|"read-only"| labdb
-    collector -->|"metrics, logs"| dt["Dynatrace SaaS"]
-    oneagent["OneAgent on hosts"] --> dt
-    dt --> mcp["Dynatrace Remote MCP"]
-    mcp --> agent["SRE Agent<br/>inside sre-backend / sre-worker"]
-```
-
-There are two separate databases. The **platform database** (`sre-postgres`) stores users, conversations,
-investigations, reports and agent memory. The **monitored database** (`airlab`) belongs to the lab. The agent never
-connects to the monitored database; it sees it only through Dynatrace.
-
-## Prerequisites
-
-| Requirement | Notes |
-|---|---|
-| Docker Engine with the Compose v2 plugin | All builds and services run in containers. Verified with Compose v5.8.0 on Rocky Linux 10. |
-| Bash and `openssl` | Used by `scripts/gen-sre-platform-env.sh`. On Windows use WSL or Git Bash. |
-| Git | To clone the repository. |
-| Dynatrace SaaS tenant and a **platform token** | Scopes: `mcp-gateway:servers:invoke`, `mcp-gateway:servers:read`, `storage:metrics:read`, `storage:logs:read`, `storage:entities:read`, `storage:events:read`, `storage:buckets:read`, `storage:smartscape:read`, `storage:spans:read`. |
-| Anthropic API key | Optional. Without it the agent runs in deterministic mode (no LLM explanation). |
-| LangSmith API key, Slack incoming webhook | Optional. |
-| Outbound HTTPS from the Docker host | To Dynatrace and the Anthropic API. |
-
-Not needed on the host: Python, Node.js, Java or Maven (unless you want to run tests outside Docker).
-
-The compose file sets container memory limits of 384 MB (`sre-postgres`), 640 MB (`sre-backend`), 640 MB
-(`sre-worker`) and 96 MB (`sre-frontend`). No host sizing beyond these limits has been validated.
-
-## Installation and configuration
-
-Commands below are for a Linux host (or WSL / Git Bash) and start from the repository root unless stated otherwise.
-
-### 1. Clone
+Docker Engine ve Compose v2 kurulu bir Linux host'ta (ya da WSL / Git Bash), repository kökünden:
 
 ```bash
-git clone <repository-url>
-cd <repository-directory>
-```
-
-### 2. Platform secrets (`app-vm/sre-platform.env`)
-
-```bash
+# 1. Platform secret'ları (rastgele değerler üretir, mevcut dosyanın üzerine yazmaz)
 scripts/gen-sre-platform-env.sh app-vm/sre-platform.env
-```
 
-The script generates random values, writes the file with mode `600` and never overwrites an existing file. It sets:
+# 2. Agent entegrasyonları: app-vm/agent.env dosyasını oluşturun (Dynatrace ve isteğe bağlı Claude değerleri)
+#    Değişken listesi: docs/INSTALLATION.md
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `POSTGRES_PASSWORD` | yes | Password of the `sre-postgres` container. Written to the data volume on first start. |
-| `SRE_DB_PASSWORD` | yes | Backend/worker connection password. Must equal `POSTGRES_PASSWORD`. |
-| `SRE_JWT_SECRET` | yes | Token signing secret (at least 32 characters). |
-| `SRE_SETTINGS_KEY` | recommended | Encryption key for secrets stored through the Settings screen. If lost, stored secrets cannot be decrypted. |
-| `SRE_ADMIN_USERNAME`, `SRE_ADMIN_PASSWORD` | yes | Initial admin account. Used only when no admin exists at first start. |
-| `SRE_ENVIRONMENT` | no | Environment label (default `lab`). |
-
-All other `SRE_*` variables are optional and documented with their defaults in `sre-platform/.env.example`
-(session lifetime, rate limits, worker intervals, Slack, LangSmith sync, outbound allowlist, UI port and bind address).
-Add the ones you need to `app-vm/sre-platform.env`.
-
-### 3. Agent integrations (`app-vm/agent.env`)
-
-Create the file by hand (it must exist, even if some values are empty) and restrict its permissions:
-
-```bash
-cat > app-vm/agent.env <<'EOF'
-# Dynatrace Remote MCP: set the tenant id, or set DT_MCP_URL to a full MCP URL instead
-DT_ENV=<dynatrace-environment-id>
-DT_PLATFORM_TOKEN=<dynatrace-platform-token>
-
-# LLM (optional): without a key the agent runs in deterministic mode
-ANTHROPIC_API_KEY=<anthropic-api-key>
-CLAUDE_MODEL=claude-opus-5-5
-
-# LangSmith tracing (optional)
-LANGSMITH_API_KEY=
-LANGSMITH_TRACING=false
-LANGSMITH_PROJECT=airlab-sre-agent
-EOF
-chmod 600 app-vm/agent.env
-```
-
-| Variable | Required | Purpose |
-|---|---|---|
-| `DT_ENV` or `DT_MCP_URL` | yes | With `DT_ENV` the URL is derived as `https://<DT_ENV>.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp`. |
-| `DT_PLATFORM_TOKEN` | yes | Bearer token for the MCP gateway (scopes listed in [Prerequisites](#prerequisites)). |
-| `ANTHROPIC_API_KEY` | no | Enables Claude. |
-| `CLAUDE_MODEL`, `CLAUDE_RCA_MODEL` | no | Chat/interpretation model and RCA model. Both default to `claude-opus-5-5`. |
-| `LANGSMITH_API_KEY`, `LANGSMITH_TRACING`, `LANGSMITH_PROJECT` | no | Tracing is active only when a key is set and `LANGSMITH_TRACING=true`. |
-| `AGENT_CONFIG` | no | Path to a YAML file merged over the built-in `defaults.yaml` (thresholds, weights, budgets). |
-
-Both env files are ignored by Git. Never commit real values.
-
-### 4. Compose environment file
-
-`app-vm/docker-compose.yml` also defines the lab services, which read `app-vm/.env`. Create it even if you only run
-the platform, so that Compose can load the whole file:
-
-```bash
+# 3. Compose ortam dosyası
 cd app-vm
 cp .env.example .env && chmod 600 .env
-```
 
-For a platform-only setup the example values can stay as they are. For the lab, fill in the database host and
-passwords (see [Running the lab](#optional-running-the-lab-locally)).
-
-### 5. Build and start the platform
-
-Run in `app-vm/`:
-
-```bash
+# 4. Derle ve başlat
 docker compose --profile platform build sre-migrate sre-frontend
 docker compose --profile platform up -d sre-frontend sre-worker
+
+# 5. Sağlık kontrolü
+curl -s http://localhost:8090/api/health
+curl -s http://localhost:8090/api/ready
 ```
 
-Naming the two services starts only the platform: `sre-postgres` → `sre-migrate` (applies Alembic migrations and
-seeds the knowledge base, then exits) → `sre-backend` → `sre-frontend`, plus `sre-worker`. Running
-`docker compose --profile platform up -d` without service names also starts the lab services.
+Ardından `http://<host>:8090` adresini açın ve `app-vm/sre-platform.env` içindeki `SRE_ADMIN_USERNAME` ve
+`SRE_ADMIN_PASSWORD` ile giriş yapın. Tüm adımlar, değişken tablosu ve hata çözümü
+[Kurulum Kılavuzu](docs/INSTALLATION.md) içindedir.
 
-The Docker build context is always the repository root (`context: ..` in the compose file).
-
-Useful follow-up commands (in `app-vm/`):
-
-```bash
-# re-run migrations and seed
-docker compose --profile platform run --rm sre-migrate
-
-# create an additional user (roles: admin, sre, viewer)
-docker compose exec -e SRE_NEW_USER_PASSWORD='<password>' sre-backend sre-platform create-user <username> sre
-```
-
-### Local development without Docker
-
-The backend and frontend can be run from source for development and tests. This mirrors the CI workflow
-(`.github/workflows/ci.yml`); a PostgreSQL 17 instance is required for database tests.
-
-```bash
-# backend + agent (Python 3.12+)
-cd sre-platform/backend
-pip install -e ../../sre-agent -e ".[test]"
-SRE_TEST_DATABASE_URL='postgresql+psycopg://<user>:<password>@127.0.0.1:5432/<db>' pytest
-
-# frontend (Node.js 22)
-cd sre-platform/frontend
-npm ci
-npm run dev        # Vite dev server
-npm run build
-```
-
-### Optional: running the lab locally
-
-The lab gives the agent something to analyse. Telemetry reaches the agent only if Dynatrace is configured for the
-hosts and the collector (`observability/dynatrace/README.md`).
-
-```bash
-scripts/build.sh                                   # mvn verify inside Docker (unit + Testcontainers tests)
-cd app-vm && cp .env.example .env.local            # set DB_HOST=postgres, add LOCAL_PG_SUPERUSER_PASSWORD, change passwords
-C="docker compose -f docker-compose.yml -f compose.local.yml --env-file .env.local"
-$C up -d --build postgres
-$C --profile tools run --rm db-migrator migrate
-$C --profile tools run --rm db-migrator seed --scale=1
-$C --profile observability up -d
-cd .. && scripts/smoke.sh                          # UI → API → DB checks
-```
-
-In the target topology PostgreSQL runs as a systemd service on a separate database host, prepared with
-`db-vm/install-postgres17.sh` and `db-vm/bootstrap-db.sh`. The full procedure is in `docs/lab/runbook.md`.
-
-## Quick start
-
-1. **Check the containers** (in `app-vm/`):
-
-   ```bash
-   docker compose --profile platform ps
-   ```
-
-   `sre-postgres`, `sre-backend`, `sre-worker` and `sre-frontend` should be `healthy`; `sre-migrate` should have
-   exited with code 0.
-
-2. **Check the API through the frontend proxy:**
-
-   ```bash
-   curl -s http://localhost:8090/healthz       # nginx
-   curl -s http://localhost:8090/api/health    # backend liveness
-   curl -s http://localhost:8090/api/ready     # database and schema version
-   ```
-
-3. **Sign in.** Open `http://<host>:8090` and log in with `SRE_ADMIN_USERNAME` and `SRE_ADMIN_PASSWORD` from
-   `app-vm/sre-platform.env`. Change the password on the account page (`/account`).
-
-4. **Verify the integrations.** The system status in the UI (backed by `GET /api/system/info`) shows whether MCP,
-   Claude and LangSmith are configured. Connectors and LLM providers can also be managed under `/settings`.
-
-5. **Run the agent for the first time.** Open `/investigate`, start a conversation and ask about a service and a time
-   range. The agent steps (plan, DQL queries, evidence, explanation) stream live. The finished investigation is
-   listed under `/investigations`, and an RCA report can be generated from it and found under `/rca`.
-
-6. **Scheduled runs.** The worker evaluates watch conditions every minute and runs a health check every
-   `SRE_HEALTH_CHECK_MINUTES` (default 15). Jobs can be inspected and triggered from the scheduling section of
-   `/settings`.
-
-The OpenAPI schema (`/api/openapi.json`, `/api/docs`) is disabled by default; set `SRE_API_DOCS=true` to enable it.
-
-## Project structure
+## Repository yapısı
 
 ```text
-sre-agent/        Agent core (airlab_agent): graph, signal catalogue, features, scoring, MCP and LLM adapters, eval
+sre-agent/        Agent çekirdeği (airlab_agent): graph, signal kataloğu, feature, scoring, MCP ve LLM adapter'ları, eval
 sre-platform/
-  backend/        FastAPI app, worker, Alembic migrations, agent runtime, settings, guardrails, tests
-  frontend/       React UI, nginx config
-app-vm/           docker-compose.yml (all services), compose.local.yml (local PostgreSQL for the lab), .env.example
-lab/              Java 21 lab: Maven reactor, four services, db-migrator, chaos-controller, lab/Dockerfile
-db-vm/            PostgreSQL 17 install and bootstrap scripts for the monitored database host
-observability/    pg-lock-collector, netem-agent, Dynatrace setup notes
-scripts/          Build, env generation, smoke tests, experiment runners
-docs/lab/         Lab architecture, experiments, telemetry contract, runbook, ADRs, OpenAPI
-docs/platform/    Platform docs: memory, guardrails, security, settings, agent builder, trace, example reports
-docs/specs/       Original requirement texts (historical)
-deploy/evidence/  Installation and experiment evidence
-.github/workflows CI pipeline
+  backend/        FastAPI uygulaması, worker, Alembic migration'ları, agent runtime, settings, guardrails, testler
+  frontend/       React arayüzü, nginx yapılandırması
+app-vm/           docker-compose.yml (tüm servisler), compose.local.yml (laboratuvar için yerel PostgreSQL), .env.example
+lab/              Java 21 laboratuvarı: Maven reactor, dört servis, db-migrator, chaos-controller, Dockerfile
+db-vm/            İzlenen veritabanı host'u için PostgreSQL 17 kurulum ve bootstrap script'leri
+observability/    pg-lock-collector, netem-agent, Dynatrace kurulum notları
+scripts/          Build, env üretimi, smoke test, deney çalıştırıcıları
+docs/             Bu dokümantasyon merkezi (docs/*.md), ekran görüntüleri (docs/assets/), konu dokümanları (docs/platform, docs/lab)
+deploy/evidence/  Kurulum ve deney kanıtları
+.github/workflows CI pipeline'ı
 ```
 
-## Tests
+## Testler
 
-| Command | Where | Scope |
+| Komut | Dizin | Kapsam |
 |---|---|---|
-| `python -m pytest -q tests` | `sre-agent/` | Agent unit, scenario, graph and watch tests (fake MCP, no network) |
-| `python -m pytest -q tests` | `sre-platform/backend/` | API and service tests; needs `SRE_TEST_DATABASE_URL` (DB tests are skipped without it) |
-| `npx tsc -b --noEmit && npx vitest run && npm run build` | `sre-platform/frontend/` | Type check, UI tests, production build |
-| `scripts/build.sh` or `.\scripts\build.ps1` | repository root | Lab `mvn verify` inside Docker |
-| `scripts/smoke.sh` | repository root | End-to-end checks against a running lab |
+| `python -m pytest -q tests` | `sre-agent/` | Agent unit, senaryo, graph ve watch testleri (sahte MCP, ağ gerekmez) |
+| `python -m pytest -q tests` | `sre-platform/backend/` | API ve servis testleri; `SRE_TEST_DATABASE_URL` yoksa veritabanı testleri atlanır |
+| `npx tsc -b --noEmit && npx vitest run && npm run build` | `sre-platform/frontend/` | Tip kontrolü, arayüz testleri, production build |
+| `scripts/build.sh` | repository kökü | Laboratuvar için Docker içinde `mvn verify` |
+| `scripts/smoke.sh` | repository kökü | Çalışan laboratuvara karşı uçtan uca kontroller |
 
-CI runs the first three groups plus gitleaks, `pip-audit` and `npm audit` on every push to `main` and on pull
-requests. No external service or secret is needed for the tests.
+CI, ilk üç grubu ve ek olarak gitleaks, `pip-audit` ve `npm audit` adımlarını `main` dalına yapılan her push'ta ve
+pull request'lerde çalıştırır ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Testler dış servis ya da secret
+gerektirmez.
 
-## Troubleshooting
+## Ek dokümanlar
 
-| Symptom | Likely cause | What to do |
-|---|---|---|
-| `env file .../app-vm/.env not found` (or `agent.env`, `sre-platform.env`) | Compose loads every `env_file` referenced in the file | Create the missing file (steps 2–4). |
-| `sre-backend` restarts with a database authentication error | `sre-platform.env` was regenerated after the first start; the old password is stored in the `sre-pg-data` volume | Restore the original password in the env file, or change it in PostgreSQL with `ALTER ROLE`. |
-| `sre-frontend` does not start | It waits for `sre-backend` to become healthy, which waits for `sre-migrate` | `docker compose logs sre-migrate sre-backend` |
-| Login fails with the generated admin password | `SRE_ADMIN_PASSWORD` is applied only when no admin exists | Use the current password, or create another admin with `sre-platform create-user`. |
-| Report status `partial`, evidence `UNAVAILABLE` | Dynatrace MCP is unreachable | Check `DT_ENV` / `DT_MCP_URL`, token validity and outbound HTTPS from the host. |
-| A signal is marked `PERMISSION` | Platform token lacks a scope | Add the missing `storage:*:read` scope. |
-| Signals are `EMPTY` or `STALE` | No telemetry for that period | Check OneAgent and `pg-lock-collector` (`docker logs airlab-pg-lock-collector`). |
-| Answers contain no LLM explanation | `ANTHROPIC_API_KEY` is empty or the API is unreachable | Set the key in `agent.env` and restart `sre-backend` and `sre-worker`. |
-| Secrets cannot be added in Settings | `SRE_SETTINGS_KEY` is empty | Set it in `sre-platform.env` and restart the backend. |
+| Konu | Doküman |
+|---|---|
+| Platform iç yapısı, API listesi, bilinen sınırlar | [sre-platform/README.md](sre-platform/README.md) |
+| Agent tasarımı, scoring, watch davranışı | [sre-agent/README.md](sre-agent/README.md), [docs/platform/sre-agent-runbook.md](docs/platform/sre-agent-runbook.md) |
+| Settings modülü | [docs/platform/settings.md](docs/platform/settings.md) |
+| Agent Builder | [docs/platform/agent-builder.md](docs/platform/agent-builder.md) |
+| Agent Memory | [docs/platform/agent-memory.md](docs/platform/agent-memory.md), [docs/platform/memory/](docs/platform/memory/) |
+| Agent Middleware | [docs/platform/agent-middleware.md](docs/platform/agent-middleware.md) |
+| Guardrails | [docs/platform/guardrails/](docs/platform/guardrails/) |
+| Agent Trace, Context Windows, MCP Çağrıları | [agent-trace.md](docs/platform/agent-trace.md), [context-windows.md](docs/platform/context-windows.md), [mcp-calls.md](docs/platform/mcp-calls.md) |
+| LangSmith tracing | [docs/platform/langsmith-tracing.md](docs/platform/langsmith-tracing.md) |
+| Güvenlik uygulaması ve kanıtları | [docs/platform/security/](docs/platform/security/) |
+| Laboratuvar mimarisi, deneyler, runbook | [docs/lab/](docs/lab/) |
+| Chaos Controller v2 | [docs/lab/chaos-v2-architecture.md](docs/lab/chaos-v2-architecture.md) |
+| Dynatrace kurulumu ve token scope'ları | [observability/dynatrace/README.md](observability/dynatrace/README.md) |
 
-The UI is served over plain HTTP. Restrict exposure with `SRE_UI_BIND_IP`, or place a TLS-terminating proxy in front
-of it.
+## Güvenlik, lisans ve katkı
 
-## Further documentation
-
-- Platform internals, API list and known limits: `sre-platform/README.md`
-- Agent design, scoring and watch behaviour: `sre-agent/README.md`, `docs/platform/sre-agent-runbook.md`
-- Settings, guardrails, memory, tracing: `docs/platform/`
-- Lab architecture, experiments and deployment runbook: `docs/lab/`
-- Dynatrace setup and token scopes: `observability/dynatrace/README.md`
-- Security policy: `SECURITY.md`
+- **Güvenlik politikası:** [SECURITY.md](SECURITY.md). Güvenlik açıklarını bu dosyadaki yönteme göre bildirin.
+- **Lisans:** Repository'de bir lisans dosyası bulunmuyor. Lisans eklenene kadar kullanım ve dağıtım koşulları için
+  repository sahibine danışın.
+- **Katkı:** Ayrı bir katkı rehberi yok. Değişiklik göndermeden önce [Testler](#testler) bölümündeki komutların
+  geçtiğini doğrulayın; CI aynı kontrolleri çalıştırır.
+- Arayüz düz HTTP ile sunulur. Erişimi `SRE_UI_BIND_IP` ile sınırlayın ya da önüne TLS sonlandıran bir proxy koyun.
