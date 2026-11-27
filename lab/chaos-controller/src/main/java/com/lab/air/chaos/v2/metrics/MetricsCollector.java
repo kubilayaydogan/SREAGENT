@@ -81,7 +81,7 @@ public class MetricsCollector {
     }
 
     record DbSnap(long tMs, double xacts, double deadlocks, double tempBytes, double inserts, Double readBytes,
-                  Double writeBytes, Double calls, Double execMs) {
+                  Double writeBytes, Double calls, Double execMs, double updates, double rollbacks) {
     }
 
     public MetricsCollector(ChaosProperties props, V2Properties v2) {
@@ -281,6 +281,9 @@ public class MetricsCollector {
                       FROM pg_stat_activity WHERE backend_type = 'client backend' AND xact_start IS NOT NULL
                        AND application_name <> 'chaos-observer') AS longest_xact,
                    d.xact_commit + d.xact_rollback AS xacts, d.deadlocks, d.temp_bytes, d.tup_inserted,
+                   d.tup_updated, d.xact_rollback,
+                   (SELECT count(*) FROM pg_stat_activity WHERE backend_type = 'parallel worker') AS par_workers,
+                   (SELECT coalesce(sum(n_dead_tup), 0) FROM pg_stat_user_tables WHERE schemaname = 'chaos') AS dead_tup,
                    pg_database_size(current_database()) AS dbsize
               FROM pg_stat_database d WHERE d.datname = current_database()""";
 
@@ -298,6 +301,10 @@ public class MetricsCollector {
             double deadlocks;
             double temp;
             double ins;
+            double upd;
+            double rollbacks;
+            int parWorkers;
+            double deadTup;
             double size;
             try (Statement st = c.createStatement(); ResultSet rs = st.executeQuery(Q_MAIN)) {
                 rs.next();
@@ -311,10 +318,14 @@ public class MetricsCollector {
                 deadlocks = rs.getDouble("deadlocks");
                 temp = rs.getDouble("temp_bytes");
                 ins = rs.getDouble("tup_inserted");
+                upd = rs.getDouble("tup_updated");
+                rollbacks = rs.getDouble("xact_rollback");
+                parWorkers = rs.getInt("par_workers");
+                deadTup = rs.getDouble("dead_tup");
                 size = rs.getDouble("dbsize");
             }
             try (Statement st = c.createStatement(); ResultSet rs = st.executeQuery("""
-                    SELECT regexp_replace(application_name, '(-service)?(-lab-storm)?$', '') AS app, count(*) AS n,
+                    SELECT regexp_replace(application_name, '(-service)?(-lab-(storm|idle))?$', '') AS app, count(*) AS n,
                            count(*) FILTER (WHERE wait_event_type = 'Lock') AS lw
                       FROM pg_stat_activity WHERE backend_type = 'client backend' GROUP BY 1""")) {
                 while (rs.next()) {
@@ -358,7 +369,7 @@ public class MetricsCollector {
             } catch (SQLException e) {
                 log.debug("lab_os.host_stats() okunamadı: {}", e.getMessage());
             }
-            DbSnap now = new DbSnap(t, xacts, deadlocks, temp, ins, readB, writeB, calls, execMs);
+            DbSnap now = new DbSnap(t, xacts, deadlocks, temp, ins, readB, writeB, calls, execMs, upd, rollbacks);
             DbSnap ref;
             synchronized (dbSnaps) {
                 dbSnaps.addLast(now);
@@ -371,6 +382,8 @@ public class MetricsCollector {
             Double dlMin = null;
             Double tempMb = null;
             Double insS = null;
+            Double updS = null;
+            Double rbS = null;
             Double rMb = null;
             Double wMb = null;
             Double qMean = null;
@@ -382,6 +395,8 @@ public class MetricsCollector {
                 Double tb = rate(now.tempBytes, ref.tempBytes, dt);
                 tempMb = tb == null ? null : tb / 1048576;
                 insS = rate(now.inserts, ref.inserts, dt);
+                updS = rate(now.updates, ref.updates, dt);
+                rbS = rate(now.rollbacks, ref.rollbacks, dt);
                 if (now.readBytes != null && ref.readBytes != null) {
                     Double r = rate(now.readBytes, ref.readBytes, dt);
                     Double w = rate(now.writeBytes, ref.writeBytes, dt);
@@ -394,12 +409,12 @@ public class MetricsCollector {
             }
             dbError = null;
             return new DbSample(true, cpu, mem, load, cpus, conns, maxc, active, idleTx, waiters, longest, tps, dlMin,
-                    tempMb, rMb, wMb, insS, qMean, size / 1048576);
+                    tempMb, rMb, wMb, insS, qMean, size / 1048576, updS, deadTup, parWorkers, rbS);
         } catch (SQLException e) {
             dbError = e.getMessage();
             closeDb();
             return new DbSample(false, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                    null, null, null, null, null);
+                    null, null, null, null, null, null, null, null, null);
         }
     }
 

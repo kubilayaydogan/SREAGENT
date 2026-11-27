@@ -7,10 +7,9 @@ import type { Custom, Intensity, Scenario } from '../types'
 const INTENSITIES: Intensity[] = ['LIGHT', 'MEDIUM', 'HIGH', 'CRITICAL', 'CUSTOM']
 
 const CUSTOM_FIELDS: [keyof Custom, string][] = [
-  ['workers', 'Eşzamanlı worker'], ['rps', 'İstek hızı (rps)'], ['dbConnections', 'DB bağlantısı'],
+  ['workers', 'Eşzamanlı worker'], ['dbConnections', 'DB bağlantısı / session'],
   ['txDurationMs', 'Transaction süresi (ms)'], ['queryFrequency', 'Query sıklığı (worker başına /sn)'],
   ['targetValue', 'Hedef seviye (ör. DB CPU %)'], ['errorPct', 'Hata olasılığı (%)'],
-  ['networkLatencyMs', 'Network latency (ms)'], ['packetLossPct', 'Packet loss (%)'],
   ['maxAffectedServices', 'En fazla etkilenen servis'],
 ]
 const BUDGET_FIELDS: [string, string][] = [
@@ -70,7 +69,7 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
   const total = d.baselineSec + d.rampSec + d.durationSec + d.recoverySec
   const needsTargets = f.targetMode === 'SINGLE' || f.targetMode === 'MULTI'
   const problems: string[] = []
-  if (needsTargets && f.targets.length === 0) problems.push('Hedef uygulama seçin.')
+  if (needsTargets && f.targets.length === 0) problems.push('Yüke katılacak uygulamayı seçin.')
   if (sc && f.targetMode === 'MULTI' && f.targets.length > 0 && f.targets.length < sc.minApps) problems.push(`Bu senaryo en az ${sc.minApps} uygulama ister.`)
   if (d.durationSec <= 0) problems.push('Chaos süresi 0\'dan büyük olmalı.')
   if (d.maxDurationSec > 0 && total > d.maxDurationSec) problems.push('Toplam süre, “En uzun süre” sınırını aşıyor.')
@@ -139,7 +138,7 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
                 {sc && <p className="help">Bu senaryoda yükü başlatan: {sc.initiatorRole}.</p>}
               </fieldset>
 
-              <fieldset><legend><span className="step">3</span> Kimler hedef alınsın?</legend>
+              <fieldset><legend><span className="step">3</span> Yüke başka hangi uygulamalar katılsın?</legend>
                 <div className="modes">
                   {TARGET_MODES.map((m) => (
                     <label key={m.v} title={m.help} className={f.targetMode === m.v ? 'on' : ''}>
@@ -158,7 +157,8 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
                     ))}
                   </div>
                 )}
-                {sc && <p className="help">Senaryonun doğrudan hedefi: {sc.directTarget}.</p>}
+                <p className="help">Hedef her senaryoda paylaşılan PostgreSQL'dir. Seçilen her uygulama yükü kendi veritabanı bağlantılarıyla başlatır; etki, aynı veritabanını kullanan diğer uygulamalara da yansıyabilir.</p>
+                {sc && <p className="help">Yükün bindiği yer: {sc.directTarget}.</p>}
               </fieldset>
 
               <fieldset><legend><span className="step">4</span> Ne kadar şiddetli olsun?</legend>
@@ -277,7 +277,7 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
               <h3>Deney özeti</h3>
               <p className="sentence">
                 <b>{f.initiator}</b> uygulaması <b>{sc ? sc.name : f.scenarioId}</b> senaryosunu <b>{intensityLabel(f.intensity).toLowerCase()}</b> yoğunlukta başlatır.
-                {' '}Hedef: <b>{needsTargets ? (f.targets.join(', ') || 'seçilmedi') : mode?.label.toLowerCase()}</b>.
+                {' '}Hedef paylaşılan PostgreSQL; yüke katılan: <b>{needsTargets ? (f.targets.join(', ') || 'seçilmedi') : mode?.label.toLowerCase()}</b>.
                 {' '}Toplam süre yaklaşık <b>{humanDuration(total)}</b>; chaos {humanDuration(d.durationSec)} uygulanır.
                 {' '}Arka plan trafiği {f.traffic.enabled ? 'açık' : 'kapalı'}.
               </p>
@@ -292,8 +292,8 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
                   <h4>Kimler katılıyor</h4>
                   <dl className="kv">
                     <dt>Yükü başlatan</dt><dd>{String(preview.initiator)}</dd>
-                    <dt>Doğrudan hedef</dt><dd>{(preview.targets as string[]).join(', ') || '—'}</dd>
-                    <dt>Katılan uygulamalar</dt><dd>{(preview.participants as string[]).join(', ')}</dd>
+                    <dt>Hedef</dt><dd>Paylaşılan PostgreSQL</dd>
+                    <dt>Yükü başlatan uygulamalar</dt><dd>{(preview.participants as string[]).join(', ')}</dd>
                     <dt>Etkilenmesi beklenen</dt><dd>{(preview.expectedAffected as string[]).join(', ') || 'uygulama düzeyinde beklenmiyor (etki veritabanında)'}</dd>
                   </dl>
                   <h4>Ne yapılacak</h4>

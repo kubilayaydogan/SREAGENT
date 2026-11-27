@@ -38,7 +38,7 @@ x-app: &app
     LAB_CHAOS_PEERS_CHECKIN: http://checkin:8082
     LAB_CHAOS_PEERS_FLIGHTOPS: http://flightops:8083
     LAB_CHAOS_PEERS_BAGGAGE: http://baggage:8084
-    # S11 duty-cycle CPU burn (1 vCPU quota içinde) ve S12 heap ballast üst sınırı: max heap'in %50'si
+    # lab cpu-burn (1 vCPU quota içinde) ve heap ballast uçlarının üst sınırı: max heap'in %50'si (senaryolar bu uçları kullanmaz)
     # (%70 ile canlı set + allocation burst'leri birleşince OutOfMemoryError ölçüldü)
     LAB_CHAOS_MAX_CPU_THREADS: ${LAB_CHAOS_MAX_CPU_THREADS:-6}
     LAB_CHAOS_MAX_MEMORY_FRACTION: ${LAB_CHAOS_MAX_MEMORY_FRACTION:-0.5}

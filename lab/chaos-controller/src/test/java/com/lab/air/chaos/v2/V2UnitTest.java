@@ -147,7 +147,7 @@ class V2UnitTest {
     static Sample sample(double dbCpu, int conns, Double heapUsed, boolean appUp) {
         AppSample a = new AppSample(appUp, 10.0, heapUsed, 100.0, 2, 6, 0, 8, 5.0, 0.0, 20.0, 40.0, 3, 0, null, null);
         DbSample d = new DbSample(true, dbCpu, 50.0, 1.0, 6, conns, 100, 3, 0, 0, 0.1, 50.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                1.0, 60.0);
+                1.0, 60.0, 0.0, 0.0, 0, 0.0);
         return new Sample("t", 0, State.RUNNING, Map.of("checkin", a), d, new HostSample(10.0, 40.0, 40.0), List.of(),
                 Map.of());
     }
@@ -248,7 +248,8 @@ class V2UnitTest {
     @Test
     void intensityIncreasesControlTargets() {
         ScenarioRegistry reg = new ScenarioRegistry();
-        for (String id : List.of("S01", "S02", "S04", "S06", "S07", "S09", "S10", "S11", "S17", "S18")) {
+        for (String id : List.of("S01", "S02", "S04", "S05", "S06", "S07", "S08", "S09", "S10", "S11", "S12", "S13",
+                "S14", "S15", "S16", "S17", "S19")) {
             double prev = -1;
             for (Intensity in : List.of(Intensity.LIGHT, Intensity.MEDIUM, Intensity.HIGH, Intensity.CRITICAL)) {
                 var p = reg.get(id).orElseThrow().plan()
@@ -279,21 +280,99 @@ class V2UnitTest {
     }
 
     @Test
-    void memoryPressureIsOpenLoopAndBelowHeapBudget() {
+    void memorySortIsOpenLoopAndBounded() {
         ScenarioRegistry reg = new ScenarioRegistry();
         double prev = -1;
         for (Intensity in : List.of(Intensity.LIGHT, Intensity.MEDIUM, Intensity.HIGH, Intensity.CRITICAL)) {
-            var p = reg.get("S12").orElseThrow().plan()
-                    .apply(new Ctx("checkin", List.of("checkin"), in, null, CAL, new Random(1)));
-            assertEquals(null, p.control(), "S12 open-loop olmalı");
-            double rate = p.actions().get(0).ratePerWorker();
-            assertTrue(rate > prev, in.name());
-            prev = rate;
-            double ballast = ((Number) p.parameters().get("ballastMb")).doubleValue();
-            double heapMax = CAL.heapMaxMb().getOrDefault("checkin", 448.0);
-            assertTrue(ballast / heapMax * 100 + 25 <= Budget.defaults().maxAppHeapPct(), in.name());
-            assertTrue(ballast <= 0.5 * heapMax, in.name() + " ballast heap'in %50'sini aşmamalı");
+            for (List<String> targets : List.of(List.of("checkin"), APPS)) {
+                var p = reg.get("S18").orElseThrow().plan().apply(new Ctx("checkin", targets, in, null, CAL, new Random(1)));
+                assertNull(p.control(), "S18 open-loop olmalı (bellek sert kaynak)");
+                double peak = ((Number) p.parameters().get("estimatedPeakMb")).doubleValue();
+                assertTrue(peak <= 1400, in.name() + " tahmini tepe bellek " + peak + " MB");
+                if (targets.size() == 1) {
+                    assertTrue(peak > prev, in.name());
+                    prev = peak;
+                }
+            }
         }
+        // custom worker sayısı bellek üst sınırını delemez
+        var custom = new com.lab.air.chaos.v2.model.Model.Custom(40, null, null, null, null, null, null, null, null, null, null);
+        var p = reg.get("S18").orElseThrow().plan().apply(new Ctx("checkin", APPS, Intensity.CRITICAL, custom, CAL, new Random(1)));
+        assertTrue(((Number) p.parameters().get("estimatedPeakMb")).doubleValue() <= 1400);
+    }
+
+    /** DB yükü üreten lab uçları; uygulama CPU / heap / bağımlılık / ağ uçları senaryolarda kullanılamaz. */
+    static final Set<String> DB_LOAD_PATHS = Set.of("/lab/chaos/table-lock", "/lab/chaos/contend", "/lab/chaos/long-tx",
+            "/lab/chaos/cpu-query", "/lab/chaos/write-burst", "/lab/chaos/heavy-read", "/lab/chaos/temp-spill",
+            "/lab/chaos/serialization", "/lab/chaos/deadlock", "/lab/chaos/connection-storm", "/lab/chaos/commit-storm",
+            "/lab/chaos/update-churn", "/lab/chaos/advisory-lock", "/lab/chaos/idle-in-tx", "/lab/chaos/parallel-query",
+            "/lab/chaos/point-queries", "/lab/chaos/memory-sort");
+
+    static Set<String> loadTypes(ScenarioRegistry reg, String id, List<String> targets) {
+        var p = reg.get(id).orElseThrow().plan().apply(new Ctx("checkin", targets, Intensity.HIGH, null, CAL, new Random(3)));
+        Set<String> types = new java.util.TreeSet<>();
+        for (var a : p.actions()) {
+            // S03 iki ayrı satır kümesinde aynı yük tipini (long transaction) kullanır
+            types.add(a.path());
+        }
+        return types;
+    }
+
+    @Test
+    void everyScenarioLoadsOnlyPostgres() {
+        ScenarioRegistry reg = new ScenarioRegistry();
+        assertEquals(20, reg.all().size());
+        for (ScenarioDef d : reg.all()) {
+            var p = d.plan().apply(new Ctx("checkin", APPS, Intensity.HIGH, null, CAL, new Random(3)));
+            for (var a : p.actions()) {
+                assertEquals(ScenarioDef.Kind.LOOP, a.kind(), d.id() + ": netem / iş trafiği eylemi olmamalı");
+                assertTrue(DB_LOAD_PATHS.contains(a.path()), d.id() + " DB yükü olmayan uç: " + a.path());
+            }
+            if (p.control() != null) {
+                assertEquals(Scope.DB, p.control().scope(), d.id() + " kontrol metriği DB metriği olmalı");
+            }
+        }
+    }
+
+    @Test
+    void singleTypeScenariosAreAllDifferentAndSomeCombineTypes() {
+        ScenarioRegistry reg = new ScenarioRegistry();
+        Set<String> multi = Set.of("S17", "S19", "S20");
+        Map<String, String> seen = new java.util.HashMap<>();
+        for (ScenarioDef d : reg.all()) {
+            Set<String> types = loadTypes(reg, d.id(), APPS);
+            if (multi.contains(d.id())) {
+                assertTrue(types.size() >= 2, d.id() + " birden fazla yük tipi üretmeli: " + types);
+            } else {
+                assertEquals(1, types.size(), d.id() + " tek yük tipi üretmeli: " + types);
+                String type = types.iterator().next();
+                String other = seen.put(type, d.id());
+                assertNull(other, d.id() + " ile " + other + " aynı yük tipini üretiyor: " + type);
+            }
+        }
+        assertEquals(17, seen.size());
+        assertEquals(DB_LOAD_PATHS, Set.copyOf(seen.keySet()), "her DB yük tipi tek bir senaryonun");
+        for (String id : ScenarioRegistry.CASCADE_POOL) {
+            assertFalse(multi.contains(id), "birleşik senaryo alt senaryo olamaz: " + id);
+        }
+    }
+
+    @Test
+    void everySelectedAppStartsTheLoad() {
+        ScenarioRegistry reg = new ScenarioRegistry();
+        for (ScenarioDef d : reg.all()) {
+            if ("S20".equals(d.id())) {
+                continue;       // alt senaryolar initiator'ı kendi seçer; aşağıda ayrıca denetlenir
+            }
+            var p = d.plan().apply(new Ctx("checkin", APPS, Intensity.MEDIUM, null, CAL, new Random(3)));
+            Set<String> starters = new java.util.HashSet<>();
+            p.actions().forEach(a -> starters.add(a.app()));
+            assertEquals(Set.copyOf(APPS), starters, d.id() + ": seçilen her uygulama yükü başlatmalı");
+        }
+        var s20 = reg.get("S20").orElseThrow().plan().apply(new Ctx("checkin", APPS, Intensity.HIGH, null, CAL, new Random(3)));
+        Set<String> starters = new java.util.HashSet<>();
+        s20.actions().forEach(a -> starters.add(a.app()));
+        assertTrue(starters.size() >= 2, "S20: yükü en az 2 uygulama başlatmalı");
     }
 
     @Test
@@ -338,7 +417,13 @@ class V2UnitTest {
         var s15 = o.resolve(req("S15", "checkin", TargetMode.SINGLE, List.of(), 5L));
         assertTrue(s15.participants().size() >= 2, "minApps=2 → seed'e bağlı peer eklenir");
         var s03 = o.resolve(req("S03", "flightops", TargetMode.AUTO, List.of(), 5L));
-        assertEquals(APPS, s03.ctx().targets(), "AUTO: S03 tüm uygulamaları kurban trafiğiyle hedefler");
+        assertEquals(APPS, s03.ctx().targets(), "AUTO: S03 tüm uygulamalarda uzun transaction açar");
+        var s04 = o.resolve(req("S04", "checkin", TargetMode.MULTI, List.of("baggage", "flightops"), 5L));
+        assertEquals(List.of("checkin", "baggage", "flightops"), s04.participants());
+        assertEquals(3, s04.plan().actions().size(), "seçilen her uygulama yükü başlatır");
+        assertEquals(s04.participants(), s04.expectedAffected());
+        assertEquals(List.of(), o.resolve(req("S13", "checkin", TargetMode.ALL, List.of(), 5L)).expectedAffected(),
+                "advisory lock iş endpoint'lerini etkilemez");
     }
 
     @Test
@@ -361,7 +446,7 @@ class V2UnitTest {
         AppSample c = new AppSample(true, 10.0, 50.0, 100.0, 2, 6, 0, 8, 5.0, 0.0, p95Checkin, p95Checkin * 2, 3, 0, null, null);
         AppSample b = new AppSample(true, 10.0, 50.0, 100.0, 2, 6, 0, 8, 5.0, 0.0, p95Baggage, p95Baggage * 2, 3, 0, null, null);
         DbSample d = new DbSample(true, 20.0, 50.0, 1.0, 6, 20, 100, 3, 0, (int) lockWaiters, 0.1, 50.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 1.0, 60.0);
+                0.0, 0.0, 1.0, 60.0, 0.0, 0.0, 0, 0.0);
         return new Sample("t", 0, st, Map.of("checkin", c, "baggage", b), d, null, List.of(), Map.of());
     }
 

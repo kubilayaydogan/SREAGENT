@@ -47,12 +47,12 @@ export function intensityLabel(i: string | null | undefined): string {
 }
 
 export const TARGET_MODES: { v: TargetMode; label: string; help: string }[] = [
-  { v: 'AUTO', label: 'Otomatik', help: 'Senaryonun doğal hedefleri kullanılır. Emin değilseniz bunu seçin.' },
-  { v: 'SINGLE', label: 'Tek uygulama', help: 'Yalnız seçtiğiniz bir uygulama hedef alınır.' },
-  { v: 'MULTI', label: 'Seçtiklerim', help: 'İşaretlediğiniz uygulamalar hedef alınır.' },
-  { v: 'ALL', label: 'Tüm uygulamalar', help: 'Dört uygulamanın hepsi hedef alınır.' },
-  { v: 'SHARED_DB', label: 'Paylaşılan PostgreSQL', help: 'Yük veritabanına verilir; dört uygulama da etkilenebilir.' },
-  { v: 'RANDOM', label: 'Rastgele', help: 'Hedefler seed değerine göre rastgele seçilir.' },
+  { v: 'AUTO', label: 'Otomatik', help: 'Senaryonun önerdiği uygulamalar yüke katılır. Emin değilseniz bunu seçin.' },
+  { v: 'SINGLE', label: 'Tek uygulama', help: 'Yükü, başlatan uygulamayla birlikte yalnız seçtiğiniz uygulama üretir.' },
+  { v: 'MULTI', label: 'Seçtiklerim', help: 'İşaretlediğiniz her uygulama aynı veritabanı yükünü kendi bağlantılarıyla başlatır.' },
+  { v: 'ALL', label: 'Tüm uygulamalar', help: 'Dört uygulamanın hepsi veritabanı yükünü birlikte başlatır.' },
+  { v: 'SHARED_DB', label: 'Paylaşılan PostgreSQL', help: 'Dört uygulama da yükü başlatır; etki paylaşılan veritabanı üzerinden hepsine yansıyabilir.' },
+  { v: 'RANDOM', label: 'Rastgele', help: 'Yüke katılan uygulamalar seed değerine göre rastgele seçilir.' },
 ]
 
 export const VERDICT_LABEL: Record<string, string> = {
@@ -86,7 +86,11 @@ export const CATEGORY_LABEL: Record<string, string> = {
   connection: 'Connection Pool ve bağlantı',
   lock: 'Lock ve transaction',
   'db-cpu': 'Veritabanı CPU',
-  'db-io': 'Veritabanı I/O',
+  'db-io': 'Veritabanı I/O ve WAL',
+  'db-memory': 'Veritabanı belleği',
+  'db-maintenance': 'Vacuum ve dead tuple',
+  combined: 'Birden fazla yük tipi',
+  // eski deney kayıtlarındaki kategoriler (artık senaryo üretmez)
   'app-resource': 'Uygulama kaynakları (CPU, bellek)',
   network: 'Network',
   amplification: 'Retry ve yük çoğalması',
@@ -135,6 +139,31 @@ export const PARAM_LABEL: Record<string, string> = {
   errorPct: 'Hata olasılığı (%)',
   retries: 'Retry sayısı',
   timeoutMs: 'Timeout (ms)',
+  apps: 'Yükü başlatan uygulamalar',
+  loadTypes: 'Birleştirilen yük tipleri',
+  records: 'Paylaşılan satır sayısı',
+  keys: 'Advisory lock anahtarı sayısı',
+  pairs: 'Satır çifti sayısı',
+  targetLockWaiters: 'Hedef lock bekleyen session',
+  targetDbCpuPct: 'Hedef DB CPU (%)',
+  targetInsertsPerSec: 'Hedef insert hızı (satır/sn)',
+  targetUpdatesPerSec: 'Hedef update hızı (satır/sn)',
+  targetTempMbPerSec: 'Hedef temp yazımı (MB/sn)',
+  targetTps: 'Hedef transaction hızı (TPS)',
+  targetRollbacksPerSec: 'Hedef rollback hızı (/sn)',
+  targetParallelWorkers: 'Hedef parallel worker sayısı',
+  targetIdleSessions: 'Hedef idle in transaction session',
+  rowsPerCall: 'Çağrı başına satır',
+  commitsPerCall: 'Çağrı başına commit',
+  queriesPerCall: 'Çağrı başına sorgu',
+  sessionsPerCall: 'Çağrı başına session',
+  connectionsPerCall: 'Çağrı başına bağlantı',
+  achievablePct: 'Ulaşılabilir doluluk (%)',
+  snapshotHoldMs: 'Snapshot tutma süresi (ms)',
+  sortMb: 'Sort başına bellek (MB)',
+  workersPerApp: 'Uygulama başına worker',
+  estimatedPeakMb: 'Tahmini en yüksek bellek (MB)',
+  subScenarios: 'Seçilen senaryolar',
 }
 export function paramLabel(k: string): string {
   return PARAM_LABEL[k] ?? k

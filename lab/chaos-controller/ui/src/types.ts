@@ -48,6 +48,10 @@ export interface DbSample {
   insertsPerSec: number | null
   queryMeanMs: number | null
   dbSizeMb: number | null
+  updatesPerSec: number | null
+  deadTuples: number | null
+  parallelWorkers: number | null
+  rollbacksPerSec: number | null
 }
 
 export interface HostSample { cpuPct: number | null; memUsedPct: number | null; diskFreeGb: number | null }

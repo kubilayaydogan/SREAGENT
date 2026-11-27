@@ -57,10 +57,18 @@ class ChaosLabIT {
     }
 
     HttpResponse<String> post(String path) throws Exception {
-        return HTTP.send(HttpRequest.newBuilder(URI.create("http://localhost:" + PORT + path))
+        HttpRequest req = HttpRequest.newBuilder(URI.create("http://localhost:" + PORT + path))
                 .POST(HttpRequest.BodyPublishers.noBody()).header("X-Lab-Token", LAB_TOKEN)
-                .header("X-Experiment-Id", "it-exp").header("X-Chaos-Scenario", "S02").build(),
-                HttpResponse.BodyHandlers.ofString());
+                .header("X-Experiment-Id", "it-exp").header("X-Chaos-Scenario", "S02").build();
+        try {
+            return HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (java.io.IOException e) {
+            // sunucunun kapattığı bayat keep-alive bağlantısı: istek sunucuya ulaşmadı, yeni bağlantıyla bir kez dene
+            if (e.getMessage() == null || !e.getMessage().contains("received no bytes")) {
+                throw e;
+            }
+            return HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        }
     }
 
     CompletableFuture<HttpResponse<String>> postAsync(String path) {
@@ -191,6 +199,125 @@ class ChaosLabIT {
         assertEquals(200, r.get().statusCode(), r.get().body());
         assertEquals(6, json(r.get()).get("opened").asLong());
         assertTrue(storm >= 4, "pg_stat_activity'de storm bağlantıları: " + storm);
+    }
+
+    @Test
+    void tableLockQueuesReadersBehindExclusiveHolder() throws Exception {
+        var hold = postAsync("/lab/chaos/table-lock?mode=hold&holdMs=1500");
+        Thread.sleep(300);
+        var read = post("/lab/chaos/table-lock?mode=read");
+        assertEquals(200, hold.get().statusCode(), hold.get().body());
+        assertEquals(200, read.statusCode(), read.body());
+        assertTrue(json(read).get("lockWaitMs").asLong() >= 800, read.body());
+        assertEquals(1000, json(read).get("rows").asLong());
+    }
+
+    @Test
+    void serializationConflictIsRaisedByPostgresAndRetried() throws Exception {
+        long before = scalar("SELECT xact_rollback FROM pg_stat_database WHERE datname = current_database()");
+        var a = postAsync("/lab/chaos/serialization?records=1&holdMs=700&retries=3");
+        Thread.sleep(200);
+        var b = post("/lab/chaos/serialization?records=1&holdMs=700&retries=3");
+        assertEquals(200, a.get().statusCode(), a.get().body());
+        assertEquals(200, b.statusCode(), b.body());
+        long conflicts = json(a.get()).get("conflicts").asLong() + json(b).get("conflicts").asLong();
+        assertTrue(conflicts >= 1, "40001 gözlenmeli: " + a.get().body() + " " + b.body());
+        assertTrue(waitForIncrease("SELECT xact_rollback FROM pg_stat_database WHERE datname = current_database()",
+                before) > before);
+    }
+
+    @Test
+    void commitStormCommitsEveryRowSeparately() throws Exception {
+        long rows = scalar("SELECT count(*) FROM chaos.write_sink");
+        long before = scalar("SELECT xact_commit FROM pg_stat_database WHERE datname = current_database()");
+        var r = post("/lab/chaos/commit-storm?commits=300&payloadBytes=64");
+        assertEquals(200, r.statusCode(), r.body());
+        assertEquals(300, json(r).get("commits").asLong());
+        assertEquals(rows + 300, scalar("SELECT count(*) FROM chaos.write_sink"));
+        long after = before;
+        for (int i = 0; i < 50 && after < before + 300; i++) {
+            after = waitForIncrease("SELECT xact_commit FROM pg_stat_database WHERE datname = current_database()", after);
+        }
+        assertTrue(after >= before + 300, "300 ayrı commit bekleniyordu, artış: " + (after - before));
+    }
+
+    @Test
+    void updateChurnProducesDeadTuples() throws Exception {
+        long sum = scalar("SELECT sum(v) FROM chaos.churn");
+        var r = post("/lab/chaos/update-churn?rows=500&batches=3");
+        assertEquals(200, r.statusCode(), r.body());
+        assertEquals(1500, json(r).get("updated").asLong());
+        assertEquals(sum + 1500, scalar("SELECT sum(v) FROM chaos.churn"));
+        assertEquals(50_000, scalar("SELECT count(*) FROM chaos.churn"));
+        assertTrue(waitForIncrease("SELECT n_tup_upd - n_tup_hot_upd FROM pg_stat_user_tables WHERE relname = 'churn'", 0)
+                >= 1, "güncellemeler HOT olmamalı (indeksli sütun değişiyor)");
+    }
+
+    @Test
+    void advisoryLockBlocksSecondSessionOnSameKey() throws Exception {
+        var a = postAsync("/lab/chaos/advisory-lock?keys=1&holdMs=1500");
+        Thread.sleep(300);
+        var b = post("/lab/chaos/advisory-lock?keys=1&holdMs=0");
+        assertEquals(200, a.get().statusCode(), a.get().body());
+        assertEquals(200, b.statusCode(), b.body());
+        assertTrue(json(b).get("lockWaitMs").asLong() >= 800, b.body());
+    }
+
+    @Test
+    void idleInTransactionSessionsHoldSnapshotOutsidePool() throws Exception {
+        var r = postAsync("/lab/chaos/idle-in-tx?sessions=4&holdMs=3000");
+        Thread.sleep(1500);
+        long idle;
+        // state / backend_xmin başka rolün oturumları için yalnız pg_monitor üyesine görünür (controller da lab_monitor kullanır)
+        try (Connection c = LabPostgres.as("lab_monitor", "it-monitor"); var st = c.createStatement();
+             ResultSet rs = st.executeQuery("""
+                     SELECT count(*) FROM pg_stat_activity
+                      WHERE application_name = 'flightops-service-lab-idle' AND state = 'idle in transaction'
+                        AND backend_xmin IS NOT NULL""")) {
+            rs.next();
+            idle = rs.getLong(1);
+        }
+        assertEquals(200, r.get().statusCode(), r.get().body());
+        assertEquals(4, json(r.get()).get("sessions").asLong());
+        assertTrue(idle >= 3, "idle in transaction + snapshot tutan oturum: " + idle);
+        assertEquals(0, scalar("SELECT count(*) FROM pg_stat_activity WHERE application_name = 'flightops-service-lab-idle'"));
+    }
+
+    @Test
+    void idleInTransactionSessionsEndOnCleanup() throws Exception {
+        var r = postAsync("/lab/chaos/idle-in-tx?sessions=2&holdMs=20000");
+        Thread.sleep(1200);
+        long t0 = System.nanoTime();
+        assertEquals(200, post("/lab/cleanup").statusCode());
+        assertEquals(200, r.get().statusCode(), r.get().body());
+        assertTrue(json(r.get()).get("interrupted").asBoolean(), r.get().body());
+        assertTrue((System.nanoTime() - t0) / 1_000_000 < 5000, "cleanup oturumları hemen kapatmalı");
+    }
+
+    @Test
+    void parallelQueryLaunchesParallelWorkers() throws Exception {
+        var r = post("/lab/chaos/parallel-query?workers=2&scanPct=100");
+        assertEquals(200, r.statusCode(), r.body());
+        assertTrue(json(r).get("launchedWorkers").asLong() >= 1, r.body());
+    }
+
+    @Test
+    void pointQueriesRunAsSeparateTransactions() throws Exception {
+        var r = post("/lab/chaos/point-queries?queries=300");
+        assertEquals(200, r.statusCode(), r.body());
+        assertEquals(300, json(r).get("queries").asLong());
+    }
+
+    @Test
+    void memorySortStaysInMemoryWithoutTempFiles() throws Exception {
+        Thread.sleep(1500);         // önceki testlerin istatistikleri flush olsun
+        long before = scalar("SELECT temp_bytes FROM pg_stat_database WHERE datname = current_database()");
+        var r = post("/lab/chaos/memory-sort?workMemMb=64&kRows=60");
+        assertEquals(200, r.statusCode(), r.body());
+        assertEquals(60_000, json(r).get("sortedRows").asLong());
+        Thread.sleep(1500);
+        assertEquals(before, scalar("SELECT temp_bytes FROM pg_stat_database WHERE datname = current_database()"),
+                "sort bellekte kalmalı, temp dosyası yazılmamalı");
     }
 
     @Test

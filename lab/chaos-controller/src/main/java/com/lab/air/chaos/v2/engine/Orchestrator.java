@@ -309,10 +309,10 @@ public class Orchestrator {
             return participants;
         }
         return switch (def.id()) {
-            case "S01", "S11", "S12", "S13", "S14", "S15", "S19" -> List.of(initiator);
-            case "S04", "S05", "S06", "S07" -> List.of(initiator);     // paylaşılan DB etkisi yoğunluğa bağlı: bilgi
-            // contention yalnız chaos.* satırlarında: etki DB (lock) ve workload seviyesinde, iş endpoint'lerinde değil
-            case "S02", "S08", "S09" -> List.of();
+            // bekleme yalnız chaos.* nesnelerinde ya da boşta duran oturumlarda: etki DB (lock / session) ve workload
+            // seviyesindedir, iş endpoint'lerinde beklenmez
+            case "S01", "S02", "S08", "S09", "S13", "S14" -> List.of();
+            // paylaşılan DB kaynağı (CPU, I/O, WAL, bellek) tüketilir: yükü başlatan uygulamalar; diğerleri yoğunluğa bağlı
             default -> participants;
         };
     }

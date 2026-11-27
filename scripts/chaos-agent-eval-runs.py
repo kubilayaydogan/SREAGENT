@@ -33,25 +33,28 @@ e2e = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(e2e)
 
 # case → (senaryo, intensity, initiator, targetMode, targets). C0 = chaos yok (yalnız sürekli trafik) kontrol penceresi.
+# Tüm senaryolar yalnız PostgreSQL yükü üretir. S03, S04, S10 ve S17 2026-11-24 koşusuyla aynı yük tipidir;
+# S01, S11 ve S13 yeni yük tipleridir (table lock, commit storm, advisory lock) → eval/chaos_v2_labels.yaml'daki
+# eski etiketleri bu case'ler için geçersizdir, koşudan önce etiketler kör olarak yeniden yazılmalıdır.
 CASES = {
     "C0": None,
     "S03": ("S03", "MEDIUM", "flightops", "AUTO", []),
     "S04": ("S04", "MEDIUM", "baggage", "SINGLE", []),
-    "S01": ("S01", "HIGH", "checkin", "SINGLE", []),
+    "S01": ("S01", "MEDIUM", "checkin", "MULTI", ["reservation"]),
     "S10": ("S10", "MEDIUM", "flightops", "MULTI", ["baggage"]),
-    "S11": ("S11", "HIGH", "baggage", "SINGLE", []),
-    "S13": ("S13", "HIGH", "checkin", "SINGLE", []),
+    "S11": ("S11", "HIGH", "baggage", "MULTI", ["reservation"]),
+    "S13": ("S13", "HIGH", "checkin", "MULTI", ["flightops"]),
     "S17": ("S17", "HIGH", "baggage", "AUTO", []),
 }
-# Doğrulama seti (--set validation): kurallar ilk setten türetildi; burada farklı initiator/intensity ile denenir.
+# Doğrulama seti (--set validation): aynı yük tipleri farklı initiator / intensity ile, artı ilk sette olmayan tipler.
 VALIDATION = {
     "V0": None,
     "V10": ("S10", "HIGH", "reservation", "MULTI", ["checkin"]),
-    "V11": ("S11", "HIGH", "reservation", "SINGLE", []),
-    "V13": ("S13", "HIGH", "flightops", "SINGLE", []),
-    "V14": ("S14", "HIGH", "checkin", "SINGLE", []),
+    "V11": ("S11", "HIGH", "reservation", "MULTI", ["flightops"]),
+    "V13": ("S13", "HIGH", "flightops", "MULTI", ["baggage"]),
+    "V14": ("S14", "HIGH", "checkin", "MULTI", ["baggage"]),
     "V03": ("S03", "HIGH", "flightops", "AUTO", []),
-    "V18": ("S18", "MEDIUM", "reservation", "ALL", []),
+    "V19": ("S19", "MEDIUM", "reservation", "AUTO", []),
 }
 DURATIONS = {"baselineSec": 210, "rampSec": 30, "durationSec": 270, "recoverySec": 90, "maxDurationSec": 0}
 CONTROL_SEC = 8 * 60

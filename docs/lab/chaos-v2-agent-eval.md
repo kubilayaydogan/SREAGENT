@@ -1,5 +1,7 @@
 # SRE Agent — Chaos v2 kör değerlendirmesi (2026-11-24)
 
+> **Not:** Bu belge 2026-11-24 tarihli koşunun kaydıdır. O tarihteki senaryo setinde S01 (connection pool), S11 (uygulama CPU), S13/S14 (network) ve S18 (iş trafiği) vardı. Senaryolar sonradan yalnız PostgreSQL yükü üretecek biçimde yeniden düzenlendi (güncel liste: [chaos-v2-architecture.md](chaos-v2-architecture.md)); bu kimlikler artık farklı yük tiplerini gösterir. Aşağıdaki sonuçlar eski set için geçerlidir; yeni set için değerlendirme henüz koşulmadı.
+
 Amaç: SRE Agent, Chaos Controller v2'nin ürettiği gerçek arızaları **yalnız Dynatrace telemetry'si** ile, deneyin adı/senaryosu
 verilmeden teşhis edebiliyor mu?
 

@@ -503,7 +503,7 @@ bağlıdır).
 | Ekran | Amaç |
 |---|---|
 | Overview | Servislerin ve veritabanının anlık durumu |
-| Library | 20 hazır senaryo (S01–S20): connection, lock, DB CPU, DB I/O, uygulama kaynağı, network, cascade |
+| Library | 20 hazır senaryo (S01–S20); hepsi paylaşılan PostgreSQL'de yük oluşturur: lock, connection, DB CPU, DB I/O ve WAL, DB belleği, vacuum, birleşik yükler |
 | Builder | Senaryo, başlatan uygulama, hedefler ve yoğunluk seçerek deney oluşturma |
 | Live | Çalışan deneyin canlı metrikleri ve durdurma |
 | History | Geçmiş deneyler ve raporları |

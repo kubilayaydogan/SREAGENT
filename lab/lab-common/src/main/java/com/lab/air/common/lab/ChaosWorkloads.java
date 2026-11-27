@@ -70,6 +70,13 @@ public class ChaosWorkloads {
     private final AtomicLong ballastBytes = new AtomicLong();
     private final AtomicLong writes = new AtomicLong();
     private final AtomicLong deadlocksSeen = new AtomicLong();
+    private final AtomicLong serializationFailures = new AtomicLong();
+    /** chaos.churn satır sayısı (V7 migration ile aynı). */
+    private static final int CHURN_ROWS = 50_000;
+    /** Advisory lock anahtar sınıfı: iş kodunun kullanabileceği anahtarlarla çakışmaz. */
+    private static final int ADVISORY_CLASS = 424_242;
+    private static final java.util.regex.Pattern WORKERS_LAUNCHED =
+            java.util.regex.Pattern.compile("\"Workers Launched\":\\s*(\\d+)");
 
     public ChaosWorkloads(DataSource ds, ChaosLabProperties props, Environment env) {
         this.ds = ds;
@@ -79,7 +86,7 @@ public class ChaosWorkloads {
         this.permits = new Semaphore(props.maxConcurrentOps());
     }
 
-    // ------------------------------------------------------------------ row contention (S02, S08)
+    // ------------------------------------------------------------------ row contention (S02)
 
     /** Paylaşılan sentetik satırlardan birini günceller ve lock'u holdMs tutar. records küçüldükçe contention artar. */
     public Map<String, Object> contend(int records, long holdMs, int errorPct) throws SQLException {
@@ -163,7 +170,7 @@ public class ChaosWorkloads {
         });
     }
 
-    // ------------------------------------------------------------------ CPU-intensive SQL (S04)
+    // ------------------------------------------------------------------ CPU-intensive SQL (S04, S17)
 
     /** Gerçek CPU: md5 + agregasyon. work = bin satır (1..2000) → bir çağrı ~work×1000 satır işler. */
     public Map<String, Object> cpuQuery(int work, int errorPct) throws SQLException {
@@ -176,7 +183,7 @@ public class ChaosWorkloads {
                 ) x""", rows, errorPct));
     }
 
-    // ------------------------------------------------------------------ heavy read (S06)
+    // ------------------------------------------------------------------ heavy read (S06, S17)
 
     /** İndeksiz sıralı tarama + agregasyon; scanPct = tablonun taranan yüzdesi. */
     public Map<String, Object> heavyRead(int scanPct, int errorPct) throws SQLException {
@@ -378,7 +385,353 @@ public class ChaosWorkloads {
                 "avgConnectMs", ok.get() == 0 ? 0 : connectMs.get() / ok.get(), "heldMs", hold);
     }
 
-    // ------------------------------------------------------------------ application CPU (S11)
+    // ------------------------------------------------------------------ table-level lock queue (S01)
+
+    /**
+     * mode=hold: chaos.lock_target tablosunu ACCESS EXCLUSIVE kilitleyip holdMs tutar (DDL / VACUUM FULL benzeri).
+     * mode=read: aynı tabloyu okur; kilit tutuluyorsa relation lock kuyruğunda bekler (lock_timeout sunucu sınırı).
+     */
+    public Map<String, Object> tableLock(String mode, long holdMs) throws SQLException {
+        boolean hold = "hold".equals(mode);
+        long ms = Math.min(Math.max(0, holdMs), Math.min(props.maxLongTxMs(), 20_000));
+        long gen = generation.get();
+        return withPermit(() -> {
+            try (Connection c = ds.getConnection()) {
+                c.setAutoCommit(false);
+                try {
+                    long t0 = System.nanoTime();
+                    long rows = 0;
+                    if (hold) {
+                        try (Statement st = c.createStatement()) {
+                            st.execute(SqlTag.labTag("chaos-tablelock",
+                                    "LOCK TABLE chaos.lock_target IN ACCESS EXCLUSIVE MODE"));
+                        }
+                    } else {
+                        try (Statement st = c.createStatement(); ResultSet rs = st.executeQuery(
+                                SqlTag.labTag("chaos-tablelock", "SELECT count(*) FROM chaos.lock_target"))) {
+                            rs.next();
+                            rows = rs.getLong(1);
+                        }
+                    }
+                    long lockWaitMs = (System.nanoTime() - t0) / 1_000_000;
+                    if (hold) {
+                        long end = System.nanoTime() + ms * 1_000_000;
+                        while (System.nanoTime() < end && generation.get() == gen) {
+                            sleepInTx(c, "chaos-tablelock", Math.min(1_000, Math.max(1, (end - System.nanoTime()) / 1_000_000)));
+                        }
+                    }
+                    c.commit();
+                    return result("mode", hold ? "hold" : "read", "lockWaitMs", lockWaitMs, "heldMs", hold ? ms : 0,
+                            "rows", rows);
+                } catch (SQLException e) {
+                    c.rollback();
+                    throw e;
+                }
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------ serialization conflicts (S08)
+
+    /**
+     * REPEATABLE READ transaction: satırı okur, holdMs bekler, günceller. Aynı satırı bu arada başka bir transaction
+     * güncellediyse PostgreSQL 40001 (could not serialize access) verir; uygulama sınırlı retry yapar.
+     */
+    public Map<String, Object> serialization(int records, long holdMs, int retries) throws SQLException {
+        int n = clamp(records, 1, 400);
+        long hold = Math.min(Math.max(0, holdMs), 5_000);
+        int maxAttempts = clamp(retries, 0, 5) + 1;
+        int id = 500 + ThreadLocalRandom.current().nextInt(n);      // 0..499 row contention (S02) ile çakışmaz
+        return withPermit(() -> {
+            int conflicts = 0;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                try (Connection c = ds.getConnection()) {
+                    int before = c.getTransactionIsolation();
+                    c.setAutoCommit(false);
+                    c.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+                    try {
+                        try (PreparedStatement ps = c.prepareStatement(SqlTag.labTag("chaos-serial",
+                                "SELECT counter FROM chaos.shared_records WHERE id = ?"))) {
+                            ps.setInt(1, id);
+                            ps.executeQuery().close();
+                        }
+                        sleepInTx(c, "chaos-serial", hold);
+                        try (PreparedStatement ps = c.prepareStatement(SqlTag.labTag("chaos-serial",
+                                "UPDATE chaos.shared_records SET counter = counter + 1, touched_by = ?, touched_at = now() WHERE id = ?"))) {
+                            ps.setString(1, app);
+                            ps.setInt(2, id);
+                            ps.executeUpdate();
+                        }
+                        c.commit();
+                        return result("record", id, "attempts", attempt, "conflicts", conflicts);
+                    } catch (SQLException e) {
+                        c.rollback();
+                        if (!"40001".equals(e.getSQLState())) {
+                            throw e;
+                        }
+                        conflicts++;
+                        serializationFailures.incrementAndGet();
+                        if (attempt == maxAttempts) {
+                            throw e;
+                        }
+                        sleepQuietly(20L * attempt + ThreadLocalRandom.current().nextInt(30));
+                    } finally {
+                        c.setTransactionIsolation(before);       // bağlantı havuza varsayılan seviyeyle döner
+                        c.setAutoCommit(true);
+                    }
+                }
+            }
+            throw new IllegalStateException("unreachable");
+        });
+    }
+
+    // ------------------------------------------------------------------ commit storm / WAL flush (S11)
+
+    /**
+     * Her biri kendi transaction'ında commit edilen tek satırlık INSERT'ler: satır hacmi küçük, commit (WAL flush)
+     * sayısı yüksek. Toplu INSERT'ten (write-burst) farkı budur.
+     */
+    public Map<String, Object> commitStorm(int commits, int payloadBytes) throws SQLException {
+        int n = clamp(commits, 1, 2_000);
+        int reps = clamp(payloadBytes / 32, 1, 16);
+        long gen = generation.get();
+        return withPermit(() -> {
+            try (Connection c = ds.getConnection()) {
+                c.setAutoCommit(true);
+                long t0 = System.nanoTime();
+                int done = 0;
+                try (PreparedStatement ps = c.prepareStatement(SqlTag.labTag("chaos-commit",
+                        "INSERT INTO chaos.write_sink (app, experiment_id, payload) VALUES (?, ?, repeat(md5(random()::text), ?))"))) {
+                    ps.setString(1, app);
+                    ps.setString(2, MDC.get(RequestContextFilter.MDC_EXPERIMENT_ID));
+                    ps.setInt(3, reps);
+                    for (; done < n && generation.get() == gen; done++) {
+                        ps.executeUpdate();
+                    }
+                }
+                long total = writes.addAndGet(done);
+                if (total / props.writeSinkKeep() != (total - done) / props.writeSinkKeep()) {
+                    trimWriteSink(c, props.writeSinkKeep());
+                }
+                return result("commits", done, "ms", (System.nanoTime() - t0) / 1_000_000);
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------ update churn / dead tuples (S12)
+
+    /**
+     * chaos.churn satırlarını toplu günceller (indeksli sütun değişir → HOT olmayan güncelleme): dead tuple, WAL ve
+     * autovacuum işi üretir. Satırlar SKIP LOCKED ile seçilir; workload'lar birbirini row lock'ta bekletmez.
+     */
+    public Map<String, Object> updateChurn(int rows, int batches) throws SQLException {
+        int n = clamp(rows, 1, 5_000);
+        int b = clamp(batches, 1, 50);
+        long gen = generation.get();
+        return withPermit(() -> {
+            try (Connection c = ds.getConnection()) {
+                c.setAutoCommit(true);
+                long t0 = System.nanoTime();
+                long updated = 0;
+                try (PreparedStatement ps = c.prepareStatement(SqlTag.labTag("chaos-churn", """
+                        UPDATE chaos.churn SET v = v + 1, pad = md5(random()::text), updated_at = now()
+                         WHERE id IN (SELECT id FROM chaos.churn WHERE id >= ? ORDER BY id LIMIT ?
+                                         FOR UPDATE SKIP LOCKED)"""))) {
+                    for (int i = 0; i < b && generation.get() == gen; i++) {
+                        ps.setInt(1, ThreadLocalRandom.current().nextInt(Math.max(1, CHURN_ROWS - n)));
+                        ps.setInt(2, n);
+                        updated += ps.executeUpdate();
+                    }
+                }
+                return result("updated", updated, "ms", (System.nanoTime() - t0) / 1_000_000);
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------ advisory lock contention (S13)
+
+    /** Az sayıdaki advisory lock anahtarından birini transaction boyunca tutar; diğer oturumlar aynı anahtarı bekler. */
+    public Map<String, Object> advisoryLock(int keys, long holdMs) throws SQLException {
+        int k = ThreadLocalRandom.current().nextInt(clamp(keys, 1, 1_000));
+        long hold = Math.min(Math.max(0, holdMs), 10_000);
+        return withPermit(() -> {
+            try (Connection c = ds.getConnection()) {
+                c.setAutoCommit(false);
+                try {
+                    long t0 = System.nanoTime();
+                    try (PreparedStatement ps = c.prepareStatement(SqlTag.labTag("chaos-advisory",
+                            "SELECT pg_advisory_xact_lock(?, ?)"))) {
+                        ps.setInt(1, ADVISORY_CLASS);
+                        ps.setInt(2, k);
+                        ps.execute();
+                    }
+                    long lockWaitMs = (System.nanoTime() - t0) / 1_000_000;
+                    sleepInTx(c, "chaos-advisory", hold);
+                    c.commit();
+                    return result("key", k, "lockWaitMs", lockWaitMs, "heldMs", hold);
+                } catch (SQLException e) {
+                    c.rollback();
+                    throw e;
+                }
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------ idle in transaction (S14)
+
+    /**
+     * Havuz DIŞI fiziksel bağlantılar (application_name = &lt;servis&gt;-lab-idle) REPEATABLE READ transaction açıp
+     * bir kez okur ve holdMs boyunca hiçbir şey yapmadan bekler: oturum "idle in transaction" kalır, bağlantı slotu
+     * dolu durur ve snapshot (backend_xmin) tutulduğu için vacuum dead tuple'ları temizleyemez. Lock tutmaz.
+     * Sunucu sınırı: rolün idle_in_transaction_session_timeout değeri (30 s).
+     */
+    public Map<String, Object> idleInTransaction(int sessions, long holdMs) {
+        int n = clamp(sessions, 1, props.maxStormConnections());
+        long hold = Math.min(Math.max(0, holdMs), 25_000);
+        String url = env.getRequiredProperty("spring.datasource.url")
+                .replaceAll("ApplicationName=[^&]*", "ApplicationName=" + app + "-lab-idle");
+        String user = env.getRequiredProperty("spring.datasource.username");
+        String pw = env.getRequiredProperty("spring.datasource.password");
+        long gen = generation.get();
+        AtomicInteger ok = new AtomicInteger();
+        AtomicInteger failed = new AtomicInteger();
+        List<Thread> ts = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            ts.add(Thread.ofVirtual().start(() -> {
+                try (Connection c = DriverManager.getConnection(url, user, pw)) {
+                    c.setAutoCommit(false);
+                    c.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+                    try (Statement st = c.createStatement()) {
+                        st.executeQuery(SqlTag.labTag("chaos-idle", "SELECT count(*) FROM chaos.shared_records")).close();
+                    }
+                    ok.incrementAndGet();
+                    long end = System.nanoTime() + hold * 1_000_000;
+                    while (System.nanoTime() < end && generation.get() == gen) {
+                        sleepQuietly(200);
+                    }
+                    c.rollback();
+                } catch (SQLException e) {
+                    failed.incrementAndGet();
+                }
+            }));
+        }
+        for (Thread t : ts) {
+            try {
+                t.join(hold + 15_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        if (ok.get() == 0) {
+            throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "IDLE_ALL_FAILED",
+                    "bağlantıların hepsi reddedildi (" + failed.get() + ")");
+        }
+        return result("sessions", ok.get(), "failed", failed.get(), "heldMs", hold,
+                "interrupted", generation.get() != gen);
+    }
+
+    // ------------------------------------------------------------------ parallel query fan-out (S15)
+
+    /**
+     * Tek sorgu için parallel query açılır (yalnız bu transaction): sorgu, istenen sayıda parallel worker süreci
+     * ister. Eşzamanlı çağrılar sunucunun ortak parallel worker havuzunu (max_parallel_workers) tüketir.
+     */
+    public Map<String, Object> parallelQuery(int workers, int scanPct) throws SQLException {
+        int w = clamp(workers, 1, 8);
+        int pct = clamp(scanPct, 1, 100);
+        return withPermit(() -> {
+            try (Connection c = ds.getConnection()) {
+                c.setAutoCommit(false);
+                try (Statement st = c.createStatement()) {
+                    st.execute("SET LOCAL max_parallel_workers_per_gather = " + w);
+                    st.execute("SET LOCAL parallel_setup_cost = 0");
+                    st.execute("SET LOCAL parallel_tuple_cost = 0");
+                    st.execute("SET LOCAL min_parallel_table_scan_size = 0");
+                    long t0 = System.nanoTime();
+                    int launched = 0;
+                    // k üzerinde indeks yok → parallel seq scan. EXPLAIN ANALYZE sorguyu GERÇEKTEN çalıştırır ve kaç
+                    // parallel worker'ın başlatıldığını bildirir (havuz doluysa istenenden az olur).
+                    try (ResultSet rs = st.executeQuery(SqlTag.labTag("chaos-parallel",
+                            "EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, FORMAT JSON) "
+                                    + "SELECT count(*), max(md5(payload)) FROM chaos.synthetic_data WHERE k % 100 < " + pct))) {
+                        if (rs.next()) {
+                            var m = WORKERS_LAUNCHED.matcher(rs.getString(1));
+                            if (m.find()) {
+                                launched = Integer.parseInt(m.group(1));
+                            }
+                        }
+                    }
+                    c.commit();
+                    return result("requestedWorkers", w, "launchedWorkers", launched, "scanPct", pct,
+                            "ms", (System.nanoTime() - t0) / 1_000_000);
+                } catch (SQLException e) {
+                    c.rollback();
+                    throw e;
+                }
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------ point query flood (S16)
+
+    /** Çok sayıda küçük primary key sorgusu (her biri ayrı transaction): sorgu başına iş az, sorgu sayısı yüksek. */
+    public Map<String, Object> pointQueries(int queries) throws SQLException {
+        int n = clamp(queries, 1, 5_000);
+        long gen = generation.get();
+        return withPermit(() -> {
+            try (Connection c = ds.getConnection()) {
+                c.setAutoCommit(true);
+                long t0 = System.nanoTime();
+                int done = 0;
+                try (PreparedStatement ps = c.prepareStatement(SqlTag.labTag("chaos-point",
+                        "SELECT val FROM chaos.synthetic_data WHERE id = ?"))) {
+                    for (; done < n && generation.get() == gen; done++) {
+                        ps.setLong(1, ThreadLocalRandom.current().nextLong(400_000));
+                        ps.executeQuery().close();
+                    }
+                }
+                return result("queries", done, "ms", (System.nanoTime() - t0) / 1_000_000);
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------ in-memory sort / work_mem (S18)
+
+    /**
+     * work_mem transaction içinde yükseltilip büyük bir sort bellekte yapılır: temp dosyası yazılmaz, backend
+     * belleği büyür. (temp-spill'in tersi: orada work_mem düşürülür ve sort diske taşar.) work_mem veri boyutundan
+     * küçük verilirse sort diske taşar; çağıran, kRows × 0,3 kB'tan büyük bir değer vermelidir.
+     */
+    public Map<String, Object> memorySort(int workMemMb, int kRows) throws SQLException {
+        int mb = clamp(workMemMb, 4, 256);
+        int rows = clamp(kRows, 10, 400) * 1_000;       // satır başına ≈ 0,3 kB → en fazla ≈ 120 MB
+        return withPermit(() -> {
+            try (Connection c = ds.getConnection()) {
+                c.setAutoCommit(false);
+                try (Statement st = c.createStatement()) {
+                    st.execute("SET LOCAL work_mem = '" + mb + "MB'");
+                    st.execute("SET LOCAL max_parallel_workers_per_gather = 0");
+                    long t0 = System.nanoTime();
+                    // window function tam sort ister (LIMIT'li top-N kısayolu yok); veri tabloya dokunmadan üretilir
+                    try (PreparedStatement ps = c.prepareStatement(SqlTag.labTag("chaos-memsort", """
+                            SELECT max(rn) FROM (
+                              SELECT row_number() OVER (ORDER BY o COLLATE "C") AS rn
+                                FROM (SELECT repeat(md5(g::text), 8) AS o FROM generate_series(1, ?) g) s
+                            ) x"""))) {
+                        ps.setInt(1, rows);
+                        ps.executeQuery().close();
+                    }
+                    c.commit();
+                    return result("sortedRows", rows, "workMemMb", mb, "ms", (System.nanoTime() - t0) / 1_000_000);
+                } catch (SQLException e) {
+                    c.rollback();
+                    throw e;
+                }
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------ application CPU (senaryolarda kullanılmaz)
 
     /** JVM içinde sınırlı CPU burn (container cpus limitiyle gerçek CPU saturation). */
     public Map<String, Object> cpuBurn(long ms, int threads) {
@@ -423,7 +776,7 @@ public class ChaosWorkloads {
         return result("threads", got, "ms", dur);
     }
 
-    // ------------------------------------------------------------------ memory pressure (S12)
+    // ------------------------------------------------------------------ JVM memory (senaryolarda kullanılmaz)
 
     /** Gerçek heap ballast: mb kadar dokunulmuş byte[] holdMs tutulur; toplam max heap oranıyla sınırlı. */
     public Map<String, Object> memory(int mb, long holdMs) {
@@ -463,7 +816,7 @@ public class ChaosWorkloads {
         }
     }
 
-    // ------------------------------------------------------------------ app → app dependency (S15, S16, S19)
+    // ------------------------------------------------------------------ app → app dependency (senaryolarda kullanılmaz)
 
     private static final Map<String, String> PEER_PATHS = Map.of(
             "reservation", "/api/flights/hot",
@@ -542,6 +895,7 @@ public class ChaosWorkloads {
                 "maxOps", props.maxConcurrentOps(), "burningThreads", burning.get(), "longTransactions", longTx.get(),
                 "ballastMb", ballastBytes.get() / MB, "heapUsedMb", (rt.totalMemory() - rt.freeMemory()) / MB,
                 "heapMaxMb", rt.maxMemory() / MB, "deadlocksSeen", deadlocksSeen.get(),
+                "serializationFailures", serializationFailures.get(),
                 "peers", props.peers().keySet());
     }
 

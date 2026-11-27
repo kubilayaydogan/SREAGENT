@@ -4,7 +4,7 @@ success criteria / expected vs observed / recovery sonuçlarını ve markdown ra
 
 APP_VM'de çalıştırın (kimlik bilgileri app-vm/.env'den okunur, ekrana basılmaz):
   python3 scripts/chaos-e2e.py --out /opt/airlab/deploy/evidence/chaos-v2 [--only S01,S02] [--quick]
-  python3 scripts/chaos-e2e.py --acceptance        # cascading acceptance testi (S17, HIGH)
+  python3 scripts/chaos-e2e.py --acceptance        # birleşik DB yükü acceptance testi (S17, HIGH)
 
 Çıkış kodu: tüm deneyler terminal duruma ulaştı, cleanup OK ve zorunlu ölçütler PASS ise 0.
 """
@@ -19,28 +19,29 @@ import time
 import urllib.error
 import urllib.request
 
-# senaryo → (intensity, initiator, targetMode, targets)
+# senaryo → (intensity, initiator, targetMode, targets). Tüm senaryolar paylaşılan PostgreSQL'de yük oluşturur;
+# MULTI / ALL / AUTO satırlarında yükü birden fazla uygulama başlatır.
 PLAN = {
-    "S01": ("HIGH", "checkin", "SINGLE", []),
+    "S01": ("MEDIUM", "checkin", "MULTI", ["reservation"]),
     "S02": ("MEDIUM", "reservation", "MULTI", ["reservation", "checkin"]),
     "S03": ("MEDIUM", "flightops", "AUTO", []),
     "S04": ("MEDIUM", "baggage", "SINGLE", []),
-    "S05": ("MEDIUM", "baggage", "SINGLE", []),
+    "S05": ("MEDIUM", "baggage", "MULTI", ["flightops"]),
     "S06": ("MEDIUM", "reservation", "SINGLE", []),
     "S07": ("MEDIUM", "checkin", "SINGLE", []),
     "S08": ("MEDIUM", "reservation", "MULTI", ["checkin", "flightops"]),
     "S09": ("MEDIUM", "checkin", "MULTI", ["baggage"]),
     "S10": ("MEDIUM", "flightops", "MULTI", ["baggage"]),
-    "S11": ("HIGH", "baggage", "SINGLE", []),
+    "S11": ("MEDIUM", "baggage", "MULTI", ["reservation"]),
     "S12": ("MEDIUM", "reservation", "SINGLE", []),
-    "S12C": ("CRITICAL", "reservation", "SINGLE", []),
-    "S13": ("HIGH", "checkin", "SINGLE", []),
-    "S14": ("HIGH", "flightops", "SINGLE", []),
+    "S13": ("MEDIUM", "checkin", "MULTI", ["flightops"]),
+    "S14": ("MEDIUM", "flightops", "MULTI", ["checkin"]),
     "S15": ("MEDIUM", "reservation", "MULTI", ["baggage"]),
     "S16": ("MEDIUM", "checkin", "MULTI", ["flightops"]),
     "S17": ("HIGH", "baggage", "AUTO", []),
-    "S18": ("MEDIUM", "reservation", "ALL", []),
-    "S19": ("HIGH", "baggage", "SINGLE", []),
+    "S18": ("MEDIUM", "reservation", "MULTI", ["checkin"]),
+    "S18H": ("HIGH", "reservation", "ALL", []),
+    "S19": ("MEDIUM", "baggage", "AUTO", []),
     "S20": ("HIGH", "checkin", "ALL", []),
 }
 
@@ -155,7 +156,7 @@ def main() -> int:
         for sid, (inten, init, mode, tg) in PLAN.items():
             if only and sid not in only:
                 continue
-            # "S12C" gibi ekli anahtarlar aynı senaryonun farklı yoğunluğudur (varsayılan çalıştırmada atlanır)
+            # "S18H" gibi ekli anahtarlar aynı senaryonun farklı yoğunluğudur (varsayılan çalıştırmada atlanır)
             if len(sid) > 3 and sid not in only:
                 continue
             results.append(run_one(api, sid[:3], inten, init, mode, tg, durations, a.out, "e2e " + sid))

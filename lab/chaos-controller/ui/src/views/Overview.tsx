@@ -131,6 +131,8 @@ export function Overview({ go }: { go: (h: string) => void }) {
                 <dt>Session'lar</dt><dd>{db.active ?? '—'} aktif · {db.idleInTx ?? '—'} idle in transaction</dd>
                 <dt>En uzun transaction</dt><dd>{fmt(db.longestXactSec, 1, 'sn')} · deadlock {fmt(db.deadlocksPerMin)} /dk</dd>
                 <dt>Disk I/O</dt><dd>okuma {fmt(db.readMbPerSec, 2)} · yazma {fmt(db.writeMbPerSec, 2)} · temp {fmt(db.tempMbPerSec, 2)} MB/sn</dd>
+                <dt>Yazma</dt><dd>insert {fmt(db.insertsPerSec, 0)} · update {fmt(db.updatesPerSec, 0)} satır/sn · rollback {fmt(db.rollbacksPerSec, 1)} /sn</dd>
+                <dt>Bakım</dt><dd>{fmt(db.deadTuples, 0)} dead tuple · {db.parallelWorkers ?? '—'} parallel worker</dd>
               </dl>
             </>
           ) : <p className="error">{ov.dbError ?? 'Veritabanı ölçüm bağlantısı yok.'}</p>}

@@ -51,7 +51,7 @@ public final class Model {
     public record Budget(Double maxDbCpuPct, Double maxDbConnectionsPct, Double maxAppCpuPct, Double maxAppHeapPct,
                          Double maxDbMemPct) {
         public static Budget defaults() {
-            return new Budget(92.0, 90.0, 100.0, 92.0, 95.0);   // app CPU %100 = kapalı (S11 bilinçli doyurur)
+            return new Budget(92.0, 90.0, 100.0, 92.0, 95.0);   // app CPU %100 = kapalı (yük DB'dedir; uygulama CPU'su sınırlanmaz)
         }
     }
 
@@ -135,7 +135,8 @@ public final class Model {
                            Integer connections, Integer maxConnections, Integer active, Integer idleInTx,
                            Integer lockWaiters, Double longestXactSec, Double tps, Double deadlocksPerMin,
                            Double tempMbPerSec, Double readMbPerSec, Double writeMbPerSec, Double insertsPerSec,
-                           Double queryMeanMs, Double dbSizeMb) {
+                           Double queryMeanMs, Double dbSizeMb, Double updatesPerSec, Double deadTuples,
+                           Integer parallelWorkers, Double rollbacksPerSec) {
         public Double connectionsPct() {
             return connections == null || maxConnections == null || maxConnections <= 0 ? null
                     : 100.0 * connections / maxConnections;

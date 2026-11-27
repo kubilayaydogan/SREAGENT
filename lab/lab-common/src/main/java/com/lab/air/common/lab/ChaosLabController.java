@@ -86,6 +86,69 @@ public class ChaosLabController {
         return w.connectionStorm(count, holdMs);
     }
 
+    @Op("lab_chaos_table_lock")
+    @PostMapping("/table-lock")
+    public Map<String, Object> tableLock(@RequestParam(defaultValue = "read") String mode,
+                                         @RequestParam(defaultValue = "1000") long holdMs) throws SQLException {
+        return w.tableLock(mode, holdMs);
+    }
+
+    @Op("lab_chaos_serialization")
+    @PostMapping("/serialization")
+    public Map<String, Object> serialization(@RequestParam(defaultValue = "10") int records,
+                                             @RequestParam(defaultValue = "100") long holdMs,
+                                             @RequestParam(defaultValue = "1") int retries) throws SQLException {
+        return w.serialization(records, holdMs, retries);
+    }
+
+    @Op("lab_chaos_commit_storm")
+    @PostMapping("/commit-storm")
+    public Map<String, Object> commitStorm(@RequestParam(defaultValue = "200") int commits,
+                                           @RequestParam(defaultValue = "64") int payloadBytes) throws SQLException {
+        return w.commitStorm(commits, payloadBytes);
+    }
+
+    @Op("lab_chaos_update_churn")
+    @PostMapping("/update-churn")
+    public Map<String, Object> updateChurn(@RequestParam(defaultValue = "500") int rows,
+                                           @RequestParam(defaultValue = "5") int batches) throws SQLException {
+        return w.updateChurn(rows, batches);
+    }
+
+    @Op("lab_chaos_advisory_lock")
+    @PostMapping("/advisory-lock")
+    public Map<String, Object> advisoryLock(@RequestParam(defaultValue = "5") int keys,
+                                            @RequestParam(defaultValue = "500") long holdMs) throws SQLException {
+        return w.advisoryLock(keys, holdMs);
+    }
+
+    @Op("lab_chaos_idle_in_tx")
+    @PostMapping("/idle-in-tx")
+    public Map<String, Object> idleInTx(@RequestParam(defaultValue = "5") int sessions,
+                                        @RequestParam(defaultValue = "10000") long holdMs) {
+        return w.idleInTransaction(sessions, holdMs);
+    }
+
+    @Op("lab_chaos_parallel_query")
+    @PostMapping("/parallel-query")
+    public Map<String, Object> parallelQuery(@RequestParam(defaultValue = "2") int workers,
+                                             @RequestParam(defaultValue = "50") int scanPct) throws SQLException {
+        return w.parallelQuery(workers, scanPct);
+    }
+
+    @Op("lab_chaos_point_queries")
+    @PostMapping("/point-queries")
+    public Map<String, Object> pointQueries(@RequestParam(defaultValue = "500") int queries) throws SQLException {
+        return w.pointQueries(queries);
+    }
+
+    @Op("lab_chaos_memory_sort")
+    @PostMapping("/memory-sort")
+    public Map<String, Object> memorySort(@RequestParam(defaultValue = "32") int workMemMb,
+                                          @RequestParam(defaultValue = "200") int kRows) throws SQLException {
+        return w.memorySort(workMemMb, kRows);
+    }
+
     @Op("lab_chaos_cpu_burn")
     @PostMapping("/cpu-burn")
     public Map<String, Object> cpuBurn(@RequestParam(defaultValue = "2000") long ms,

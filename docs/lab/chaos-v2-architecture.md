@@ -95,7 +95,8 @@ expectedImpact[]          insan-okur açıklama
 abortConditions[]         SafetyGuard'a ek koşullar
 cleanup                   açıklama (cleanup her zaman genel /lab/chaos/cleanup + netem clear)
 plan(ctx) → Plan {
-  actions[]   LOOP (path, params, minWorkers..maxWorkers, controlled) | NETEM (target, delay, jitter, loss, TTL) | TRAFFIC
+  actions[]   LOOP (path, params, minWorkers..maxWorkers, controlled)   — senaryolar yalnız LOOP (DB workload) kullanır;
+              NETEM ve TRAFFIC eylem türleri motorda durur (arka plan trafiği TRAFFIC ile üretilir)
   control     {metric, target, gain} | null   (adaptive)
   criteria[]  {metric, scope, agg, expected(atLeast/rise/stays), required}
   parameters  kalibre edilmiş değerler (rapor için)
@@ -106,30 +107,38 @@ plan(ctx) → Plan {
 Yoğunluk seviyeleri şunlardır: LIGHT, MEDIUM, HIGH, CRITICAL ve CUSTOM.
 
 - Değerler sabit kodlanmaz, ortamdan kalibre edilir: pool boyutu, `max_connections`, role CONNECTION LIMIT, DB vCPU sayısı, heap max ve `lab.chaos.maxConcurrentOps`.
-- CUSTOM aşağıdaki alanları kabul eder: workers, rps, dbConnections, txDurationMs, queryFrequency, targetValue, errorPct, networkLatencyMs, packetLossPct, maxAffectedServices ve budget (DB CPU, DB conn, app CPU, heap, DB mem).
+- CUSTOM aşağıdaki alanları kabul eder: workers, dbConnections, txDurationMs, queryFrequency, targetValue, errorPct, maxAffectedServices ve budget (DB CPU, DB conn, app CPU, heap, DB mem).
 
-| ID | Senaryo | Kategori | Direct target |
-|---|---|---|---|
-| S01 | Connection pool exhaustion | connection | initiator'ın Hikari pool'u |
-| S02 | Lock contention | lock | paylaşılan satırlar (`chaos.shared_records`) |
-| S03 | Long-running transactions | lock | `flightops.flight_inventory` sıcak satırları (NO-OP UPDATE) |
-| S04 | CPU-intensive queries | db-cpu | DB_VM CPU |
-| S05 | High-frequency writes | db-io | WAL / disk write (`chaos.write_sink`) |
-| S06 | Heavy read workloads | db-io | buffer cache / disk read (`chaos.synthetic_data`) |
-| S07 | Temporary file pressure | db-io | temp dosyaları (`work_mem` küçük, `temp_file_limit` 2 GB) |
-| S08 | Transaction contention (multi-app) | lock | paylaşılan satır kümesi |
-| S09 | Deadlock | lock | `chaos.deadlock_pairs` |
-| S10 | Connection storm | connection | `max_connections` |
-| S11 | Application CPU saturation | app-resource | container CPU (duty-cycle) |
-| S12 | Application memory pressure | app-resource | JVM heap (sınırlı ballast) |
-| S13 | Database network latency | network | app → DB yolu (netem delay) |
-| S14 | Database packet loss | network | app → DB yolu (netem loss) |
-| S15 | App-to-app dependency latency | network | app → peer HTTP (netem) |
-| S16 | Retry storm | amplification | yavaşlatılan peer |
-| S17 | Cascading database saturation | cascade | DB CPU + active sessions → tüm uygulamalar |
-| S18 | Multi-application concurrent load | load | tüm uygulamalar + DB |
-| S19 | Slow database + retry amplification | amplification | netem + istemci retry politikası |
-| S20 | Randomized cascading failure | cascade | seed ile seçilen alt senaryoların bileşimi |
+Senaryoların hepsi **yalnız paylaşılan PostgreSQL'de** yük oluşturur; uygulama CPU'su, JVM heap'i, ağ (netem) ya da iş trafiği üzerinden yük veren senaryo yoktur.
+
+- S01–S16 ve S18 birbirinden farklı tipte **tek** bir DB yükü üretir (17 farklı tip). S17, S19 ve S20 **birden fazla** yük tipini birleştirir.
+- Yükü, initiator ile birlikte seçilen **her uygulama** kendi DB rolü ve bağlantılarıyla başlatır (MULTI / ALL / RANDOM modları; workload adı `<tip>-<uygulama>`). AUTO modda senaryonun önerdiği uygulamalar katılır.
+- Etki paylaşılan DB üzerinden diğer uygulamalara da yansıyabilir; bu, arka plan iş trafiğinin p95 / hata oranı üzerinden ölçülür ve raporda "etkilenen uygulamalar" olarak gösterilir.
+
+| ID | Senaryo | Kategori | Yük tipi (lab ucu) | Yükün bindiği yer |
+|---|---|---|---|---|
+| S01 | Table-level lock queue | lock | `table-lock` | relation lock kuyruğu (`chaos.lock_target`, ACCESS EXCLUSIVE) |
+| S02 | Row lock contention | lock | `contend` | paylaşılan satırlar (`chaos.shared_records`) |
+| S03 | Long-running transactions | lock | `long-tx` | transaction yaşı + tutulan row lock'lar (sıcak uçuş satırı ve chaos satırları) |
+| S04 | CPU-intensive queries | db-cpu | `cpu-query` | DB_VM CPU |
+| S05 | Bulk insert / WAL volume | db-io | `write-burst` | WAL hacmi / disk write (`chaos.write_sink`) |
+| S06 | Sequential scan reads | db-io | `heavy-read` | buffer cache / disk read (`chaos.synthetic_data`) |
+| S07 | Temporary file pressure | db-io | `temp-spill` | temp dosyaları (`work_mem` küçük, `temp_file_limit` 2 GB) |
+| S08 | Serialization conflicts | lock | `serialization` | MVCC / REPEATABLE READ çakışmaları (40001, rollback) |
+| S09 | Deadlock | lock | `deadlock` | `chaos.deadlock_pairs` (40P01) |
+| S10 | Connection storm | connection | `connection-storm` | `max_connections` / auth / backend fork |
+| S11 | Commit storm | db-io | `commit-storm` | commit yolu / WAL flush (tek satırlık transaction'lar) |
+| S12 | Update churn / dead tuples | db-maintenance | `update-churn` | dead tuple, indeks bakımı, autovacuum (`chaos.churn`) |
+| S13 | Advisory lock contention | lock | `advisory-lock` | advisory lock alanı (tablo / satır kilitlenmez) |
+| S14 | Idle-in-transaction sessions | connection | `idle-in-tx` | bağlantı slotları + en eski snapshot (xmin) |
+| S15 | Parallel query fan-out | db-cpu | `parallel-query` | parallel worker havuzu + CPU çekirdekleri |
+| S16 | Point-query flood | db-cpu | `point-queries` | sorgu işleme hattı (salt okuma TPS) |
+| S17 | CPU + scan saturation | combined | `cpu-query` + `heavy-read` | DB CPU + buffer cache + active sessions |
+| S18 | In-memory sort pressure | db-memory | `memory-sort` | backend belleği (DB_VM RAM), temp dosyası yok |
+| S19 | Vacuum blocked by old snapshots | combined | `idle-in-tx` + `update-churn` | xmin horizon + dead tuple birikimi (bloat) |
+| S20 | Randomized mixed database load | combined | seed ile seçilen 2–3 tip | S02, S04, S06, S07, S10, S11, S12, S13, S15, S16 havuzundan |
+
+Yeni yük tiplerinin nesneleri `V7__chaos_db_load_types.sql` migration'ı ile gelir (`chaos.lock_target`, `chaos.churn`); kurulumdan önce `db-migrator` çalıştırılmalıdır.
 
 ## 4. REST API (`/api/v2`, HTTP Basic)
 
@@ -209,7 +218,7 @@ Uçtan uca doğrulama (APP_VM'de):
 
 ```bash
 python3 scripts/chaos-e2e.py --quick                  # 20 senaryo, kanıt: deploy/evidence/chaos-v2/
-python3 scripts/chaos-e2e.py --acceptance             # S17 HIGH cascading acceptance
+python3 scripts/chaos-e2e.py --acceptance             # S17 HIGH (CPU + scan) acceptance
 ```
 
 Testler:
@@ -223,12 +232,13 @@ Testler:
 
 - **DB_VM disk boş alanı doğrudan ölçülmez.** Koruma `temp_file_limit` (2 GB/rol), DB boyut artış limiti ve `chaos.write_sink` trim ile sağlanır.
 - **Tek uygulamalı connection storm (S10) role limitine takılır.** Bu limit 40 bağlantıdır. `max_connections` doygunluğu için senaryonun ALL/MULTI modunda çalıştırılması gerekir.
-- **Network senaryoları (S13–S16, S19) netem sidecar'a bağlıdır.** Etki container ağ arayüzünde oluşur; DB_VM tarafında ağ kesintisi simüle edilmez.
-  Sidecar uygulamanın network namespace'ini paylaşır (`network_mode: service:<app>`). Uygulama container'ı yeniden oluşturulur veya yeniden başlatılırsa sidecar eski namespace'te kalır ve deney ön kontrolde "netem sidecar erişilemiyor" hatasıyla reddedilir. Çözüm: `docker compose up -d --force-recreate --no-deps netem-<app>`.
+- **Senaryolar netem sidecar'ı kullanmaz.** Ağ gecikmesi / paket kaybı senaryoları kaldırıldı; netem altyapısı (sidecar, `Action.netem`) motorda durur ama hiçbir senaryo planına girmez. Sidecar'lar çalışmasa da deneyler başlar.
 - **Dynatrace UI bağlantılarında query parametre biçimi garanti değildir.** Bu yüzden raporda kopyalanabilir DQL de verilir.
-- **Lock senaryolarının (S02, S08, S09) etkisi yalnız DB ve workload seviyesinde görünür.** Bu senaryolar yalnız `chaos.*` satırlarında çalışır, iş endpoint'leri etkilenmez. İş trafiğini etkileyen lock senaryosu S03'tür (sıcak uçuş satırları).
-- **S18 (multi-app load) iş endpoint'lerine gerçek trafik gönderir.** Bu endpoint'ler hafif (catalog sorguları) olduğu için DB CPU genelde birkaç yüzdeyi aşmaz. Zorunlu ölçütler RPS ve TPS artışıdır; DB CPU yalnızca bilgi amaçlı gösterilir. DB CPU doygunluğu için S04 veya S17 kullanılmalıdır.
+- **Lock ve oturum senaryolarının (S01, S02, S08, S09, S13, S14) etkisi yalnız DB ve workload seviyesinde görünür.** Bu senaryolar yalnız `chaos.*` nesnelerinde (ya da boşta duran oturumlarla) çalışır, iş endpoint'leri etkilenmez; raporda "etkilenmesi beklenen uygulama" boş gelir. İş trafiğini doğrudan etkileyen lock senaryosu S03'tür (sıcak uçuş satırları).
+- **Hız hedefli senaryolarda (S05, S11, S12, S16, S19) worker başına çağrı hızı sınırlıdır.** Tüm uygulamaların tüm worker'ları açıkken toplam hız hedefin yaklaşık 2 katıdır; controller hedefi worker sayısıyla tutturur. Hedefler (TPS, satır/sn) DB_VM diskine göre kalibre edilmemiştir; ulaşılamıyorsa CUSTOM `targetValue` ile düşürülmelidir.
 - **Birleşik planlarda (S20, paralel random) alt senaryolar bir seviye düşük yoğunlukla çalışır.** Aksi halde toplam yük budget sınırını aşar.
-- **Chaos CPU ve okuma sorguları (S04, S06, S17) parallel query kapalı çalışır** (`SET LOCAL max_parallel_workers_per_gather = 0`, yalnız o transaction'da). Böylece 1 worker yaklaşık 1 vCPU'ya karşılık gelir ve adaptive controller hedefe ince adımlarla yaklaşabilir. Parallel query açıkken 1–2 worker DB CPU'yu %96'ya çıkarıp budget abort'una yol açtı. DB'nin global ayarları değiştirilmez.
-- **S12 heap ballast open-loop çalışır** (hız × 8 MB × 20 s). Ballast en fazla max heap'in %50'sidir (`LAB_CHAOS_MAX_MEMORY_FRACTION`) ve 256 KB'lık parçalar hâlinde ayrılır. 1 MB'lık parçalar G1'de humongous object olup iki region kapladı ve geliştirme sırasında reservation'da OutOfMemoryError'a yol açtı.
+- **Chaos CPU ve okuma sorguları (S04, S06, S17, S18) parallel query kapalı çalışır** (`SET LOCAL max_parallel_workers_per_gather = 0`, yalnız o transaction'da). Böylece 1 worker yaklaşık 1 vCPU'ya karşılık gelir ve adaptive controller hedefe ince adımlarla yaklaşabilir. Parallel query'yi bilinçli olarak açan tek senaryo S15'tir (yalnız kendi transaction'ında; sunucu ayarı değişmez).
+- **S18 (in-memory sort) open-loop çalışır.** Bellek sert bir kaynaktır; üst sınır = uygulama × worker × sort boyutu olarak planda hesaplanır (`estimatedPeakMb`, en fazla ≈ 1,3 GB) ve CUSTOM worker sayısıyla aşılamaz. DB_VM belleği %95'i geçerse SafetyGuard deneyi durdurur.
+- **S14 ve S19'daki idle-in-transaction oturumları en fazla 25 s tutulur** (rolün `idle_in_transaction_session_timeout` değeri 30 s). Oturumlar havuz dışıdır (`application_name = <servis>-lab-idle`) ve rol başına CONNECTION LIMIT (40) içinde kalır.
+- **S12 ve S19 `chaos.churn` tablosunda bloat bırakır.** Satır sayısı sabittir (50 000); dead tuple'ları autovacuum temizler, ayrılan alan sonraki deneylerde yeniden kullanılır.
 - **Metrik örnekleme aralığı 2 saniyedir.** p95 değeri Prometheus histogram bucket'larından hesaplanır, bu yüzden bucket çözünürlüğü kadar yaklaşıktır.
