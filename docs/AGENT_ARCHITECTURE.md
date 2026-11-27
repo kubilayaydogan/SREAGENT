@@ -49,7 +49,7 @@ ama yapıları farklıdır.
 | Değiştirilebilir mi | Hayır (yalnız Settings'ten threshold, bütçe, model) | Evet: taslak → doğrulama → yayım → sürüm |
 | Analiz mantığı | Deterministik feature, scoring, attribution | Kullanıcının kurduğu node zinciri; risk score üretmez |
 | LLM'in rolü | Yorumlama ve açıklama | Workflow'daki LLM node'ları ne isterse |
-| MCP kullanımı | Sabit signal kataloğu (17 signal) | MCP Tool node'undaki salt okunur DQL |
+| MCP kullanımı | Sabit signal kataloğu (18 signal) | MCP Tool node'undaki salt okunur DQL |
 | Çıktı | Investigation kaydı, risk score, mechanism, RCA'ya dönüşebilir | Metin ya da structured output; `agent_runs` kaydı |
 | Çalıştırma | AI Investigation, watch, health check | AI Investigation'da agent seçimi, test çalıştırması, schedule |
 | Kaynak | [`graph.py`](../sre-agent/src/airlab_agent/graph.py), [`agent/chat.py`](../sre-platform/backend/sre_platform/agent/chat.py) | [`builder/engine.py`](../sre-platform/backend/sre_platform/builder/engine.py) |
@@ -105,7 +105,7 @@ flowchart TB
 |---|---|---|
 | `build_graph`, `run_analysis` | Analiz graph'ını kurar ve çalıştırır | [`graph.py`](../sre-agent/src/airlab_agent/graph.py) |
 | `ChatOrchestrator` | Sohbet graph'ı: yönlendirme, analiz çağrısı, hafıza, yanıt | [`agent/chat.py`](../sre-platform/backend/sre_platform/agent/chat.py) |
-| Signal kataloğu | 17 signal için DQL şablonları ve pencere hesabı | [`signals.py`](../sre-agent/src/airlab_agent/signals.py) |
+| Signal kataloğu | 18 signal için DQL şablonları ve pencere hesabı | [`signals.py`](../sre-agent/src/airlab_agent/signals.py) |
 | `extract`, `assess_quality` | Query sonuçlarından feature ve veri kalitesi | [`features.py`](../sre-agent/src/airlab_agent/features.py) |
 | `score_all` | Uygulama başına risk score | [`scoring.py`](../sre-agent/src/airlab_agent/scoring.py) |
 | `detect`, `alternatives` | Mechanism tespiti, source uygulama, alternatif açıklamalar | [`attribution.py`](../sre-agent/src/airlab_agent/attribution.py) |
@@ -142,7 +142,7 @@ flowchart TD
 | `plan` | İncelenen pencereyi ve hemen öncesindeki baseline'ı belirler, ingest gecikmesini düşer | – | – |
 | `collect` | Katalogdaki signal'ları çalıştırır; her sonucu veri durumuyla evidence olarak yazar | – | Evet |
 | `analyze` | Feature çıkarır, veri kalitesini ölçer, risk score ve mechanism'i hesaplar | – | – |
-| `extra_evidence` | `row_lock` bulunduysa lock edge ayrıntısını, `db_cpu` ya da `global_connection_pressure` bulunduysa en pahalı statement'ları toplar | – | Evet |
+| `extra_evidence` | `row_lock` bulunduysa lock edge ayrıntısını, `db_cpu`, `global_connection_pressure`, `db_memory_pressure` ya da bir PostgreSQL workload mechanism'i bulunduysa en pahalı statement'ları toplar | – | Evet |
 | `explain` | Bulguları Türkçe anlatır. LLM yoksa, ulaşılamazsa ya da guardrail engellerse deterministik metin kullanılır | Evet | – |
 | `finalize` | Durumu (`completed` / `partial`) belirler, raporu oluşturur | – | – |
 
@@ -223,8 +223,8 @@ Veri durumları:
 | `UNAVAILABLE` | MCP'ye ulaşılamadı |
 | `SKIPPED_BUDGET` | Query bütçesi dolduğu için çalıştırılmadı |
 
-Signal kataloğu (17 signal): `http`, `spans`, `hikari`, `jvm_gc`, `jvm_heap`, `hosts`, `containers`, `db_conn`,
-`db_sessions`, `lock_waiters`, `collector`, `edges`, `pg_lock_logs`, `db_stats`, `statements`, `pg_server`, `pg_io`.
+Signal kataloğu (18 signal): `http`, `spans`, `hikari`, `jvm_gc`, `jvm_heap`, `hosts`, `containers`, `db_conn`,
+`db_sessions`, `lock_waiters`, `collector`, `edges`, `pg_lock_logs`, `db_stats`, `statements`, `pg_server`, `pg_io`, `pg_error_logs`.
 Her signal'ın kaynağı ve alanları: [telemetry-contract.md](lab/telemetry-contract.md).
 
 Her MCP çağrısı platformda kaydedilir ve **MCP Çağrıları** ekranında görünür ([mcp-calls.md](platform/mcp-calls.md)).
@@ -302,9 +302,22 @@ değiştirilebilir ve değişiklik öncesinde geçmiş veriye karşı önizleneb
 | `app_container_cpu` | Tek bir uygulama container'ında CPU artışı |
 | `network_path_latency` | Uygulama yavaş, veritabanı sunucu tarafı execution time normal |
 | `independent_load` | Yük artışı var, paylaşılan kaynak baskısı yok |
+| `deadlock` | Deadlock sayacı ya da PostgreSQL logunda `deadlock detected` satırları |
+| `serialization_conflict` | PostgreSQL logunda `could not serialize access` satırları |
+| `temp_file_pressure` | Temp dosyası yazımı arttı (sort / hash `work_mem`'e sığmıyor) |
+| `write_pressure` | Insert ve WAL hacmi arttı. Alt tür: `bulk_write`, `commit_heavy` |
+| `update_churn` | Update hızı arttı; autovacuum aktivitesi ve vacuum'u engelleyebilecek session'lar ayrıca belirtilir |
+| `read_pressure` | Okunan tuple hacmi ya da diskten okunan blok arttı (ör. sequential scan) |
+| `db_memory_pressure` | Veritabanı host'unda memory kullanımı arttı |
+| `idle_in_transaction` | Bir uygulamanın idle in transaction session'ları birikti |
 
 Her mechanism; source uygulamaları, etkilenen uygulamaları, dayandığı evidence kimliklerini ve bir confidence
 düzeyini taşır. Sonuç bir **hipotez** olarak sunulur; alternatif açıklamalar ayrıca listelenir.
+
+PostgreSQL workload mechanism'leri (`temp_file_pressure`, `write_pressure`, `update_churn`, `read_pressure`) `db_cpu`'dan
+önce değerlendirilir; ikisi birlikte bulunursa `db_cpu` kaydı ilgili yükü `related_load` alanında gösterir. `deadlock` ve
+`serialization_conflict` için source uygulama, log satırındaki database role'ünden çıkarılır. Eşikler
+`defaults.yaml → mechanisms` altındadır ve lab ölçümlerinden seçilmiş ilk değerlerdir.
 
 `db_cpu` nedeni `maintenance` olduğunda source uygulama gösterilmez: CPU'yu uygulama query'leri değil veritabanı bakım
 aktivitesi (örneğin autovacuum) kullanıyordur.

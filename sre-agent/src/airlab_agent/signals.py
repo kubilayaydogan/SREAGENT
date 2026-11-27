@@ -151,6 +151,16 @@ def q_pg_lock_logs(ws, cfg):
             f'| {_bucket(ws, "timestamp")} | summarize n=count(), by:{{w}}')
 
 
+def q_pg_error_logs(ws, cfg):
+    """PostgreSQL logundaki deadlock ve serialization failure satırları. Rol, log_line_prefix'teki `user=` alanından
+    ayrıştırılır (2026-11-27 gerçek log: `... user=svc_checkin db=airlab app=... ERROR:  could not serialize access`)."""
+    return (f'fetch logs, {_rng(ws)} | filter host.name == "{cfg["hosts"]["db"]}" '
+            f'and (contains(content, "deadlock detected") or contains(content, "could not serialize access")) '
+            f'| parse content, "LD \'user=\' LD:role \' db=\'" | {_bucket(ws, "timestamp")} '
+            f'| summarize dl=countIf(contains(content, "deadlock detected")), '
+            f'sr=countIf(contains(content, "could not serialize access")), by:{{w, role}}')
+
+
 def q_db_stats(ws, cfg):
     return (f"timeseries dl=sum(airlab.pg.db.deadlocks), rb=sum(airlab.pg.db.xact_rollback), "
             f"cm=sum(airlab.pg.db.xact_commit), tmp=sum(airlab.pg.db.temp_bytes), rd=sum(airlab.pg.db.blks_read), "
@@ -190,6 +200,7 @@ CATALOG: dict[str, Callable] = {
     "hosts": q_hosts, "containers": q_containers, "db_conn": q_db_conn, "db_sessions": q_db_sessions,
     "lock_waiters": q_lock_waiters, "collector": q_collector, "edges": q_edges, "pg_lock_logs": q_pg_lock_logs,
     "db_stats": q_db_stats, "statements": q_statements, "pg_server": q_pg_server, "pg_io": q_pg_io,
+    "pg_error_logs": q_pg_error_logs,
 }
 # Analizin zorunlu sinyalleri (doctor bunları kontrol eder). Diğerleri destekleyicidir.
 REQUIRED = ["http", "spans", "hikari", "hosts", "db_conn", "db_sessions", "collector", "edges"]

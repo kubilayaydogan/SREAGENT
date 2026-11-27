@@ -46,6 +46,14 @@ export const MECHANISM_LABEL: Record<string, string> = {
   app_container_cpu: "Container CPU saturation",
   network_path_latency: "App ↔ PostgreSQL network path latency",
   independent_load: "Bağımsız load artışı",
+  deadlock: "Deadlock",
+  serialization_conflict: "Serialization failure",
+  temp_file_pressure: "PostgreSQL temp file pressure",
+  write_pressure: "PostgreSQL write / WAL pressure",
+  update_churn: "UPDATE churn / vacuum pressure",
+  read_pressure: "PostgreSQL read (scan) pressure",
+  db_memory_pressure: "DB_VM memory pressure",
+  idle_in_transaction: "Idle in transaction session'ları",
 };
 
 export function mechanismLabel(id: string | null | undefined): string {

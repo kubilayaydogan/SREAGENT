@@ -162,6 +162,229 @@ def db_cpu_cause(cur_db: dict, base_db: dict, m: dict, lock_active: bool = False
     return out
 
 
+# Paylaşılan PostgreSQL'de ölçülen mechanism'ler: bunlardan biri varken "bağımsız load" ya da "network path" denmez.
+DB_WORKLOAD = ("temp_file_pressure", "write_pressure", "update_churn", "read_pressure")
+SHARED = {"row_lock", "global_connection_pressure", "db_cpu", "app_vm_cpu", "deadlock", "serialization_conflict",
+          "db_memory_pressure", *DB_WORKLOAD}
+
+
+def exec_sources(cur: dict, base: dict, cfg: dict) -> tuple[list[str], dict[str, float]]:
+    """pg_stat_statements exec time'ı (role bazında) belirgin artan uygulamalar: en büyük artışın en az dörtte biri
+    ve asgari eşik. Artış yoksa boş liste (source tahmin edilmez)."""
+    incs = {}
+    for app in cfg["apps"]:
+        c, b = _g(cur["apps"].get(app), "db_exec_ms_per_min"), _g(base["apps"].get(app), "db_exec_ms_per_min")
+        if c is not None:
+            incs[app] = c - (b or 0)
+    floor = max(cfg["mechanisms"]["db_source_min_exec_ms"], max(incs.values(), default=0) * 0.25)
+    return [a for a in sorted(sorted(incs), key=incs.get, reverse=True) if incs[a] >= floor], incs
+
+
+def db_workload(cur: dict, base: dict, cfg: dict, imp: dict, ev) -> list[dict]:
+    """PostgreSQL workload mechanism'leri: deadlock, serialization failure, temp file, write/WAL, update churn,
+    read (scan) ve DB_VM memory. Hepsi iki dönemin karşılaştırmasıdır; veri yoksa mechanism üretilmez."""
+    m = cfg["mechanisms"]
+    db, bdb = cur["db"], base["db"]
+    out: list[dict] = []
+    aff = sorted(imp)
+    srcs, incs = exec_sources(cur, base, cfg)
+    exec_inc = {k: round(v, 1) for k, v in incs.items()}
+    mb = 1024 * 1024
+
+    def rose(key, min_value, ratio=m["db_rate_ratio"]) -> bool:
+        c, b = db.get(key), bdb.get(key)
+        return c is not None and c >= min_value and c >= (b or 0.0) * ratio
+
+    def pair(key, scale=1.0, nd=1):                      # [önceki dönem, incelenen aralık]
+        return [None if x is None else round(x / scale, nd) for x in (bdb.get(key), db.get(key))]
+
+    def log_sources(key) -> list[str]:
+        by = db.get(key) or {}
+        top = max(by.values(), default=0)
+        return [a for a in sorted(sorted(by), key=by.get, reverse=True) if by[a] >= top * 0.25]
+
+    def event(metric_key, log_key) -> tuple[float, bool]:
+        n = max(db.get(metric_key) or 0, db.get(log_key) or 0) if metric_key else (db.get(log_key) or 0)
+        rate = max(db.get(f"{k}_per_min") or 0 for k in (metric_key, log_key) if k)
+        brate = max(bdb.get(f"{k}_per_min") or 0 for k in (metric_key, log_key) if k)
+        return n, rate >= brate * m["db_event_ratio"] and rate > brate
+
+    # a) Deadlock
+    n, up = event("deadlocks", "deadlock_logs")
+    if n >= m["deadlock_min"] and up:
+        sig = ((["airlab.pg.db.deadlocks"] if (db.get("deadlocks") or 0) >= 1 else [])
+               + (["PostgreSQL logu: deadlock detected"] if (db.get("deadlock_logs") or 0) >= 1 else []))
+        who = log_sources("deadlock_logs_by_app")
+        out.append({
+            "id": "deadlock", "title": "Deadlock",
+            "source_apps": who, "affected_apps": [a for a in who if a in imp],
+            "mechanism": "Transaction'lar aynı row'ları farklı sırayla lock'ladı; PostgreSQL deadlock'u tespit edip "
+                         "transaction'lardan birini iptal etti. İptal edilen transaction uygulamada error olarak görünür.",
+            "deadlocks": [bdb.get("deadlocks"), db.get("deadlocks")],
+            "deadlock_logs": [bdb.get("deadlock_logs"), db.get("deadlock_logs")],
+            "logs_by_app": db.get("deadlock_logs_by_app") or {},
+            "signals": sig, "confidence": _conf(len(sig), bool(imp)), "evidence_ids": ev("db_stats", "pg_error_logs"),
+        })
+
+    # b) Serialization failure: rollback metric'i tek başına ayırt etmez (arka plan trafiği de rollback üretir),
+    #    bu yüzden kanıt PostgreSQL logudur.
+    n, up = event(None, "serialization_logs")
+    if n >= m["serialization_min_logs"] and up:
+        sig = ["PostgreSQL logu: could not serialize access"]
+        if rose("rollbacks_per_min", 1, 1.5):
+            sig.append("airlab.pg.db.xact_rollback artışı")
+        who = log_sources("serialization_logs_by_app")
+        out.append({
+            "id": "serialization_conflict", "title": "Serialization failure (transaction conflict)",
+            "source_apps": who, "affected_apps": [a for a in who if a in imp],
+            "mechanism": "REPEATABLE READ / SERIALIZABLE isolation level'da çalışan transaction'lar aynı row'ları "
+                         "eşzamanlı güncelledi; PostgreSQL çakışan transaction'ı 'could not serialize access' ile "
+                         "iptal etti. Uygulama retry yapmıyorsa bu error olarak, yapıyorsa ek load olarak görünür.",
+            "serialization_logs": [bdb.get("serialization_logs"), db.get("serialization_logs")],
+            "logs_by_app": db.get("serialization_logs_by_app") or {},
+            "rollbacks_per_min": pair("rollbacks_per_min"),
+            "signals": sig, "confidence": _conf(len(sig), bool(imp)), "evidence_ids": ev("pg_error_logs", "db_stats"),
+        })
+
+    # c) Temp file
+    if rose("temp_bytes_per_min", m["temp_min_mb_per_min"] * mb):
+        out.append({
+            "id": "temp_file_pressure", "title": "PostgreSQL temp file pressure",
+            "source_apps": srcs, "affected_apps": aff,
+            "mechanism": "Sort / hash işlemleri work_mem'e sığmadı ve temp dosyasına taştı. Temp dosyası yazımı disk "
+                         "I/O'su ve CPU harcar; aynı disk'i kullanan diğer query'ler de yavaşlayabilir.",
+            "temp_mb_per_min": pair("temp_bytes_per_min", mb), "exec_ms_increase_per_min": exec_inc,
+            "signals": ["airlab.pg.db.temp_bytes"] + (["pg_stat_statements exec_time"] if srcs else []),
+            "confidence": _conf(1 + bool(srcs), bool(imp)), "evidence_ids": ev("db_stats", "statements"),
+        })
+
+    # d) Update churn / vacuum
+    churn = rose("pg_tup_upd_per_min", m["update_min_per_min"])
+    idle_rise = sum(max(0.0, (_g(cur["apps"].get(a), "db_sessions_idle_tx_tw") or 0.0)
+                        - (_g(base["apps"].get(a), "db_sessions_idle_tx_tw") or 0.0)) for a in cfg["apps"])
+    if churn:
+        vac = rose("pg_autovacuum_blocks_per_min", 5000, m["db_cpu_maint_ratio"])
+        held = idle_rise >= m["idle_tx_sessions"]
+        out.append({
+            "id": "update_churn", "title": "UPDATE churn / vacuum pressure",
+            "source_apps": srcs, "affected_apps": aff,
+            "mechanism": "Çok sayıda row sürekli UPDATE edildi; her UPDATE eski row sürümünü dead tuple olarak bırakır "
+                         "ve WAL üretir. Dead tuple'lar vacuum ile temizlenene kadar tablo ve index'ler büyür (bloat), "
+                         "query'ler daha fazla blok okur."
+                         + (" Aynı aralıkta idle in transaction session'ları da arttı: eski snapshot'lar açıkken vacuum "
+                            "bu dead tuple'ları temizleyemez." if held else ""),
+            "updates_per_min": pair("pg_tup_upd_per_min", nd=0), "wal_mb_per_min": pair("pg_wal_bytes_per_min", mb),
+            "autovacuum_blocks_per_min": pair("pg_autovacuum_blocks_per_min", nd=0),
+            "autovacuum_active": vac, "vacuum_blocked_suspect": held, "idle_in_tx_rise": round(idle_rise, 2),
+            "exec_ms_increase_per_min": exec_inc,
+            "signals": ["postgres.tup_updated"] + (["postgres.wal_bytes"] if rose("pg_wal_bytes_per_min", m["write_min_wal_mb_per_min"] * mb) else [])
+                       + (["autovacuum buffer activity"] if vac else []) + (["pg_stat_statements exec_time"] if srcs else []),
+            "confidence": _conf(1 + bool(srcs), bool(imp)),
+            "evidence_ids": ev("pg_server", "pg_io", "db_sessions", "statements"),
+        })
+
+    # e) Write / WAL: insert artışı, ya da update churn'e bağlanamayan WAL artışı
+    ins_up = rose("pg_tup_ins_per_min", m["write_min_inserts_per_min"])
+    wal_up = rose("pg_wal_bytes_per_min", m["write_min_wal_mb_per_min"] * mb)
+    if ins_up or (wal_up and not churn):
+        d_ins = (db.get("pg_tup_ins_per_min") or 0) - (bdb.get("pg_tup_ins_per_min") or 0)
+        d_cm = (db.get("commits_per_min") or 0) - (bdb.get("commits_per_min") or 0)
+        # commit başına birkaç row: yük WAL hacminden çok commit (WAL flush) sayısındadır
+        commit_heavy = ins_up and d_cm > 0 and d_ins / d_cm < 5 and rose("commits_per_min", 1, 2.0)
+        out.append({
+            "id": "write_pressure", "title": "PostgreSQL write / WAL pressure",
+            "pattern": "commit_heavy" if commit_heavy else "bulk_write",
+            "source_apps": srcs, "affected_apps": aff,
+            "mechanism": ("Çok sayıda küçük transaction ayrı ayrı commit edildi; her commit WAL flush (fsync) ister. "
+                          "Commit'ler WAL yazımında sıraya girer, diğer uygulamaların commit latency'si artabilir."
+                          if commit_heavy else
+                          "Yüksek hacimde INSERT yapıldı; WAL üretimi ve tablo / index büyümesi arttı. WAL yazımı, "
+                          "checkpoint ve disk I/O'su paylaşıldığı için diğer uygulamaların write'ları yavaşlayabilir."),
+            "inserts_per_min": pair("pg_tup_ins_per_min", nd=0), "wal_mb_per_min": pair("pg_wal_bytes_per_min", mb),
+            "commits_per_min": pair("commits_per_min", nd=0),
+            "checkpoint_blocks_per_min": pair("pg_checkpoint_blocks_per_min", nd=0),
+            "exec_ms_increase_per_min": exec_inc,
+            "signals": (["postgres.tup_inserted"] if ins_up else []) + (["postgres.wal_bytes"] if wal_up else [])
+                       + (["pg_stat_statements exec_time"] if srcs else []),
+            "confidence": _conf(ins_up + wal_up + bool(srcs), bool(imp)),
+            "evidence_ids": ev("pg_server", "db_stats", "statements"),
+        })
+
+    # f) Read (scan): okunan tuple hacmi ya da diskten okunan blok
+    scan_up = rose("pg_tup_read_per_min", m["read_min_tuples_per_min"])
+    disk_up = rose("blks_read_per_min", m["read_min_blocks_per_min"])
+    if scan_up or disk_up:
+        out.append({
+            "id": "read_pressure", "title": "PostgreSQL read (scan) pressure",
+            "source_apps": srcs, "affected_apps": aff,
+            "mechanism": "Query'ler çok sayıda row taradı (ör. sequential scan). "
+                         + ("Okumaların bir kısmı diskten yapıldı; disk I/O'su ve shared_buffers içeriği diğer "
+                            "query'lerle paylaşıldığı için onların da latency'si artabilir." if disk_up else
+                            "Okumalar shared_buffers'tan karşılandı (diskten okuma artmadı); maliyet disk I/O'su "
+                            "değil CPU ve memory bandwidth'tir."),
+            "tuples_read_per_min": pair("pg_tup_read_per_min", nd=0),
+            "disk_blocks_read_per_min": pair("blks_read_per_min", nd=0),
+            "client_blocks_per_min": pair("pg_client_blocks_per_min", nd=0), "disk_reads": disk_up,
+            "exec_ms_increase_per_min": exec_inc,
+            "signals": (["postgres.tup_returned"] if scan_up else []) + (["airlab.pg.db.blks_read"] if disk_up else [])
+                       + (["pg_stat_statements exec_time"] if srcs else []),
+            "confidence": _conf(scan_up + disk_up + bool(srcs), bool(imp)),
+            "evidence_ids": ev("pg_server", "db_stats", "pg_io", "statements"),
+        })
+
+    # g) DB_VM memory
+    dbh, bdbh = cur["hosts"].get(cfg["hosts"]["db"]) or {}, base["hosts"].get(cfg["hosts"]["db"]) or {}
+    now, before = dbh.get("mem_max", dbh.get("mem")), bdbh.get("mem")
+    rise = (now - before) if (now is not None and before is not None) else None
+    if now is not None and (now >= m["db_mem_pct"] or (rise or 0) >= m["db_mem_rise_pp"]):
+        busy = rose("pg_active_ms_per_min", m["db_cpu_query_min_ms"], m["db_cpu_query_ratio"])
+        strong = now >= m["db_mem_pct"] or (rise or 0) >= 2 * m["db_mem_rise_pp"]
+        out.append({
+            "id": "db_memory_pressure", "title": "DB_VM memory pressure",
+            "source_apps": srcs if busy else [], "affected_apps": aff,
+            "mechanism": "PostgreSQL host'unda memory kullanımı arttı (ör. work_mem içinde yapılan büyük sort / hash "
+                         "işlemleri, çok sayıda backend). Memory daralınca page cache küçülür, swap ya da OOM riski "
+                         "doğar ve tüm query'ler etkilenebilir.",
+            "db_mem_pct_max": round(now, 1), "baseline_mem_pct": round(before, 1) if before is not None else None,
+            "rise_pp": round(rise, 1) if rise is not None else None,
+            "trigger": "absolute" if now >= m["db_mem_pct"] else "relative_rise",
+            "query_active_ms_per_min": pair("pg_active_ms_per_min"), "exec_ms_increase_per_min": exec_inc,
+            "signals": ["dt.host.memory.usage (db-vm)"] + (["postgres.active_time artışı"] if busy else []),
+            "confidence": _conf(1 + busy, bool(imp)) if (strong or busy) else "low",
+            "evidence_ids": ev("hosts", "pg_server", "statements"),
+        })
+    return out
+
+
+def idle_in_transaction(cur: dict, base: dict, cfg: dict, imp: dict, mechs: list[dict], ev) -> dict | None:
+    """Idle in transaction session birikimi (uygulama bazında). Network path latency ile açıklanan uygulamalar hariç."""
+    m = cfg["mechanisms"]
+    net = {a for x in mechs if x["id"] == "network_path_latency" for a in x["source_apps"]}
+    every = {}
+    for app in cfg["apps"]:
+        r = ((_g(cur["apps"].get(app), "db_sessions_idle_tx_tw") or 0.0)
+             - (_g(base["apps"].get(app), "db_sessions_idle_tx_tw") or 0.0))
+        if app not in net:
+            every[app] = round(r, 2)
+    rises = {a: r for a, r in every.items() if r >= m["idle_tx_sessions"]}
+    if not rises and sum(max(0.0, r) for r in every.values()) >= 2 * m["idle_tx_sessions"]:
+        # hiçbir uygulama tek başına eşiği geçmiyor ama toplam belirgin: payı olan uygulamalar
+        rises = {a: r for a, r in every.items() if r >= m["idle_tx_sessions"] / 2}
+    if not rises:
+        return None
+    who = sorted(sorted(rises), key=rises.get, reverse=True)
+    return {
+        "id": "idle_in_transaction", "title": "Idle in transaction session'ları",
+        "source_apps": who, "affected_apps": [a for a in who if a in imp],
+        "mechanism": "Uygulama transaction'ı açtı ama commit / rollback etmeden bekliyor. Bu session'lar connection "
+                     "tutar, aldıkları lock'ları bırakmaz ve snapshot'ları açık kaldığı için vacuum eski row "
+                     "sürümlerini (dead tuple) temizleyemez; süre uzadıkça diğer uygulamalar etkilenir.",
+        "idle_in_tx_rise_by_app": rises,
+        "signals": ["airlab.pg.sessions (state = idle in transaction)"],
+        "confidence": _conf(1, bool(imp)), "evidence_ids": ev("db_sessions"),
+    }
+
+
 def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]) -> dict[str, Any]:
     m = cfg["mechanisms"]
     imp = impacted_apps(cur, base, cfg)
@@ -274,6 +497,12 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
             "confidence": _conf(1 + bool(sources), bool(imp)), "evidence_ids": ev("db_conn", "db_sessions"),
         })
 
+    # 3b) PostgreSQL workload mechanism'leri (DB CPU'dan önce: CPU artışı çoğu zaman bunların sonucudur)
+    mechs += db_workload(cur, base, cfg, imp, ev)
+    # Deadlock'a giren transaction'lar kısa süre birbirini bekler; bu lock wait'ler deadlock'un parçasıdır.
+    # Deadlock daha özgül bulgu olduğu için öne alınır (2026-11-27 ölçümü: 48 deadlock ile birlikte 15 lock edge).
+    mechs.sort(key=lambda x: x["id"] != "deadlock")
+
     # 4) DB_VM CPU
     dbh, bdbh = hosts.get(cfg["hosts"]["db"]) or {}, bhosts.get(cfg["hosts"]["db"]) or {}
     if dbh.get("cpu") is not None and (dbh["cpu"] >= m["db_cpu_pct"] or
@@ -298,6 +527,7 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
                           "execution time artışı CPU pressure'ın sonucu sayılır." if maint else
                           "PostgreSQL host'unda CPU saturation tüm query'lerin execution time'ını uzatır; problemi başlatan, "
                           "pg_stat_statements execution time'ı en çok artan role(ler)dir."),
+            "related_load": [x["id"] for x in mechs if x["id"] in DB_WORKLOAD],
             "db_cpu": round(dbh["cpu"], 1), "baseline_cpu": round(bdbh["cpu"], 1) if bdbh.get("cpu") is not None else None,
             "exec_ms_increase_per_min": {k: round(v, 1) for k, v in incs.items()},
             "signals": ["dt.host.cpu.usage (db-vm)"] + (["pg_stat_statements exec_time"] if sources else [])
@@ -348,7 +578,7 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
     # 5c) Network path latency (app ↔ PostgreSQL): uygulamada latency artıyor, DB server-side execution süresi artmıyor,
     #     uygulamanın oturumları transaction içinde "idle" (DB client'ı bekliyor) ve paylaşılan resource baskısı yok.
     #     (2026-11-24 chaos eval S13: idle-in-transaction 0 → 2.65, exec/call sabit.)
-    shared_now = {x["id"] for x in mechs} & {"row_lock", "global_connection_pressure", "db_cpu", "app_vm_cpu"}
+    shared_now = {x["id"] for x in mechs} & SHARED
     if not shared_now:
         for app in sorted(imp):
             c, b = cur["apps"].get(app, {}), base["apps"].get(app, {})
@@ -359,6 +589,12 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
                 continue
             exec_ratio = (ce / cn) / max(be / bn, 1e-9)
             if idle_rise < m["net_idle_tx_sessions"] or exec_ratio >= m["net_max_exec_ratio"]:
+                continue
+            # Network path'te bekleyen session'lar uygulamanın connection pool'undaki connection'lardır. Pool'un
+            # kullandığından fazla idle in transaction session varsa bunlar pool dışı / elde tutulan session'lardır
+            # (idle_in_transaction mechanism'i); network gecikmesi değildir.
+            pool_active = c.get("pool_active_max")
+            if pool_active is not None and (c.get("db_sessions_idle_tx") or 0.0) > pool_active + 0.5:
                 continue
             if any(x["id"] == "app_container_cpu" and app in x["source_apps"] for x in mechs):
                 continue
@@ -376,8 +612,13 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
                 if x["id"] == "pool_saturation" and app in x["affected_apps"] and not x.get("secondary_to"):
                     x["secondary_to"] = "network_path_latency"
 
+    # 5d) Idle in transaction birikimi
+    idle = idle_in_transaction(cur, base, cfg, imp, mechs, ev)
+    if idle:
+        mechs.append(idle)
+
     # 6) Bağımsız yük: yük artan uygulama var ama başka uygulamaya yayılma ve paylaşılan kaynak mekanizması yok
-    shared = {x["id"] for x in mechs} & {"row_lock", "global_connection_pressure", "db_cpu", "app_vm_cpu"}
+    shared = {x["id"] for x in mechs} & (SHARED | {"idle_in_transaction"})
     for app, r in loads.items():
         if r >= cfg["impact"]["throughput_load_ratio"] and not shared:
             others = [a for a in imp if a != app]
@@ -416,6 +657,18 @@ def alternatives(attr: dict, quality: dict) -> list[str]:
             out.append("DB CPU: " + cause["summary"])
         if cause.get("caveat"):
             out.append(cause["caveat"])
+        related = [m["title"] for m in attr["mechanisms"] if m["id"] in DB_WORKLOAD]
+        if related and cause["kind"] != "maintenance":
+            out.append(f"DB CPU artışı, aynı aralıkta ölçülen şu load ile uyumlu: {', '.join(related)}.")
+    if "update_churn" in ids:
+        out.append("Dead tuple sayısı ve tablo bloat'u doğrudan ölçülmedi; update hızı ve autovacuum aktivitesinden "
+                   "çıkarım yapıldı (pg_stat_user_tables ile doğrulayın).")
+    if "db_memory_pressure" in ids:
+        out.append("DB_VM memory artışı host düzeyinde ölçüldü; PostgreSQL backend'leri dışındaki process'lerden de "
+                   "kaynaklanabilir.")
+    if "serialization_conflict" in ids or "deadlock" in ids:
+        out.append("Deadlock / serialization failure sayıları PostgreSQL logundan okundu; source uygulama, log "
+                   "satırındaki database role'ünden çıkarıldı.")
     if attr["unexplained_impacted"]:
         out.append(f"Şu uygulamalardaki etki bilinen problem türlerinden hiçbiriyle açıklanamadı: {', '.join(attr['unexplained_impacted'])}"
                    " (uygulama içi error, GC veya network olabilir).")

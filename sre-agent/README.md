@@ -31,7 +31,8 @@ plan ─► collect (17 katalog DQL, tek MCP oturumu) ─► analyze (özellik +
 * **Üç ayrı boyut:** risk şiddeti, veri kapsamı ve nedensellik güveni (`high/medium/low`) raporda ayrı alanlardır.
 * **Mekanizmalar:** `row_lock`, `pool_saturation` (tek havuz; kilidin sonucuysa `secondary_to`),
   `global_connection_pressure` (mutlak eşik veya göreli artış), `db_cpu`, `app_vm_cpu` (agent'ın kendi CPU'su ayrı işaretlenir: `self_is_source`), `app_container_cpu`, `network_path_latency`,
-  `independent_load`. Kök engelleyici, kendisi Lock beklemeyen blocker'dır; zincirdeki ara halkalar kaynak sayılmaz.
+  `independent_load`; PostgreSQL workload mekanizmaları: `deadlock`, `serialization_conflict`, `temp_file_pressure`,
+  `write_pressure`, `update_churn`, `read_pressure`, `db_memory_pressure`, `idle_in_transaction`. Kök engelleyici, kendisi Lock beklemeyen blocker'dır; zincirdeki ara halkalar kaynak sayılmaz.
 * **Kaos etiketleri** (`experiment_id`, `lab_hold`) telemetri girişte silinir. Kanıt olarak kullanılmaz, rapora ve
   Claude'a gitmez.
 

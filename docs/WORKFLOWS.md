@@ -200,8 +200,9 @@ Korelasyon zaman hizalamasına dayanır: uygulama metrikleri (latency, hata, Con
 (oturumlar, lock'lar, statement'lar) ve host metrikleri (CPU) aynı pencere ve aynı baseline üzerinden karşılaştırılır.
 Lock edge kayıtları hangi uygulamanın hangisini beklettiğini doğrudan gösterir.
 
-Ek kanıt turu yalnız gerektiğinde çalışır: `row_lock` bulunursa lock edge ayrıntısı, `db_cpu` ya da
-`global_connection_pressure` bulunursa en pahalı statement'lar toplanır.
+Ek kanıt turu yalnız gerektiğinde çalışır: `row_lock` bulunursa lock edge ayrıntısı; `db_cpu`,
+`global_connection_pressure`, `db_memory_pressure` ya da bir PostgreSQL workload mechanism'i bulunursa en pahalı
+statement'lar toplanır.
 
 ## 4. Risk score ve RCA üretimi
 

@@ -39,6 +39,30 @@ def human_review(attr: dict, quality: dict, scores: dict) -> list[str]:
         if m["id"] == "app_container_cpu":
             out.append(f"{m['source_apps'][0]} container'ında CPU harcayan thread'leri (thread dump, profiler) ve GC "
                        "aktivitesini inceleyin; container CPU limitini ve son deploy'u kontrol edin.")
+        if m["id"] == "deadlock":
+            out.append("PostgreSQL logundaki 'deadlock detected' DETAIL satırlarından çakışan query'leri bulun; "
+                       "transaction'ların row'ları aynı sırayla lock'lamasını sağlayın.")
+        if m["id"] == "serialization_conflict":
+            out.append("Çakışan transaction'ların isolation level'ını ve retry davranışını inceleyin; aynı row'ları "
+                       "güncelleyen işlemleri kısaltın ya da sıraya alın.")
+        if m["id"] == "temp_file_pressure":
+            out.append("Temp dosyasına taşan query'leri (EXPLAIN ANALYZE: 'Sort Method: external merge', log_temp_files) "
+                       "ve work_mem ayarını inceleyin.")
+        if m["id"] == "write_pressure":
+            out.append("En çok INSERT / commit yapan query'leri, WAL üretimini (pg_stat_wal) ve checkpoint sıklığını "
+                       "inceleyin; küçük transaction'ları batch'lemek commit sayısını azaltır.")
+        if m["id"] == "update_churn":
+            out.append("pg_stat_user_tables'ta n_dead_tup ve last_autovacuum değerlerini kontrol edin; uzun süre açık "
+                       "transaction ya da idle in transaction session varsa vacuum dead tuple'ları temizleyemez.")
+        if m["id"] == "read_pressure":
+            out.append("En çok row okuyan query'lerin execution plan'larını (EXPLAIN: Seq Scan, eksik index) inceleyin.")
+        if m["id"] == "db_memory_pressure":
+            out.append("DB_VM'de memory tüketen process'leri ve work_mem × eşzamanlı sort sayısını kontrol edin; "
+                       "swap kullanımına ve OOM kayıtlarına bakın.")
+        if m["id"] == "idle_in_transaction":
+            out.append(f"{', '.join(m['source_apps'])} için pg_stat_activity'de state = 'idle in transaction' olan "
+                       "session'ların xact_start ve son query'sini inceleyin; idle_in_transaction_session_timeout "
+                       "ayarını değerlendirin.")
         if m["id"] == "network_path_latency":
             out.append(f"{m['source_apps'][0]} ile PostgreSQL arasındaki network path'ini doğrulayın (RTT, packet loss, "
                        "tc/qdisc, MTU, DNS); DB server-side süreleri normal olduğu için query tuning çözüm değildir.")

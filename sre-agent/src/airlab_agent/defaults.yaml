@@ -79,6 +79,27 @@ mechanisms:
   db_cpu_autovacuum_min_blocks: 20000  # ...ve dakikada en az +20000 blok (boşta lab: rutin autovacuum ~350-1200 blok/dk)
   db_cpu_checkpoint_min_blocks: 1000   # checkpoint'te yazılan bloklar için aynı kural (boşta: 5 dk'da bir ~300-400 blok)
   gc_overhead: 0.10
+  # PostgreSQL workload mechanism'leri (attribution.db_workload). İLK DEĞERLER 2026-11-27 lab ölçümlerinden seçildi;
+  # değerler dakika başınadır. Boşta lab: insert ~60, update ~50-280, WAL 0,1-0,5 MB, tuple okuma ~1,4 M,
+  # rollback ~70-130, temp 0, idle in transaction arada bir 1 session. Arka plan trafiği açıkken: tuple okuma
+  # ~4-5,5 M, rollback ~130-200, commit ~4.000-5.000.
+  db_rate_ratio: 3.0               # hız metric'leri: önceki dönemin en az 3 katı (ve aşağıdaki asgari değer).
+                                   # 5 iken önceki dönemdeki tek seferlik bir yazma (migration) commit storm'u gizledi.
+  db_event_ratio: 3.0              # log/olay sayıları: önceki dönemdeki hızın en az 3 katı
+  db_source_min_exec_ms: 500       # source uygulama: role'ün pg_stat_statements exec time artışı (ms/dk)
+  deadlock_min: 2                  # dönemde en az 2 deadlock (metric ya da log; ölçüm: deadlock yükünde 3 dk'da 48)
+  serialization_min_logs: 10       # "could not serialize access" log satırı (ölçüm: serialization yükünde 106/dk)
+  temp_min_mb_per_min: 64          # temp dosyası yazımı (ölçüm: temp'e taşan sort yükünde 7,7-22 GB/dk)
+  write_min_inserts_per_min: 5000  # ölçüm: commit storm 10-14 bin, bulk insert 0,5-1,2 M
+  write_min_wal_mb_per_min: 3      # ölçüm: commit storm 3-6 MB, bulk insert 240-840 MB
+  update_min_per_min: 20000        # ölçüm: update churn 84-311 bin (WAL 35-116 MB/dk)
+  read_min_tuples_per_min: 30000000  # ölçüm: seq scan yükü 0,7-3,6 milyar; point query seli 22 M (tetiklemez)
+  read_min_blocks_per_min: 5000    # diskten okunan blok (ölçüm: seq scan yükünün ilk dakikasında ~12.000)
+  db_mem_pct: 90                   # DB_VM memory kullanımı (mutlak)
+  db_mem_rise_pp: 4                # ...ya da dönem içi en yüksek değer önceki dönem ortalamasından +4 puan
+                                   # (ölçüm: bellekte sort yükünde +4,6 / +5,8 / +6,0; boşta dalgalanma ~2 puan)
+  idle_tx_sessions: 1.5            # uygulama başına idle in transaction session artışı (dönem ortalaması; ölçüm: 2 ve 5)
+                                   # ya da tüm uygulamaların toplamı bunun 2 katı (her uygulamada az sayıda session)
 
 score:
   weights: {latency: 0.30, errors: 0.25, saturation: 0.20, lock: 0.15, resource: 0.10}

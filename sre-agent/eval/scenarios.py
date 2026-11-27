@@ -31,6 +31,10 @@ def _edge(waiter, blocker, n, blocker_wait="Timeout"):
             "wait_max": "4.2", "waiter.experiment_id": "exp-LEAK", "blocker.lab_hold": "hold-inventory-lock"}
 
 
+def _pg(**over):
+    return {**NORMAL["pg"], **over}
+
+
 SCENARIOS = {
     "normal": lambda: (NORMAL, _w(), {}),
     "independent_load": lambda: (NORMAL, _w(apps={F: {"rpm": 200.0, "mean_ms": 22.0, "p95": 33.0}}), {}),
@@ -64,4 +68,29 @@ SCENARIOS = {
     "missing_telemetry": lambda: (NORMAL, _w(collector=False),
                                   {"drop": ("spans", "edges", "pg_lock_logs", "lock_waiters", "hikari")}),
     "stale_telemetry": lambda: (NORMAL, _w(), {"stale": ("hosts", "db_conn")}),
+    # PostgreSQL workload mechanism'leri. Değerler 2026-11-27 lab ölçümlerinin büyüklük sırasındadır (dakika başına).
+    "deadlock": lambda: (NORMAL, _w(dbstats={"dl": 1.0}, pg_errors={"svc_checkin": {"dl": 3}, "svc_reservation": {"dl": 2}},
+                                    apps={C: {"err": 0.03}}, lock_total=1.0, lock_pairs={(B, C): 1.0},
+                                    edges=[_edge(B, C, 8, blocker_wait="Lock"), _edge(C, B, 7, blocker_wait="Lock")]), {}),
+    "single_deadlock": lambda: (NORMAL, _w(dbstats={"dl": 0.2}, pg_errors={"svc_checkin": {"dl": 1}}), {}),
+    "serialization": lambda: (_w(dbstats={"rb": 70.0}), _w(dbstats={"rb": 226.0, "cm": 8700.0},
+                              pg_errors={"svc_flightops": {"sr": 60}, "svc_checkin": {"sr": 53}}), {}),
+    "temp_spill": lambda: (NORMAL, _w(dbstats={"tmp": 2.0e9}, apps={B: {"exec_ms": 40000.0}}), {}),
+    "bulk_insert": lambda: (NORMAL, _w(pg=_pg(ins=1.0e6, wal=8.0e8, ret=7.0e6), apps={C: {"exec_ms": 20000.0}}), {}),
+    "commit_storm": lambda: (NORMAL, _w(pg=_pg(ins=12000.0, wal=4.5e6), dbstats={"cm": 16000.0},
+                                        apps={B: {"exec_ms": 9000.0}}), {}),
+    "update_churn": lambda: (NORMAL, _w(pg=_pg(writes=150000.0, wal=8.0e7, autovac_blocks=15000.0, ret=1.3e7),
+                                        apps={R: {"exec_ms": 30000.0}}), {}),
+    "vacuum_blocked": lambda: (NORMAL, _w(pg=_pg(writes=140000.0, wal=6.0e7),
+                                          apps={R: {"exec_ms": 25000.0, "idle_tx": 2.0}, C: {"idle_tx": 2.0},
+                                                F: {"idle_tx": 2.0}, B: {"idle_tx": 2.0}}), {}),
+    "heavy_read": lambda: (NORMAL, _w(pg=_pg(ret=1.5e9, active_ms=300000.0), hosts={"db-vm": 78.0},
+                                      apps={C: {"exec_ms": 90000.0, "mean_ms": 60.0, "p95": 95.0}}), {}),
+    "db_memory": lambda: (_w(host_mem={"db-vm": 52.0}), _w(host_mem={"db-vm": 58.0}, pg=_pg(active_ms=100000.0),
+                                                           apps={R: {"exec_ms": 60000.0}}), {}),
+    "idle_in_tx": lambda: (NORMAL, _w(apps={C: {"idle_tx": 5.0}, F: {"idle_tx": 5.0}}), {}),
+    # Arka plan trafiği arttı ama hiçbir workload mechanism'i yok (rollback, commit ve tuple okuma trafikle artar)
+    "busy_traffic": lambda: (_w(dbstats={"rb": 70.0, "cm": 1500.0}, pg=_pg(ret=1.4e6, ins=60.0, wal=2.0e5)),
+                             _w(dbstats={"rb": 190.0, "cm": 4700.0}, pg=_pg(ret=5.5e6, ins=180.0, wal=4.0e5, writes=250.0),
+                                host_mem={"db-vm": 32.0}, apps={R: {"idle_tx": 1.0}}), {}),
 }

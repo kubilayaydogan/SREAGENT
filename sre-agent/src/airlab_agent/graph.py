@@ -18,7 +18,7 @@ from langgraph.graph import END, START, StateGraph
 
 from .tracing import child_config
 from . import report as rpt
-from .attribution import alternatives, detect
+from .attribution import DB_WORKLOAD, alternatives, detect
 from .features import assess_quality, extract, window_list
 from .llm import RUN_BUDGET, LlmBudgetExceeded, LlmUnavailable
 from .mcp_gateway import OUTCOME, McpUnavailable, QueryResult
@@ -123,6 +123,10 @@ def _guard_explanation(text: str, draft: dict) -> str:
     return out.payload.get("text", text) if isinstance(out.payload, dict) else text
 
 
+# En pahalı statement'ların ek evidence olarak toplandığı mechanism'ler
+TOP_STATEMENT_MECHS = {"db_cpu", "global_connection_pressure", "db_memory_pressure", *DB_WORKLOAD}
+
+
 def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_files: bool = True):
     cfg = settings.cfg
     b = cfg["budgets"]
@@ -137,9 +141,9 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
         if "row_lock" in ids and "edges_detail" not in st["extra"]:
             keys.append("edges_detail")
             why.append("row_lock → lock edge ayrıntısı")
-        if {"db_cpu", "global_connection_pressure"} & ids and "top_statements" not in st["extra"]:
+        if TOP_STATEMENT_MECHS & ids and "top_statements" not in st["extra"]:
             keys.append("top_statements")
-            why.append("db_cpu/connection pressure → top statements")
+            why.append("db_cpu/connection pressure/DB workload → top statements")
         it = st.get("iterations", 0)
         d = {"iteration": it, "keys": keys}
         if not keys:
@@ -240,7 +244,7 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
         keys = []
         if "row_lock" in ids and "edges_detail" not in state["extra"]:
             keys.append("edges_detail")
-        if {"db_cpu", "global_connection_pressure"} & ids and "top_statements" not in state["extra"]:
+        if TOP_STATEMENT_MECHS & ids and "top_statements" not in state["extra"]:
             keys.append("top_statements")
         extra, errors = dict(state["extra"]), list(state.get("errors", []))
         evidence, used = list(state["evidence"]), state.get("budget", {}).get("queries_used", 0)

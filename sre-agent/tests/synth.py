@@ -22,7 +22,10 @@ NORMAL = {"apps": {a: dict(NORMAL_APP) for a in APPS},
           "lock_pairs": {}, "edges": [], "pg_lock_logs": 0, "collector": True, "tooling_cores": {"chaos-controller": 0.1,
                                                                                                  "sre-agent": 0.05},
           # Dynatrace PostgreSQL extension (postgres.*), dakika başına; None → o dönemde extension verisi yok
-          "pg": {"active_ms": 2000.0, "writes": 100.0, "autovac_blocks": 0.0, "ckpt_blocks": 80.0}}
+          "pg": {"active_ms": 2000.0, "writes": 100.0, "autovac_blocks": 0.0, "ckpt_blocks": 80.0},
+          # İsteğe bağlı anahtarlar (yoksa boşta değerler): "dbstats" {dl, rb, cm, tmp, rd} dakika başına;
+          # "host_mem" {host: %}; "pg_errors" {db role: {dl, sr}} dönem toplamı; pg içinde ins / ret / wal.
+          }
 
 
 def cfg():
@@ -73,7 +76,8 @@ def build_multi(S: dict[str, dict], ws: list[Window], drop: tuple = (), stale: t
     """Pencere adı → senaryo eşlemesinden sonuç üretir (watch testleri dakikalık pencere kullanır)."""
     R: dict[str, list] = {k: [] for k in ("http", "spans", "hikari", "jvm_gc", "jvm_heap", "hosts", "containers",
                                           "db_conn", "db_sessions", "lock_waiters", "collector", "edges",
-                                          "pg_lock_logs", "db_stats", "statements", "pg_server", "pg_io")}
+                                          "pg_lock_logs", "db_stats", "statements", "pg_server", "pg_io",
+                                          "pg_error_logs")}
     for app in APPS:
         for outcome in ("SUCCESS", "SERVER_ERROR"):
             pw = {}
@@ -104,7 +108,8 @@ def build_multi(S: dict[str, dict], ws: list[Window], drop: tuple = (), stale: t
         R["containers"].append(_ts(ws, {wn: {"u": sp["tooling_cores"].get(tool, 0.0) * 60e9, "s": 0.0, "rss": 1e8}
                                         for wn, sp in S.items()}, {"name": f"airlab/{tool}:1.0.0"}))
     for host in ("app-vm", "db-vm"):
-        R["hosts"].append(_ts(ws, {wn: {"cpu": sp["hosts"][host], "io": 0.5, "mem": 30.0} for wn, sp in S.items()},
+        R["hosts"].append(_ts(ws, {wn: {"cpu": sp["hosts"][host], "io": 0.5, "mem": sp.get("host_mem", {}).get(host, 30.0)}
+                                   for wn, sp in S.items()},
                               {"host": host, "dt.smartscape.host": f"HOST-{host}"}))
     R["db_conn"].append(_ts(ws, {wn: {"r": sp["conn_ratio"], "used": sp["conn_ratio"] * 97, "slots": 97.0}
                                  for wn, sp in S.items()}, {}))
@@ -120,13 +125,18 @@ def build_multi(S: dict[str, dict], ws: list[Window], drop: tuple = (), stale: t
             R["edges"].append({"w": wn, **e})
         if sp["pg_lock_logs"]:
             R["pg_lock_logs"].append({"w": wn, "n": str(sp["pg_lock_logs"])})
-    R["db_stats"].append(_ts(ws, {wn: {"dl": 0.0, "rb": 0.0, "cm": 100.0, "tmp": 0.0, "rd": 0.0} for wn in S}, {}))
+    R["db_stats"].append(_ts(ws, {wn: {"dl": 0.0, "rb": 0.0, "cm": 100.0, "tmp": 0.0, "rd": 0.0,
+                                       **sp.get("dbstats", {})} for wn, sp in S.items()}, {}))
+    for wn, sp in S.items():
+        for role, d in sp.get("pg_errors", {}).items():
+            R["pg_error_logs"].append({"w": wn, "role": role, "dl": str(d.get("dl", 0)), "sr": str(d.get("sr", 0))})
     if any(sp.get("pg") for sp in S.values()):
         nul = dict.fromkeys(("act", "ret", "ins", "upd", "dlt", "cw", "cs", "wal", "bc"))
-        R["pg_server"].append(_ts(ws, {wn: ({"act": sp["pg"]["active_ms"], "ret": 5000.0, "ins": 0.0,
+        R["pg_server"].append(_ts(ws, {wn: ({"act": sp["pg"]["active_ms"], "ret": sp["pg"].get("ret", 5000.0),
+                                              "ins": sp["pg"].get("ins", 0.0),
                                               "upd": sp["pg"]["writes"], "dlt": 0.0,
                                               "cw": 100.0, "cs": 1.0, "bc": sp["pg"]["ckpt_blocks"],
-                                              "wal": 1e5} if sp.get("pg") else nul) for wn, sp in S.items()}, {}))
+                                              "wal": sp["pg"].get("wal", 1e5)} if sp.get("pg") else nul) for wn, sp in S.items()}, {}))
         nio = dict.fromkeys(("rd", "wr", "ext", "hit", "rt", "wt"))
         for bt in ("autovacuum worker", "client backend"):
             R["pg_io"].append(_ts(ws, {wn: ({"rd": 0.0 if bt == "autovacuum worker" else 5.0, "wr": 0.0, "ext": 0.0,

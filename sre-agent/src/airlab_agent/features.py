@@ -103,6 +103,7 @@ def extract(results: dict[str, Any], ws: list[Window], cfg: dict) -> dict[str, d
             if v["cpu"]:
                 F[wn]["hosts"][host] = {"cpu": _agg(v["cpu"], "avg"), "cpu_max": _agg(v["cpu"], "max"),
                                         "iowait": _agg(v["io"], "avg"), "mem": _agg(v["mem"], "avg"),
+                                        "mem_max": _agg(v["mem"], "max"),
                                         "points": len(v["cpu"])}
 
     img_map = cfg["container_image_to_app"]
@@ -134,6 +135,9 @@ def extract(results: dict[str, Any], ws: list[Window], cfg: dict) -> dict[str, d
                     f["db_sessions_lockwait"] = f.get("db_sessions_lockwait", 0.0) + avg
                 if str(state or "").startswith("idle in transaction"):   # DB, transaction içinde client'ı bekliyor
                     f["db_sessions_idle_tx"] = f.get("db_sessions_idle_tx", 0.0) + avg
+                    # metric yalnız session varken yazılır; dönem ortalaması = toplam / dönem dakikası
+                    w = next(x for x in ws if x.name == wn)
+                    f["db_sessions_idle_tx_tw"] = f.get("db_sessions_idle_tx_tw", 0.0) + sum(v["s"]) / max(w.minutes, 1)
 
     # Collector sağlığı: hangi dakikalarda başarılı ölçüm var → kilit değerleri o dakikalar için "gerçek"
     for rec in ts("collector"):
@@ -188,8 +192,32 @@ def extract(results: dict[str, Any], ws: list[Window], cfg: dict) -> dict[str, d
     for rec in ts("db_stats"):
         for wn, v in split_series(rec, ws, TS_FIELDS["db_stats"]).items():
             if v["cm"]:
+                n = len(v["cm"])
                 F[wn]["db"].update(deadlocks=_agg(v["dl"], "sum"), rollbacks=_agg(v["rb"], "sum"),
-                                   commits=_agg(v["cm"], "sum"), temp_bytes=_agg(v["tmp"], "sum"))
+                                   commits=_agg(v["cm"], "sum"), temp_bytes=_agg(v["tmp"], "sum"),
+                                   deadlocks_per_min=sum(v["dl"]) / n, rollbacks_per_min=sum(v["rb"]) / n,
+                                   commits_per_min=sum(v["cm"]) / n, temp_bytes_per_min=sum(v["tmp"]) / n,
+                                   blks_read_per_min=sum(v["rd"]) / n)
+
+    # PostgreSQL logu: deadlock ve serialization failure satırları (rol → uygulama). Query yanıt verdiyse kayıt
+    # yokluğu gerçek 0'dır; yanıt vermediyse alanlar yazılmaz (bilinmiyor).
+    for rec in ts("pg_error_logs"):
+        wn = rec.get("w")
+        if wn not in F:
+            continue
+        d, app = F[wn]["db"], cfg["db_role_to_app"].get(rec.get("role"))
+        for fld, key in (("dl", "deadlock"), ("sr", "serialization")):
+            n = num(rec.get(fld)) or 0
+            d[f"{key}_logs"] = d.get(f"{key}_logs", 0) + n
+            if app and n:
+                by = d.setdefault(f"{key}_logs_by_app", {})
+                by[app] = by.get(app, 0) + n
+    if _qr(results, "pg_error_logs")["status"] in ("OK", "EMPTY"):
+        for w in ws:
+            d = F[w.name]["db"]
+            for key in ("deadlock", "serialization"):
+                d.setdefault(f"{key}_logs", 0)
+                d[f"{key}_logs_per_min"] = d[f"{key}_logs"] / max(w.minutes, 1)
 
     # Dynatrace PostgreSQL extension (postgres.*). Değerler dakika başına: toplam / dolu nokta sayısı (boşluklar sayılmaz).
     # Kayıt yoksa alanlar hiç yazılmaz → "veri yok" (sıfır değil).
@@ -201,7 +229,8 @@ def extract(results: dict[str, Any], ws: list[Window], cfg: dict) -> dict[str, d
             per_min = lambda *fs: sum(sum(v[f]) for f in fs) / n   # noqa: E731
             d = F[wn]["db"]
             d.update(pg_points=n, pg_active_ms_per_min=per_min("act"), pg_tup_read_per_min=per_min("ret"),
-                     pg_tup_write_per_min=per_min("ins", "upd", "dlt"))
+                     pg_tup_write_per_min=per_min("ins", "upd", "dlt"), pg_tup_ins_per_min=per_min("ins"),
+                     pg_tup_upd_per_min=per_min("upd"))
             if v["cw"] or v["cs"]:
                 d["pg_checkpoint_ms_per_min"] = (sum(v["cw"]) + sum(v["cs"])) / max(len(v["cw"]), len(v["cs"]))
             if v["wal"]:
