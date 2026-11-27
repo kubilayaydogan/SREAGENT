@@ -312,9 +312,10 @@ class ChaosLabIT {
     void memorySortStaysInMemoryWithoutTempFiles() throws Exception {
         Thread.sleep(1500);         // önceki testlerin istatistikleri flush olsun
         long before = scalar("SELECT temp_bytes FROM pg_stat_database WHERE datname = current_database()");
-        var r = post("/lab/chaos/memory-sort?workMemMb=64&kRows=60");
+        var r = post("/lab/chaos/memory-sort?workMemMb=64&kRows=60&holdMs=1200");
         assertEquals(200, r.statusCode(), r.body());
         assertEquals(60_000, json(r).get("sortedRows").asLong());
+        assertTrue(json(r).get("ms").asLong() >= 1200, "bellek sort sonrası tutulmalı: " + r.body());
         Thread.sleep(1500);
         assertEquals(before, scalar("SELECT temp_bytes FROM pg_stat_database WHERE datname = current_database()"),
                 "sort bellekte kalmalı, temp dosyası yazılmamalı");

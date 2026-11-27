@@ -145,8 +145,9 @@ public class ChaosLabController {
     @Op("lab_chaos_memory_sort")
     @PostMapping("/memory-sort")
     public Map<String, Object> memorySort(@RequestParam(defaultValue = "32") int workMemMb,
-                                          @RequestParam(defaultValue = "200") int kRows) throws SQLException {
-        return w.memorySort(workMemMb, kRows);
+                                          @RequestParam(defaultValue = "200") int kRows,
+                                          @RequestParam(defaultValue = "0") long holdMs) throws SQLException {
+        return w.memorySort(workMemMb, kRows, holdMs);
     }
 
     @Op("lab_chaos_cpu_burn")

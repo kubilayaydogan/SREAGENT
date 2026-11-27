@@ -151,7 +151,7 @@ export const PARAM_LABEL: Record<string, string> = {
   targetTempMbPerSec: 'Hedef temp yazımı (MB/sn)',
   targetTps: 'Hedef transaction hızı (TPS)',
   targetRollbacksPerSec: 'Hedef rollback hızı (/sn)',
-  targetParallelWorkers: 'Hedef parallel worker sayısı',
+  workersPerQuery: 'Sorgu başına parallel worker',
   targetIdleSessions: 'Hedef idle in transaction session',
   rowsPerCall: 'Çağrı başına satır',
   commitsPerCall: 'Çağrı başına commit',

@@ -702,8 +702,10 @@ public class ChaosWorkloads {
      * belleği büyür. (temp-spill'in tersi: orada work_mem düşürülür ve sort diske taşar.) work_mem veri boyutundan
      * küçük verilirse sort diske taşar; çağıran, kRows × 0,3 kB'tan büyük bir değer vermelidir.
      */
-    public Map<String, Object> memorySort(int workMemMb, int kRows) throws SQLException {
+    public Map<String, Object> memorySort(int workMemMb, int kRows, long holdMs) throws SQLException {
         int mb = clamp(workMemMb, 4, 256);
+        // sort bittikten sonra bellek, sorgu bitene dek tutulur: CPU harcamadan bellek baskısı (statement_timeout 15 s)
+        double holdSec = Math.min(Math.max(0, holdMs), 10_000) / 1000.0;
         int rows = clamp(kRows, 10, 400) * 1_000;       // satır başına ≈ 0,3 kB → en fazla ≈ 120 MB
         return withPermit(() -> {
             try (Connection c = ds.getConnection()) {
@@ -714,15 +716,17 @@ public class ChaosWorkloads {
                     long t0 = System.nanoTime();
                     // window function tam sort ister (LIMIT'li top-N kısayolu yok); veri tabloya dokunmadan üretilir
                     try (PreparedStatement ps = c.prepareStatement(SqlTag.labTag("chaos-memsort", """
-                            SELECT max(rn) FROM (
+                            SELECT max(rn), pg_sleep(?) FROM (
                               SELECT row_number() OVER (ORDER BY o COLLATE "C") AS rn
                                 FROM (SELECT repeat(md5(g::text), 8) AS o FROM generate_series(1, ?) g) s
                             ) x"""))) {
-                        ps.setInt(1, rows);
+                        ps.setDouble(1, holdSec);
+                        ps.setInt(2, rows);
                         ps.executeQuery().close();
                     }
                     c.commit();
-                    return result("sortedRows", rows, "workMemMb", mb, "ms", (System.nanoTime() - t0) / 1_000_000);
+                    return result("sortedRows", rows, "workMemMb", mb, "heldMs", (long) (holdSec * 1000),
+                            "ms", (System.nanoTime() - t0) / 1_000_000);
                 } catch (SQLException e) {
                     c.rollback();
                     throw e;

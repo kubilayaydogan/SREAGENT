@@ -491,8 +491,9 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S15", "Parallel query fan-out", "db-cpu",
-                "Sorgular parallel query ile çalıştırılır: her sorgu birkaç parallel worker süreci ister. Eşzamanlı "
-                        + "sorgular sunucunun ortak worker havuzunu (max_parallel_workers) tüketir.",
+                "Sorgular parallel query ile çalıştırılır: her sorgu birkaç parallel worker süreci ister ve aynı "
+                        + "anda birden fazla CPU çekirdeğini kullanır. Eşzamanlı sorgular sunucunun ortak worker "
+                        + "havuzunu (max_parallel_workers) tüketir.",
                 List.of("chaos.synthetic_data", "max_parallel_workers > 0"),
                 "parallel sorguları gönderen uygulama", "PostgreSQL parallel worker havuzu + CPU çekirdekleri", 2, false,
                 List.of("DB: parallel worker süreçleri ↑, CPU çekirdeklerinin çoğu aynı anda meşgul",
@@ -501,15 +502,19 @@ public final class ScenarioRegistry {
                 List.of("DB CPU > budget (3 örnek)"),
                 "worker'lar durur, çalışan sorgular /lab/cleanup ile iptal edilir",
                 c -> {
-                    double tgt = target(c, c.pick(2.0, 4.0, 6.0, 7.0));
+                    // Ölçüm (2026-11-27, 6 vCPU): 2 worker'lı tek sorgu ≈ 3 süreç ≈ %50 DB CPU; iki uygulamada birer
+                    // kesintisiz döngü DB CPU'yu %96'ya çıkardı. Bu yüzden çağrılar seyrekleştirilir (worker başına
+                    // 0,5 çağrı/sn) ve yük, parallel worker sayısına göre değil DB CPU'ya göre kontrol edilir.
+                    double tgt = target(c, c.pick(30.0, 45.0, 60.0, 75.0));
+                    int perQuery = c.pick(1, 2, 2, 3);
                     return new Plan(each(c, "parallel-query", "/lab/chaos/parallel-query",
-                            p("workers", "" + c.pick(2, 2, 4, 4), "scanPct", "" + c.pick(50, 100, 100, 100)), 1,
-                            workersCap(c, c.pick(2, 4, 6, 8)), rate(c, 0), true),
-                            new Control(PARALLEL_WORKERS, Scope.DB, tgt, 25),
-                            List.of(Criterion.atLeast("parallel worker gözlendi", PARALLEL_WORKERS, Scope.DB, Agg.MAX,
-                                            Math.max(1, tgt * 0.5)),
+                            p("workers", "" + perQuery, "scanPct", "" + c.pick(30, 50, 70, 100)), 1,
+                            workersCap(c, c.pick(2, 3, 4, 5)), rate(c, 0.5), true),
+                            new Control(DB_CPU_PCT, Scope.DB, tgt, 15),
+                            List.of(Criterion.atLeast("parallel worker gözlendi", PARALLEL_WORKERS, Scope.DB, Agg.MAX, 1),
                                     Criterion.rise("DB CPU artışı", DB_CPU_PCT, Scope.DB, Agg.P90, 1.2, 5, false)),
-                            List.of(), params("targetParallelWorkers", tgt, "apps", participants(c)));
+                            List.of(), params("targetDbCpuPct", tgt, "workersPerQuery", perQuery,
+                                    "apps", participants(c)));
                 }));
 
         add(new ScenarioDef("S16", "Point-query flood", "db-cpu",
@@ -567,7 +572,7 @@ public final class ScenarioRegistry {
                         + "yazılmaz, her backend onlarca MB özel bellek kullanır.",
                 List.of("lab_os.host_stats() (DB bellek ölçümü)"),
                 "sort sorgularını gönderen uygulama", "PostgreSQL backend belleği (DB_VM RAM)", 1, false,
-                List.of("DB_VM bellek kullanımı ↑ (eşzamanlı sort sayısı × sort boyutu), CPU ↑",
+                List.of("DB_VM bellek kullanımı ↑ (eşzamanlı sort sayısı × sort boyutu); CPU yalnız sort anında kısa süre ↑",
                         "temp dosyası yazılmaz (S07'nin tersi)",
                         "page cache daralırsa diğer uygulamaların okuma sorguları yavaşlayabilir"),
                 List.of("DB_VM memory > %95", "budget aşımı"),
@@ -577,16 +582,20 @@ public final class ScenarioRegistry {
                     int total = c.pick(3, 5, 8, 12);                        // tüm uygulamalarda eşzamanlı sort
                     int n = participants(c).size();
                     int perApp = Math.max(1, Math.min(workersCap(c, (int) Math.ceil(total / (double) n)), 12 / n));
-                    // open-loop: bellek sert bir kaynaktır; üst sınır = uygulama × worker × sort boyutu (≤ ~1.3 GB)
+                    // open-loop: bellek sert bir kaynaktır; üst sınır = uygulama × worker × sort boyutu (≤ ~1.3 GB).
+                    // Sort bitince bellek holdMs boyunca CPU harcamadan tutulur. Ölçüm (2026-11-27): tutma olmadan
+                    // art arda sort'lar 5 worker ile DB CPU'yu %97'ye çıkardı (yük belleğe değil CPU'ya biniyordu).
+                    int hold = c.pick(4000, 5000, 6000, 7000);
                     List<Action> a = each(c, "memory-sort", "/lab/chaos/memory-sort",
-                            p("workMemMb", "" + (mb * 2), "kRows", "" + (mb * 3)), 1, perApp, 0, false);
+                            p("workMemMb", "" + (mb * 2), "kRows", "" + (mb * 3), "holdMs", "" + hold), 1, perApp, 0,
+                            false);
                     return new Plan(a, null,
                             List.of(Criterion.part("sort workload'ı çalıştı", WL_CALLS_PER_SEC, own(c, "memory-sort"),
                                             Agg.AVG, 0.1, true),
                                     Criterion.rise("DB_VM bellek artışı (puan)", DB_MEM_PCT, Scope.DB, Agg.MAX, 1.0,
                                             c.pick(0.5, 1.5, 4.0, 8.0), c.i() >= 2),
                                     Criterion.stays("temp dosyası yazılmadı", TEMP_MB_PER_SEC, Scope.DB, Agg.P90, 1.0, 1)),
-                            List.of(), params("sortMb", mb, "workersPerApp", perApp,
+                            List.of(), params("sortMb", mb, "holdMs", hold, "workersPerApp", perApp,
                                     "estimatedPeakMb", mb * perApp * n, "apps", participants(c)));
                 }));
 
