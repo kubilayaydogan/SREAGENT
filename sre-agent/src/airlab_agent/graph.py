@@ -299,8 +299,8 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
                     "duration_ms": int((time.monotonic() - t0) * 1000), "input_tokens": tin, "output_tokens": tout,
                     "structured_output": False, "source": "llm" if outcome == "ok" else "deterministic"}
         payload = {k: draft[k] for k in ("windows", "risk", "data_coverage", "causality", "impacted", "mechanisms",
-                                         "alternatives", "data_gaps", "human_review", "extra_evidence", "notes",
-                                         "features_summary", "status")}
+                                         "alternatives", "data_gaps", "true_zero_signals", "human_review",
+                                         "extra_evidence", "notes", "features_summary", "status")}
         try:
             text = llm.explain(payload, state.get("question"))
             text = _guard_explanation(text, draft)

@@ -1,0 +1,51 @@
+# Yanıt üslubu: sohbet yanıtı, analiz açıklaması ve RCA özeti
+
+Kullanıcıya gösterilen LLM metinleri, nöbet devrinde meslektaşına yazan bir SRE'nin üslubunu taşır: ilk cümle ana
+bulguyu söyler; ölçüm, hipotez ve doğrulanmış neden ayrı ifade edilir; ölçülen sıfır, veri yokluğu ve başarısız query
+karıştırılmaz.
+
+## Kurallar nerede?
+
+| Katman | Dosya | Kapsam |
+|---|---|---|
+| Ortak üslup | `sre-agent/src/airlab_agent/style.py` (`STYLE_PROMPT`) | Kullanıcıya metin üreten **her** system prompt |
+| Terminology policy | `sre-agent/src/airlab_agent/terminology.py` (`POLICY_PROMPT`) | Aynı; çelişkide son söz bundadır |
+| Analiz açıklaması | `airlab_agent/llm.py` (`SYSTEM_EXPLAIN_BASE`) | Veri sözleşmesi ve biçim |
+| Sohbet ekleri | `sre_platform/agent/prompts.py` | Geçmişle karşılaştırma, history ve follow-up yanıtları |
+| RCA özeti | `sre_platform/services/rca_service.py` (`SUMMARY_SYSTEM`) | En fazla 6 kısa cümle, tek paragraf |
+
+Ortak üslup tek yerden eklenir: `terminology.with_policy()` prompt'un kendi talimatlarından sonra üslup bloğunu, en
+sona terminology policy'yi koyar (idempotent). Sıra: **prompt'un kendi talimatları → üslup → terminology policy**.
+
+## Hangi üretim yolları bu kuralları alır?
+
+| Yol | Son metni üreten | System prompt |
+|---|---|---|
+| Sohbet, analiz sorusu | `agent/chat.py` `respond` → `ClaudePort.astream` | `ANALYSIS_SYSTEM` |
+| Sohbet, geçmiş kayıt sorusu | aynı | `HISTORY_SYSTEM` |
+| Sohbet, takip sorusu | aynı | `FOLLOWUP_SYSTEM` |
+| Manuel / zamanlanmış / watch investigation | `airlab_agent/graph.py` `explain` → `Llm.explain` | `SYSTEM_EXPLAIN` |
+| RCA raporu özeti | `services/rca_service.generate` | `SUMMARY_SYSTEM` |
+| Agent Builder agent'ı (LLM node'ları) | `builder/engine.py` `Runner._system` | agent talimatları + `with_policy` |
+
+`ClaudePort.astream` ayrıca her çağrıda `with_policy` uygular; ileride eklenen bir prompt da üslubu alır.
+
+Akan metin ile kaydedilen metin aynıdır: sohbet yanıtı token token iletilir, tur sonunda aynı metin mesaja yazılır
+(guardrail metni düzeltirse istemciye `answer_replaced` gider). Eski kayıtlar olduğu gibi okunur; geriye dönük
+yeniden yazım yoktur.
+
+## Değişmeyenler
+
+* Risk score, severity, data coverage ve confidence deterministik motordan gelir; prompt bunları değiştiremez.
+  `final_output` guardrail'i evidence kimliği ve risk tutarlılığını kontrol etmeye devam eder.
+* JSON / Pydantic sözleşmeleri (`AnalysisRequest`, yönlendirme çıktısı, Agent Builder structured output node'ları).
+  Üslup bloğu açıkça "belirli bir çıktı biçimi ya da şema isteniyorsa ona uy" der.
+* Ek LLM çağrısı yoktur; aynı çağrıların system prompt'u değişti.
+* LLM kullanılmayan çalıştırmalardaki deterministik açıklama (`report.deterministic_explanation`) aynı kaldı.
+* Agent Builder agent'larının kendi system prompt'u ve node talimatları başta ve aynen kalır.
+
+## Modele giden veri
+
+Analiz verisine `true_zero_signals` eklendi. Model artık üç durumu veriden ayırt eder: `true_zero_signals` (ölçülen
+sıfır), `data_gaps` içinde `EMPTY` / `STALE` (kaynak veri üretmedi) ve `ERROR` / `TIMEOUT` / `PERMISSION` /
+`UNAVAILABLE` / `SKIPPED_BUDGET` (query yanıt vermedi).

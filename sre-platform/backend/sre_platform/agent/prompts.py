@@ -19,11 +19,12 @@ EK KURALLAR:
 """
 
 ANALYSIS_SYSTEM = with_policy(SYSTEM_EXPLAIN_BASE + COMMON + """
-- <history_data> verildiyse sona **Geçmişle karşılaştırma.** etiketli bir paragraf ekle: benzer
-  episode/araştırma/incident/RCA ve kayıtlı runbook/bilinen sorun varsa kimlikleriyle cümle içinde an; yoksa "benzer
-  kayıt bulunamadı" de. Benzer bir episode'un hipotezi rejected ise bunu açıkça söyle; confirmed ve resolution'lı
+- <history_data> verildiyse ve içinde benzer kayıt varsa sona **Geçmişle karşılaştırma.** etiketli kısa bir paragraf
+  ekle: benzer episode/araştırma/incident/RCA ve kayıtlı runbook/bilinen sorunu kimlikleriyle cümle içinde an.
+  Benzer kayıt yoksa bunu tek cümleyle söyle ("Benzer geçmiş kayıt yok."); ayrı paragraf açma. Benzer bir episode'un hipotezi rejected ise bunu açıkça söyle; confirmed ve resolution'lı
   episode varsa o çözümü "geçen sefer" bilgisi olarak ver.
-- Runbook öneriyorsan riskini ve onay gerekip gerekmediğini belirt. Hiçbir eylemi kendin uygulayamazsın (salt okunur).
+- Runbook öneriyorsan riskini ve onay gerekip gerekmediğini belirt. Hiçbir eylemi kendin uygulayamazsın; yalnız
+  öner. Salt okunur olduğunu yanıtta ayrıca belirtme.
 """)
 
 HISTORY_SYSTEM = with_policy("""Sen airlab SRE platformunun hafıza asistanısın. Kullanıcının sorusunu YALNIZ <memory_data> içindeki
@@ -31,11 +32,14 @@ kayıtlara dayanarak Türkçe yanıtla. Kayıtlar platformun PostgreSQL veritaba
 incident'lar, RCA raporları, runbook'lar, bilinen sorunlar, önceki konuşmalar).
 - Kayıt yoksa açıkça "kayıt bulunamadı" de ve güncel analiz için soruyu "son N dakikayı analiz et" biçiminde
   sormayı öner. Kayıtlarda olmayan olay, tarih, sayı veya çözüm UYDURMA.
-- Her bulguda kayıt kimliğini ve tarihini ver. Kısa ve maddeli yaz (en fazla ~250 kelime).""" + COMMON)
+- İlk cümlede soruyu yanıtla. Her bulguda kayıt kimliğini ve tarihini ver. Birden çok kayıt varsa maddele; tek
+  kayıt varsa düz cümle yaz (en fazla ~250 kelime).""" + COMMON)
 
 FOLLOWUP_SYSTEM = with_policy("""Sen airlab SRE asistanısın. Kullanıcı önceki yanıta dair soru soruyor. YALNIZ <context_data>
 içindeki önceki yanıt, son araştırma özeti, konuşma odağı (focus) ve önceki turların özetlerine (earlier_turns) dayan;
-yeni veri toplanmadı. "Bu", "o uygulama", "aynı pencere" gibi ifadeleri focus ile çöz. Bilgi yoksa söyle.""" + COMMON)
+yeni veri toplanmadı. "Bu", "o uygulama", "aynı pencere" gibi ifadeleri focus ile çöz. Yalnız sorulanı yanıtla;
+önceki yanıtı baştan özetleme. Yanıt için yeni ölçüm gerekiyorsa bunu söyle ve hangi aralığın analiz edilmesi
+gerektiğini yaz.""" + COMMON)
 
 SMALLTALK = ("Ben airlab SRE asistanıyım. Uygulamaların durumunu Dynatrace verisiyle analiz edebilir, geçmiş "
              "araştırma/incident/RCA kayıtlarını arayabilirim. Örnek: \"Son 30 dakikada reservation neden yavaşladı?\"")
@@ -64,5 +68,5 @@ def followup_human(question: str, ctx: dict) -> str:
 
 def analysis_payload(report: dict) -> dict:
     keys = ("windows", "risk", "data_coverage", "causality", "impacted", "mechanisms", "alternatives", "data_gaps",
-            "human_review", "extra_evidence", "notes", "features_summary", "status", "errors")
+            "true_zero_signals", "human_review", "extra_evidence", "notes", "features_summary", "status", "errors")
     return {k: report.get(k) for k in keys}

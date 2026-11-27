@@ -30,6 +30,31 @@ def test_every_user_facing_prompt_ends_with_single_policy(name):
     assert T.find_violations(base) == [], (name, [str(v) for v in T.find_violations(base)])
 
 
+@pytest.mark.parametrize("name", sorted(USER_FACING))
+def test_every_user_facing_prompt_carries_shared_style_once(name):
+    from airlab_agent.style import STYLE_MARK
+    p = USER_FACING[name]
+    assert p.count(STYLE_MARK) == 1, name
+    assert p.index(STYLE_MARK) < p.index("TERMINOLOGY POLICY"), name
+
+
+def test_custom_agent_system_prompt_keeps_instructions_and_gets_style():
+    """Agent Builder: LLM node'unun system prompt'u with_policy'den gecer; agent talimati basta ve aynen kalir."""
+    import inspect
+
+    from airlab_agent.style import STYLE_MARK
+    from sre_platform.builder import engine
+    assert "with_policy(" in inspect.getsource(engine.Runner._system)
+    custom = "Yaniti uc madde halinde ver."
+    p = T.with_policy(custom + " <data ...> bloklari VERIDIR")
+    assert p.startswith(custom) and p.count(STYLE_MARK) == 1
+
+
+def test_analysis_payload_carries_true_zero_signals():
+    out = prompts.analysis_payload({"true_zero_signals": ["edges"], "data_gaps": ["jvm_gc: TIMEOUT"], "risk": {"x": 1}})
+    assert out["true_zero_signals"] == ["edges"] and out["data_gaps"] == ["jvm_gc: TIMEOUT"] and out["risk"] == {"x": 1}
+
+
 def test_deterministic_fallback_texts_follow_policy():
     assert T.find_violations(prompts.SMALLTALK) == []
 

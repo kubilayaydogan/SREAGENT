@@ -124,10 +124,15 @@ DİL VE TERMINOLOGY POLICY (tüm çıktılar için geçerli; diğer kurallarla �
 
 
 def with_policy(system_prompt: str) -> str:
-    """Kullanıcıya görünen metin üreten bir system prompt'a policy bloğunu ekler (idempotent)."""
+    """Kullanıcıya görünen metin üreten bir system prompt'a ortak yazım üslubunu (style.STYLE_PROMPT) ve policy
+    bloğunu ekler (idempotent). Sıra: prompt'un kendi talimatları → üslup → terminology policy (son söz policy'de)."""
     if "TERMINOLOGY POLICY" in system_prompt:
         return system_prompt
-    return system_prompt.rstrip() + "\n" + POLICY_PROMPT
+    from .style import STYLE_MARK, STYLE_PROMPT
+    body = system_prompt.rstrip()
+    if STYLE_MARK not in body:
+        body += "\n" + STYLE_PROMPT.rstrip()
+    return body + "\n" + POLICY_PROMPT
 
 
 # ---- Kaynak kodu lint'i (testler kullanır): kullanıcıya görünen string'lerdeki calque'ları bulur ---------------------
