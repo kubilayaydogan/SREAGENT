@@ -1,4 +1,4 @@
-# airlab SRE Operations Platform
+# airlab SRE Agent Management Platform
 
 Mevcut Python SRE Agent'ın (`sre-agent/`, Dynatrace Remote MCP üzerinden salt-okunur analiz) üstüne kurulan çok
 kullanıcılı operasyon platformu: kalıcı PostgreSQL hafızası, FastAPI backend, SSE ile canlı ajan adımları, React arayüz,

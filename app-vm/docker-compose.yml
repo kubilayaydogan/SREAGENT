@@ -227,7 +227,7 @@ services:
       DB_OWNER_PASSWORD: ${OWNER_DB_PASSWORD}
       LAB_ALLOW_RESET: ${LAB_ALLOW_RESET:-false}
 
-  # ---- SRE Operations Platform (sre-platform/): PostgreSQL + FastAPI + worker + React arayüz, aynı APP_VM'de.
+  # ---- SRE Agent Management Platform (sre-platform/): PostgreSQL + FastAPI + worker + React arayüz, aynı APP_VM'de.
   # Gizli değerler sre-platform.env (scripts/gen-sre-platform-env.sh üretir, chmod 600) + agent.env (Dynatrace/Claude).
   #   docker compose --profile platform build
   #   docker compose --profile platform up -d           # sre-migrate şemayı/tohumu uygular, sonra servisler kalkar

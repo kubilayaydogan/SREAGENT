@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sre-platform"
 version = "0.1.0"
-description = "airlab SRE Operations Platform — FastAPI backend, PostgreSQL kalıcılığı, ajan hafızası (airlab-agent çekirdeğini kullanır)"
+description = "airlab SRE Agent Management Platform — FastAPI backend, PostgreSQL kalıcılığı, ajan hafızası (airlab-agent çekirdeğini kullanır)"
 requires-python = ">=3.12"
 dependencies = [
   "airlab-sre-agent",                       # ../../sre-agent (mevcut çekirdek: MCP, sinyaller, puanlama, atıf, LangGraph)

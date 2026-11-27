@@ -1,6 +1,6 @@
 # Kullanıcı Kılavuzu
 
-Bu kılavuz SRE Operations Platform'un ekranlarını gerçek menü adlarıyla tanıtır. Her ekran için amaç, erişim yolu,
+Bu kılavuz SRE Agent Management Platform'un ekranlarını gerçek menü adlarıyla tanıtır. Her ekran için amaç, erişim yolu,
 ön koşul, adım adım kullanım ve beklenen sonuç verilir.
 
 Kurulum için: [Kurulum Kılavuzu](INSTALLATION.md). Tüm ekran görüntüleri: [Ekran Görüntüleri](SCREENSHOTS.md).

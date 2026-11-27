@@ -1,6 +1,6 @@
 # Platform Teknik Mimarisi
 
-Bu doküman SRE Operations Platform'un bileşenlerini, aralarındaki bağlantıları, veri katmanını, dış entegrasyonları ve
+Bu doküman SRE Agent Management Platform'un bileşenlerini, aralarındaki bağlantıları, veri katmanını, dış entegrasyonları ve
 dağıtım topolojisini anlatır. Agent'ın iç yapısı ayrı bir dokümandadır: [Agent Mimarisi](AGENT_ARCHITECTURE.md).
 
 [← Dokümantasyon merkezine dön](../README.md)
@@ -30,7 +30,7 @@ flowchart TB
     sre["SRE / operasyon kullanıcısı"]
     admin["Platform yöneticisi"]
 
-    subgraph platform["SRE Operations Platform"]
+    subgraph platform["SRE Agent Management Platform"]
         ui["Web arayüzü"]
         api["Backend API + SRE Agent"]
         worker["Worker"]

@@ -1,4 +1,4 @@
-# SRE Operations Platform backend (FastAPI API + sre-worker aynı imajdan). Build bağlamı: repo kökü
+# SRE Agent Management Platform backend (FastAPI API + sre-worker aynı imajdan). Build bağlamı: repo kökü
 # (mevcut ajan çekirdeği sre-agent/ DEĞİŞTİRİLMEDEN paket olarak kurulur).
 #   docker build -f sre-platform/backend/Dockerfile -t airlab/sre-platform-backend .
 FROM python:3.13-slim

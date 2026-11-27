@@ -192,7 +192,7 @@ export function AppLayout() {
   if (prefs.data) setDisplayPrefs(prefs.data);          // render öncesi: alt sayfalar zamanı tercih edilen timezone'da gösterir
   const brand = prefs.data?.display_name ?? "airlab SRE";
   useEffect(() => {
-    document.title = `${brand} Operations`;
+    document.title = `${brand} Agent Management`;
   }, [brand]);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const crumbs = useCrumbs();

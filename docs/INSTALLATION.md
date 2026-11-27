@@ -1,6 +1,6 @@
 # Kurulum Kılavuzu
 
-Bu kılavuz SRE Operations Platform'u (ve içine gömülü SRE Agent'ı) Docker Compose ile kurmayı anlatır. İzlenen
+Bu kılavuz SRE Agent Management Platform'u (ve içine gömülü SRE Agent'ı) Docker Compose ile kurmayı anlatır. İzlenen
 laboratuvarın (airlab) kurulumu isteğe bağlıdır ve ayrı bir bölümde özetlenir.
 
 [← Dokümantasyon merkezine dön](../README.md)

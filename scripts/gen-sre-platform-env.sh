@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SRE Operations Platform gizli değerlerini üretir (rastgele; değerler ekrana yazılmaz).
+# SRE Agent Management Platform gizli değerlerini üretir (rastgele; değerler ekrana yazılmaz).
 #   scripts/gen-sre-platform-env.sh [çıktı=deploy/out/sre-platform.env]
 # Çıktıyı APP_VM'de app-vm/sre-platform.env olarak kopyalayın (chmod 600). Var olan dosyanın üzerine YAZMAZ:
 # PostgreSQL parolası ilk açılışta volume'a işlenir, sonradan değiştirmek ALTER ROLE gerektirir.

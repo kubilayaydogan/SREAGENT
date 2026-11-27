@@ -73,7 +73,7 @@ def create_app(settings: PlatformSettings | None = None, *, runtime_factory=None
     except RuntimeError:
         ps_cfg = None
     docs = bool(ps_cfg and ps_cfg.api_docs)       # varsayılan kapalı: kimliksiz API şeması/keşif yüzeyi yok
-    app = FastAPI(title="airlab SRE Operations Platform", version="0.1.0", lifespan=lifespan,
+    app = FastAPI(title="airlab SRE Agent Management Platform", version="0.1.0", lifespan=lifespan,
                   docs_url="/api/docs" if docs else None, openapi_url="/api/openapi.json" if docs else None,
                   redoc_url=None)
     from ..security import context as sec_ctx

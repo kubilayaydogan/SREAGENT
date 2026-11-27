@@ -1,7 +1,7 @@
 # SRE Agent runbook (Aşama 2)
 
 Kod: `sre-agent/` (ayrıntı `sre-agent/README.md`). Karar kaydı: `docs/lab/decisions/ADR-007-sre-agent.md`.
-Ajan yalnız SRE Operations Platform üzerinden çalışır (ayrı komut satırı aracı/container yoktur).
+Ajan yalnız SRE Agent Management Platform üzerinden çalışır (ayrı komut satırı aracı/container yoktur).
 
 ## 1. Kurulum / güncelleme
 

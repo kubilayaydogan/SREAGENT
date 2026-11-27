@@ -38,7 +38,7 @@ export default function LoginPage() {
           </span>
           <div className="leading-tight">
             <h1 className="text-[13px] font-semibold text-ink">airlab SRE</h1>
-            <p className="text-xs text-muted">Operations Platform</p>
+            <p className="text-xs text-muted">Agent Management Platform</p>
           </div>
         </div>
         <div className="space-y-3">
