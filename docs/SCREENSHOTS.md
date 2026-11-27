@@ -329,25 +329,6 @@ bazı kayıt adları laboratuvar denemelerinden kalma test verisidir.
 | **Temel işlevler** | Health check, watch ve LangSmith senkronu için aç / kapat ve aralık alanları, ilgili ortam değişkeni adları. |
 | **Dosya** | `assets/screenshots/settings-scheduling.jpg` |
 
-## Eksik ekran görüntüleri
-
-Aşağıdaki ekranların görüntüsü alınmadı. Sahte görsel ya da mockup üretilmedi; bu ekranlar için dokümanlarda görsel
-bağlantısı yoktur.
-
-| Ekran | Neden alınmadı 
-|---|---|---|
-| Giriş ekranı (`/login`) | Görüntü almak için açık oturumu kapatmak gerekiyordu | 
-| Hesabım (`/account`) | Oturum listesi istemci IP adreslerini gösterir | 
-| Settings › MCP Servers | Connector adresi Dynatrace tenant kimliğini içerir |
-| Settings › Agent, Risk Scoring, Observability, Notifications, Retention & Memory, Security & Governance, Users & API Keys | Kapsam dışında bırakıldı; Users & API Keys kullanıcı adlarını gösterir | 
-|
-| Incident ayrıntısı | Alınmadı | 
-| Agent Memory, Agent Middleware ve Guardrails'in diğer sekmeleri | Yalnız ana sekmeler alındı |
-| Chaos Controller (Overview, Library, Builder, Live, History) | Ayrı bir kullanıcı adı ve parola gerektirir; bu çalışmada parola girilmedi | 
-| Laboratuvar servis arayüzleri (reservation, check-in, flight operations, baggage) | Laboratuvar uygulamaları bu dokümantasyonun odağı değil | 
-| Açık tema | Tüm görseller koyu temada alındı | 
-
-Yeni görsel eklerken:
 
 1. Dosyayı [`docs/assets/screenshots/`](assets/screenshots/) altına kebab-case adla kaydedin (örnek: `chaos-library.jpg`).
 2. Görselde token, parola, API key, gerçek IP adresi ya da tenant adresi olmadığını kontrol edin.
