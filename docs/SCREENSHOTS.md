@@ -341,10 +341,10 @@ bağlantısı yoktur.
 | Settings › MCP Servers | Connector adresi Dynatrace tenant kimliğini içerir | Adres alanını kapatarak görüntüleyin |
 | Settings › Agent, Risk Scoring, Observability, Notifications, Retention & Memory, Security & Governance, Users & API Keys | Kapsam dışında bırakıldı; Users & API Keys kullanıcı adlarını gösterir | İsteğe bağlı |
 | Incident ayrıntısı | Alınmadı | Bir incident açıp görüntüleyin |
-| Agent Memory, Agent Middleware ve Guardrails'in diğer sekmeleri | Yalnız ana sekmeler alındı | İsteğe bağlı |
-| Chaos Controller (Overview, Library, Builder, Live, History) | Ayrı bir kullanıcı adı ve parola gerektirir; bu çalışmada parola girilmedi | Chaos Controller'a giriş yapıp beş ekranı görüntüleyin |
-| Laboratuvar servis arayüzleri (reservation, check-in, flight operations, baggage) | Laboratuvar uygulamaları bu dokümantasyonun odağı değil | İsteğe bağlı |
-| Açık tema | Tüm görseller koyu temada alındı | İsteğe bağlı |
+| Agent Memory, Agent Middleware ve Guardrails'in diğer sekmeleri | Yalnız ana sekmeler alındı |
+| Chaos Controller (Overview, Library, Builder, Live, History) | Ayrı bir kullanıcı adı ve parola gerektirir; bu çalışmada parola girilmedi | 
+| Laboratuvar servis arayüzleri (reservation, check-in, flight operations, baggage) | Laboratuvar uygulamaları bu dokümantasyonun odağı değil | 
+| Açık tema | Tüm görseller koyu temada alındı | 
 
 Yeni görsel eklerken:
 
