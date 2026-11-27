@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { APPS, APP_COLOR, BuilderForm, DEFAULT_DURATIONS, DEFAULT_TRAFFIC, buildRequest, newClientRequestId } from '../lib'
-import { DURATION_FIELDS, INTENSITY_HELP, INTENSITY_LABEL, TARGET_MODES, humanDuration, intensityLabel, paramLabel, showValue } from '../labels'
+import { DURATION_FIELDS, DURATION_RANGE, INTENSITY_HELP, INTENSITY_LABEL, LOAD_LABEL, categoryLabel, humanDuration, intensityLabel, metricLabel, paramLabel, showValue } from '../labels'
 import type { Custom, Intensity, Scenario } from '../types'
 
 const INTENSITIES: Intensity[] = ['LIGHT', 'MEDIUM', 'HIGH', 'CRITICAL', 'CUSTOM']
@@ -10,7 +10,7 @@ const CUSTOM_FIELDS: [keyof Custom, string][] = [
   ['workers', 'Eşzamanlı worker'], ['dbConnections', 'DB bağlantısı / session'],
   ['txDurationMs', 'Transaction süresi (ms)'], ['queryFrequency', 'Query sıklığı (worker başına /sn)'],
   ['targetValue', 'Hedef seviye (ör. DB CPU %)'], ['errorPct', 'Hata olasılığı (%)'],
-  ['maxAffectedServices', 'En fazla etkilenen servis'],
+  ['maxAffectedServices', 'En fazla katılan uygulama'],
 ]
 const BUDGET_FIELDS: [string, string][] = [
   ['maxDbCpuPct', 'DB CPU en fazla (%)'], ['maxDbConnectionsPct', 'DB bağlantısı en fazla (%)'],
@@ -32,8 +32,15 @@ type Action = Record<string, unknown>
 function actionText(a: Action): string {
   const app = String(a.app ?? '')
   switch (a.kind) {
-    case 'LOOP':
-      return `${app} üzerinde ${a.minWorkers}–${a.maxWorkers} worker ile tekrarlayan yük` + (a.controlled ? ' (seviye kendiliğinden ayarlanır)' : '')
+    case 'LOOP': {
+      const params = (a.params ?? {}) as Record<string, string>
+      let load = LOAD_LABEL[String(a.path)] ?? 'tekrarlayan yük'
+      if (a.path === '/lab/chaos/table-lock') {
+        load = params.mode === 'hold' ? 'tabloyu kilitleyip tutar (ACCESS EXCLUSIVE)' : 'kilitli tabloyu okumaya çalışır'
+      }
+      const workers = a.minWorkers === a.maxWorkers ? `${a.maxWorkers} worker` : `${a.minWorkers}–${a.maxWorkers} worker`
+      return `${app}: ${load} · ${workers}` + (a.controlled ? ' (sayı kendiliğinden ayarlanır)' : '')
+    }
     case 'NETEM':
       return `${app} → ${a.netemTarget} arasına ${a.delayMs} ms latency, %${a.lossPct} packet loss`
     case 'TRAFFIC':
@@ -41,6 +48,14 @@ function actionText(a: Action): string {
     default:
       return `${app}: ${String(a.kind)}`
   }
+}
+
+/** Senaryonun önerdiği uygulama kümesi; ilk eleman yükü ilk başlatandır. */
+function recommended(sc: Scenario | undefined, first: string): string[] {
+  const others = APPS.filter((a) => a !== first)
+  if (!sc) return [first]
+  if (sc.defaultAllTargets) return [first, ...others]
+  return [first, ...others.slice(0, Math.max(0, sc.minApps - 1))]
 }
 
 export function Builder({ preset, go }: { preset?: string; go: (h: string) => void }) {
@@ -53,6 +68,10 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState<'manual' | 'random'>('manual')
+  /** Yükü başlatan uygulamalar (ilk eleman = ilk başlatan). Kullanıcı dokunmadıysa senaryo değişince öneri uygulanır. */
+  const [apps, setApps] = useState<string[]>(['checkin'])
+  const [randomApps, setRandomApps] = useState(false)
+  const [touched, setTouched] = useState(false)
   const [rp, setRp] = useState({ seed: '', count: 3, parallel: false, cooldownSec: 60, maxIntensity: 'MEDIUM' as Intensity,
     allowedScenarios: [] as string[], excludedScenarios: [] as string[], allowedApps: [] as string[], excludedApps: [] as string[] })
 
@@ -64,16 +83,30 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
   const setCustom = (k: keyof Custom, v: number | null) => set('custom', { ...f.custom, [k]: v })
   const setBudget = (k: string, v: number | null) => set('custom', { ...f.custom, budget: { ...(f.custom.budget ?? {}), [k]: v } })
   const toggle = (list: string[], v: string) => list.includes(v) ? list.filter((x) => x !== v) : [...list, v]
+  const pickApps = (next: string[]) => { setApps(next); setRandomApps(false); setTouched(true); setPreview(null) }
+
+  useEffect(() => {
+    if (sc && !touched) setApps((cur) => recommended(sc, cur[0] ?? 'checkin'))
+  }, [sc, touched])
+  // seçim → API alanları: 4 uygulama = ALL, aksi halde MULTI (ilk başlatan dahil); rastgele = RANDOM
+  useEffect(() => {
+    setF((x) => randomApps
+      ? { ...x, initiator: '', targetMode: 'RANDOM', targets: [] }
+      : { ...x, initiator: apps[0] ?? '', targetMode: apps.length === APPS.length ? 'ALL' : 'MULTI', targets: apps })
+  }, [apps, randomApps])
 
   const d = f.durations
   const total = d.baselineSec + d.rampSec + d.durationSec + d.recoverySec
-  const needsTargets = f.targetMode === 'SINGLE' || f.targetMode === 'MULTI'
   const problems: string[] = []
-  if (needsTargets && f.targets.length === 0) problems.push('Yüke katılacak uygulamayı seçin.')
-  if (sc && f.targetMode === 'MULTI' && f.targets.length > 0 && f.targets.length < sc.minApps) problems.push(`Bu senaryo en az ${sc.minApps} uygulama ister.`)
-  if (d.durationSec <= 0) problems.push('Chaos süresi 0\'dan büyük olmalı.')
+  if (!randomApps && apps.length === 0) problems.push('Yükü başlatacak en az bir uygulama seçin.')
+  if (sc && !randomApps && apps.length > 0 && apps.length < sc.minApps) problems.push(`Bu senaryo en az ${sc.minApps} uygulama ister.`)
+  for (const x of DURATION_FIELDS) {
+    const r = DURATION_RANGE[x.k]
+    if (r && (!Number.isFinite(d[x.k]) || d[x.k] < r[0] || d[x.k] > r[1])) problems.push(`${x.label} ${r[0]}–${r[1]} sn aralığında olmalı.`)
+  }
   if (d.maxDurationSec > 0 && total > d.maxDurationSec) problems.push('Toplam süre, “En uzun süre” sınırını aşıyor.')
-  const mode = TARGET_MODES.find((m) => m.v === f.targetMode)
+  const severe = f.intensity === 'HIGH' || f.intensity === 'CRITICAL'
+  const cats = [...new Set(scenarios.map((s) => s.category))]
 
   async function doPreview() {
     setErr(null)
@@ -120,48 +153,53 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
         <div>
           {tab === 'manual' ? (
             <>
-              <fieldset><legend><span className="step">1</span> Hangi sorun uygulansın?</legend>
+              <fieldset><legend><span className="step">1</span> Veritabanına hangi yük uygulansın?</legend>
                 <select className="wide" value={f.scenarioId} onChange={(e) => set('scenarioId', e.target.value)}>
-                  {scenarios.map((s) => <option key={s.id} value={s.id}>{s.id} — {s.name}</option>)}
+                  {cats.map((c) => (
+                    <optgroup key={c} label={categoryLabel(c)}>
+                      {scenarios.filter((s) => s.category === c).map((s) => <option key={s.id} value={s.id}>{s.id} — {s.name}</option>)}
+                    </optgroup>
+                  ))}
                 </select>
-                {sc && <p className="help">{sc.description}</p>}
+                {sc && <p className="help"><span className="chip">{categoryLabel(sc.category)}</span> {sc.description}</p>}
+                {sc && sc.expectedImpact.length > 0 && (
+                  <details className="impact">
+                    <summary>Beklenen etki</summary>
+                    <ul>{sc.expectedImpact.map((x) => <li key={x}>{x}</li>)}</ul>
+                  </details>
+                )}
               </fieldset>
 
-              <fieldset><legend><span className="step">2</span> Yükü hangi uygulama başlatsın?</legend>
+              <fieldset><legend><span className="step">2</span> Yükü hangi uygulamalar başlatsın?</legend>
                 <div className="apps">
                   {APPS.map((a) => (
-                    <label key={a} className={'appchip ' + (f.initiator === a ? 'on' : '')} style={{ borderColor: APP_COLOR[a] }}>
-                      <input type="radio" name="init" checked={f.initiator === a} onChange={() => set('initiator', a)} />{a}
+                    <label key={a} className={'appchip ' + (!randomApps && apps.includes(a) ? 'on' : '')} style={{ borderColor: APP_COLOR[a] }}>
+                      <input type="checkbox" disabled={randomApps} checked={!randomApps && apps.includes(a)} onChange={() => pickApps(toggle(apps, a))} />{a}
+                      {!randomApps && apps[0] === a && apps.length > 1 && <span className="tag req">ilk başlatan</span>}
                     </label>
                   ))}
                 </div>
-                {sc && <p className="help">Bu senaryoda yükü başlatan: {sc.initiatorRole}.</p>}
-              </fieldset>
-
-              <fieldset><legend><span className="step">3</span> Yüke başka hangi uygulamalar katılsın?</legend>
-                <div className="modes">
-                  {TARGET_MODES.map((m) => (
-                    <label key={m.v} title={m.help} className={f.targetMode === m.v ? 'on' : ''}>
-                      <input type="radio" name="mode" checked={f.targetMode === m.v} onChange={() => set('targetMode', m.v)} />{m.label}
-                    </label>
-                  ))}
+                <div className="quick">
+                  <button type="button" onClick={() => pickApps(recommended(sc, apps[0] ?? 'checkin'))} disabled={!sc}>Senaryonun önerdiği</button>
+                  <button type="button" onClick={() => pickApps([...(apps.length ? apps : []), ...APPS.filter((a) => !apps.includes(a))])}>Tümü</button>
+                  <label className="inline" title="Uygulamalar seed değerine göre rastgele seçilir; aynı seed aynı seçimi verir.">
+                    <input type="checkbox" checked={randomApps} onChange={(e) => { setRandomApps(e.target.checked); setTouched(true); setPreview(null) }} />Rastgele seç</label>
                 </div>
-                {mode && <p className="help">{mode.help}</p>}
-                {needsTargets && (
-                  <div className="apps">
-                    {APPS.map((a) => (
-                      <label key={a} className={'appchip ' + (f.targets.includes(a) ? 'on' : '')} style={{ borderColor: APP_COLOR[a] }}>
-                        <input type={f.targetMode === 'SINGLE' ? 'radio' : 'checkbox'} checked={f.targets.includes(a)}
-                          onChange={() => set('targets', f.targetMode === 'SINGLE' ? [a] : toggle(f.targets, a))} />{a}
-                      </label>
-                    ))}
-                  </div>
+                {!randomApps && apps.length > 1 && (
+                  <label className="inline">İlk başlatan uygulama
+                    <select value={apps[0]} onChange={(e) => pickApps([e.target.value, ...apps.filter((a) => a !== e.target.value)])}>
+                      {apps.map((a) => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </label>
                 )}
-                <p className="help">Hedef her senaryoda paylaşılan PostgreSQL'dir. Seçilen her uygulama yükü kendi veritabanı bağlantılarıyla başlatır; etki, aynı veritabanını kullanan diğer uygulamalara da yansıyabilir.</p>
-                {sc && <p className="help">Yükün bindiği yer: {sc.directTarget}.</p>}
+                {sc && <p className="help">{sc.defaultAllTargets ? 'Bu senaryo için öneri: tüm uygulamalar.'
+                  : sc.minApps > 1 ? `Bu senaryo en az ${sc.minApps} uygulama ister.`
+                    : 'Tek uygulama yeterlidir; birden fazla seçerseniz yük artar.'}
+                  {' '}Seçilen her uygulama aynı yükü kendi veritabanı bağlantılarıyla başlatır.{apps.length > 1 && !randomApps ? ` “İlk başlatan”, sonuçların esas alındığı uygulamadır (${sc.initiatorRole}).` : ''}</p>}
+                <p className="help">Hedef her senaryoda paylaşılan PostgreSQL'dir{sc ? ` (yükün bindiği yer: ${sc.directTarget})` : ''}. Etki, aynı veritabanını kullanan diğer uygulamalara da yansıyabilir.</p>
               </fieldset>
 
-              <fieldset><legend><span className="step">4</span> Ne kadar şiddetli olsun?</legend>
+              <fieldset><legend><span className="step">3</span> Ne kadar şiddetli olsun?</legend>
                 <div className="modes">
                   {INTENSITIES.map((i) => (
                     <label key={i} title={INTENSITY_HELP[i]} className={'int-' + i.toLowerCase() + (f.intensity === i ? ' on' : '')}>
@@ -169,7 +207,7 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
                     </label>
                   ))}
                 </div>
-                <p className={'help ' + (f.intensity === 'HIGH' || f.intensity === 'CRITICAL' ? 'warntext' : '')}>{INTENSITY_HELP[f.intensity]}</p>
+                <p className={'help ' + (severe ? 'warntext' : '')}>{INTENSITY_HELP[f.intensity]}</p>
                 {f.intensity === 'CUSTOM' && (
                   <>
                     <div className="form-grid">
@@ -205,13 +243,13 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
               <div className="apps wrap">{scenarios.map((s) => (
                 <label key={s.id} title={s.name} className={'appchip ' + (rp.allowedScenarios.includes(s.id) ? 'on' : '')}>
                   <input type="checkbox" checked={rp.allowedScenarios.includes(s.id)}
-                    onChange={() => setRp({ ...rp, allowedScenarios: toggle(rp.allowedScenarios, s.id) })} />{s.id}</label>))}
+                    onChange={() => setRp({ ...rp, allowedScenarios: toggle(rp.allowedScenarios, s.id) })} />{s.id} <small>{s.name}</small></label>))}
               </div>
               <h4>Bu senaryoları kullanma</h4>
               <div className="apps wrap">{scenarios.map((s) => (
                 <label key={s.id} title={s.name} className={'appchip ' + (rp.excludedScenarios.includes(s.id) ? 'on bad' : '')}>
                   <input type="checkbox" checked={rp.excludedScenarios.includes(s.id)}
-                    onChange={() => setRp({ ...rp, excludedScenarios: toggle(rp.excludedScenarios, s.id) })} />{s.id}</label>))}
+                    onChange={() => setRp({ ...rp, excludedScenarios: toggle(rp.excludedScenarios, s.id) })} />{s.id} <small>{s.name}</small></label>))}
               </div>
               <h4>Uygulamalar <small className="muted">(soldaki: kullan · sağdaki: kullanma)</small></h4>
               <div className="apps">{APPS.map((a) => (
@@ -225,7 +263,7 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
             </fieldset>
           )}
 
-          <fieldset><legend><span className="step">{tab === 'manual' ? 5 : '·'}</span> Ne kadar sürsün?</legend>
+          <fieldset><legend><span className="step">{tab === 'manual' ? 4 : '·'}</span> Ne kadar sürsün?</legend>
             <div className="timeline" aria-hidden="true">
               {DURATION_FIELDS.filter((x) => x.tone).map((x) => (
                 <span key={x.k} className={'seg ' + x.tone} style={{ flexGrow: Math.max(1, d[x.k]) }} title={x.help}>
@@ -276,12 +314,15 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
             <>
               <h3>Deney özeti</h3>
               <p className="sentence">
-                <b>{f.initiator}</b> uygulaması <b>{sc ? sc.name : f.scenarioId}</b> senaryosunu <b>{intensityLabel(f.intensity).toLowerCase()}</b> yoğunlukta başlatır.
-                {' '}Hedef paylaşılan PostgreSQL; yüke katılan: <b>{needsTargets ? (f.targets.join(', ') || 'seçilmedi') : mode?.label.toLowerCase()}</b>.
+                <b>{randomApps ? 'Rastgele seçilen uygulamalar' : (apps.join(', ') || 'seçilmedi')}</b>,
+                {' '}paylaşılan PostgreSQL üzerinde <b>{sc ? sc.name : f.scenarioId}</b> yükünü <b>{intensityLabel(f.intensity).toLowerCase()}</b> yoğunlukta başlatır.
                 {' '}Toplam süre yaklaşık <b>{humanDuration(total)}</b>; chaos {humanDuration(d.durationSec)} uygulanır.
                 {' '}Arka plan trafiği {f.traffic.enabled ? 'açık' : 'kapalı'}.
               </p>
               {problems.length > 0 && <ul className="problems">{problems.map((p) => <li key={p}>{p}</li>)}</ul>}
+              {severe && problems.length === 0 && (
+                <p className="help warntext">{intensityLabel(f.intensity)} yoğunluk: {INTENSITY_HELP[f.intensity]} Güvenlik sınırı aşılırsa deney kendiliğinden durur.</p>
+              )}
               <div className="actions">
                 <button onClick={doPreview} disabled={problems.length > 0}>Planı kontrol et</button>
                 <button className="primary" disabled={busy || problems.length > 0} onClick={start}>Deneyi başlat</button>
@@ -291,15 +332,14 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
                 <div className="preview">
                   <h4>Kimler katılıyor</h4>
                   <dl className="kv">
-                    <dt>Yükü başlatan</dt><dd>{String(preview.initiator)}</dd>
                     <dt>Hedef</dt><dd>Paylaşılan PostgreSQL</dd>
-                    <dt>Yükü başlatan uygulamalar</dt><dd>{(preview.participants as string[]).join(', ')}</dd>
+                    <dt>Yükü başlatan uygulamalar</dt><dd>{(preview.participants as string[]).map((a) => a === preview.initiator && (preview.participants as string[]).length > 1 ? `${a} (ilk başlatan)` : a).join(', ')}</dd>
                     <dt>Etkilenmesi beklenen</dt><dd>{(preview.expectedAffected as string[]).join(', ') || 'uygulama düzeyinde beklenmiyor (etki veritabanında)'}</dd>
                   </dl>
                   <h4>Ne yapılacak</h4>
                   <ul>{(preview.actions as Action[]).map((a) => <li key={String(a.part)}>{actionText(a)}</li>)}</ul>
                   <p>{preview.control
-                    ? <>Yük, <b>{String((preview.control as { metric: string }).metric)}</b> ölçümü <b>{showValue((preview.control as { target: number }).target)}</b> değerine ulaşacak şekilde kendiliğinden ayarlanır.</>
+                    ? <>Yük, <b>{metricLabel(String((preview.control as { metric: string }).metric))}</b> ölçümü <b>{showValue((preview.control as { target: number }).target)}</b> değerine ulaşacak şekilde kendiliğinden ayarlanır.</>
                     : 'Yük sabit seviyede uygulanır.'}</p>
                   <h4>Başarı ölçütleri</h4>
                   <ul className="criteria">{(preview.criteria as Record<string, unknown>[]).map((c) => (

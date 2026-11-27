@@ -157,3 +157,13 @@ ul.criteria, ul.checks { list-style: none; padding-left: 0 !important; margin: 4
 .bandkey { display: inline-flex; gap: 12px; font-size: 12px; font-weight: 400; color: var(--ink2); }
 .bandkey span { display: inline-flex; align-items: center; gap: 4px; } .bandkey i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
 @media (max-width: 1000px) { .top { flex-wrap: wrap; gap: 10px; } .pagehead { flex-direction: column; } }
+.quick { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; font-size: 13px; }
+.quick button { padding: 2px 10px; font-size: 12px; }
+label.inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+label.inline select { width: auto; }
+.appchip .tag { margin-left: 4px; }
+.appchip small { font-weight: 400; color: var(--ink2); }
+.appchip:has(input:disabled) { opacity: .5; cursor: default; }
+details.impact { margin-top: 6px; font-size: 12px; color: var(--ink2); }
+details.impact summary { cursor: pointer; }
+details.impact ul { margin: 4px 0 0; padding-left: 18px; }

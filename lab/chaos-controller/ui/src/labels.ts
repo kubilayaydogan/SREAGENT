@@ -97,6 +97,51 @@ export const CATEGORY_LABEL: Record<string, string> = {
   cascade: 'Zincirleme etki',
   load: 'Yük',
 }
+/** Lab workload ucu → okurun anlayacağı yük tipi (plan önizlemesinde kullanılır). */
+export const LOAD_LABEL: Record<string, string> = {
+  '/lab/chaos/table-lock': 'tablo kilidi',
+  '/lab/chaos/contend': 'aynı satırlarda UPDATE ve bekletme (row lock)',
+  '/lab/chaos/long-tx': 'uzun süre açık tutulan transaction',
+  '/lab/chaos/cpu-query': 'CPU-yoğun sorgular',
+  '/lab/chaos/write-burst': 'toplu INSERT',
+  '/lab/chaos/heavy-read': 'tabloyu baştan sona tarayan okumalar (seq scan)',
+  '/lab/chaos/temp-spill': 'temp dosyasına taşan büyük sort',
+  '/lab/chaos/serialization': 'REPEATABLE READ altında çakışan güncellemeler',
+  '/lab/chaos/deadlock': 'ters sırayla kilitleme (deadlock)',
+  '/lab/chaos/connection-storm': 'havuz dışı kısa ömürlü bağlantılar',
+  '/lab/chaos/commit-storm': 'tek satırlık, ayrı ayrı commit edilen INSERT\'ler',
+  '/lab/chaos/update-churn': 'sürekli toplu UPDATE (dead tuple üretir)',
+  '/lab/chaos/advisory-lock': 'advisory lock tutma ve bekleme',
+  '/lab/chaos/idle-in-tx': 'boşta bekleyen açık transaction oturumları',
+  '/lab/chaos/parallel-query': 'parallel query ile çalışan sorgular',
+  '/lab/chaos/point-queries': 'çok sayıda küçük primary key sorgusu',
+  '/lab/chaos/memory-sort': 'bellekte yapılan büyük sort',
+}
+
+/** Kontrol ve ölçüt metriklerinin okunur adları; bilinmeyen metrik olduğu gibi kalır. */
+export const METRIC_LABEL: Record<string, string> = {
+  DB_CPU_PCT: 'DB CPU (%)',
+  DB_MEM_PCT: 'DB bellek (%)',
+  DB_CONNECTIONS_PCT: 'DB bağlantı doluluğu (%)',
+  DB_TPS: 'transaction hızı (TPS)',
+  LOCK_WAITERS: 'lock bekleyen session sayısı',
+  IDLE_IN_TX: 'idle in transaction session sayısı',
+  ROLLBACKS_PER_SEC: 'rollback hızı (/sn)',
+  DEADLOCKS_PER_MIN: 'deadlock sayısı (/dk)',
+  INSERTS_PER_SEC: 'insert hızı (satır/sn)',
+  UPDATES_PER_SEC: 'update hızı (satır/sn)',
+  TEMP_MB_PER_SEC: 'temp dosyası yazımı (MB/sn)',
+  PARALLEL_WORKERS: 'parallel worker sayısı',
+}
+export function metricLabel(m: string): string {
+  return METRIC_LABEL[m] ?? m
+}
+
+/** Backend'in kabul ettiği süre aralıkları (sn); form göndermeden önce aynı kural gösterilir. */
+export const DURATION_RANGE: Partial<Record<keyof Durations, [number, number]>> = {
+  baselineSec: [10, 600], rampSec: [0, 600], durationSec: [10, 3600], recoverySec: [15, 900],
+}
+
 export function categoryLabel(c: string): string {
   return CATEGORY_LABEL[c] ?? c
 }
