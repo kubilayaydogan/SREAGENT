@@ -26,6 +26,7 @@ STEPS = [
 SIGNAL_STEP = {"http": "app_metrics", "hikari": "app_metrics", "jvm_gc": "app_metrics", "jvm_heap": "app_metrics",
                "db_conn": "db_metrics", "db_sessions": "db_metrics", "lock_waiters": "db_metrics",
                "collector": "db_metrics", "db_stats": "db_metrics", "statements": "db_metrics",
+               "pg_server": "db_metrics", "pg_io": "db_metrics",
                "edges": "logs", "pg_lock_logs": "logs", "spans": "traces", "hosts": "infra", "containers": "infra",
                "edges_detail": "extra", "top_statements": "extra", "slow_traces": "traces", "problems": "extra"}
 NODE_MESSAGE = {"plan": "Analiz penceresi ve karşılaştırma (baseline) penceresi belirlendi.",

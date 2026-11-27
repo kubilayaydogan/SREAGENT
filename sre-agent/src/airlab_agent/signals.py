@@ -162,11 +162,34 @@ def q_statements(ws, cfg):
             f"{_rng(ws)}, interval:1m, by:{{db.role}}")
 
 
+def q_pg_server(ws, cfg):
+    """Dynatrace PostgreSQL extension (postgres.*), sunucu geneli: query active time, tuple trafiği, checkpoint ve WAL.
+    Tek timeseries komutu en fazla 10 aggregation kabul ediyor (11.'de DQL-SYNTAX-ERROR; tenant'ta 2026-11-27'de görüldü).
+    `postgres.checkpoints_{req,timed}.count` SORGULANMAZ: PG17'de extension bu sayaçları hep 0 yazıyor (elle CHECKPOINT
+    ile doğrulandı, 2026-11-27); checkpoint aktivitesi `postgres.buffers_checkpoint.count` (yazılan blok) ile okunur.
+    `.count` metric'leri extension'ın her örneklemede yazdığı delta'dır; 1 dk kovada toplanır."""
+    return (f"timeseries act=sum(postgres.active_time.count), ret=sum(postgres.tup_returned.count), "
+            f"ins=sum(postgres.tup_inserted.count), upd=sum(postgres.tup_updated.count), "
+            f"dlt=sum(postgres.tup_deleted.count), "
+            f"cw=sum(postgres.checkpoint_write_time.count), cs=sum(postgres.checkpoint_sync_time.count), "
+            f"wal=sum(postgres.wal_bytes.count), bc=sum(postgres.buffers_checkpoint.count), {_rng(ws)}, interval:1m")
+
+
+def q_pg_io(ws, cfg):
+    """pg_stat_io (extension): backend tipine göre blok I/O — autovacuum worker / client backend ayrımı.
+    Sonuç kümesini ilk metric (reads) belirliyor: okuma satırı olmayan backend tipleri (checkpointer, background
+    writer) bu sorguda DÖNMEZ (tenant'ta 2026-11-27'de görüldü); checkpoint için pg_server.bc kullanılır."""
+    return (f"timeseries rd=sum(postgres.io.reads.count), wr=sum(postgres.io.writes.count), "
+            f"ext=sum(postgres.io.extends.count), hit=sum(postgres.io.hits.count), "
+            f"rt=sum(postgres.io.read_time.count), "
+            f"wt=sum(postgres.io.write_time.count), {_rng(ws)}, interval:1m, by:{{backend_type}}")
+
+
 CATALOG: dict[str, Callable] = {
     "http": q_http, "spans": q_spans, "hikari": q_hikari, "jvm_gc": q_jvm_gc, "jvm_heap": q_jvm_heap,
     "hosts": q_hosts, "containers": q_containers, "db_conn": q_db_conn, "db_sessions": q_db_sessions,
     "lock_waiters": q_lock_waiters, "collector": q_collector, "edges": q_edges, "pg_lock_logs": q_pg_lock_logs,
-    "db_stats": q_db_stats, "statements": q_statements,
+    "db_stats": q_db_stats, "statements": q_statements, "pg_server": q_pg_server, "pg_io": q_pg_io,
 }
 # Analizin zorunlu sinyalleri (doctor bunları kontrol eder). Diğerleri destekleyicidir.
 REQUIRED = ["http", "spans", "hikari", "hosts", "db_conn", "db_sessions", "collector", "edges"]

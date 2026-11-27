@@ -27,7 +27,11 @@ def human_review(attr: dict, quality: dict, scores: dict) -> list[str]:
         if m["id"] == "global_connection_pressure":
             out.append("max_connections / uygulama pool size toplamını ve connection leak olup olmadığını kontrol edin.")
         if m["id"] == "db_cpu":
-            out.append("DB_VM'de en pahalı query'lerin execution plan'larını (EXPLAIN) ve maintenance job'larını inceleyin.")
+            if (m.get("cause") or {}).get("kind") == "maintenance":
+                out.append("DB_VM'de autovacuum ve checkpoint aktivitesini (pg_stat_progress_vacuum, autovacuum ve "
+                           "checkpoint ayarları, PostgreSQL logu) inceleyin; query tuning öncelik değildir.")
+            else:
+                out.append("DB_VM'de en pahalı query'lerin execution plan'larını (EXPLAIN) ve maintenance job'larını inceleyin.")
         if m["id"] == "app_vm_cpu":
             if m.get("self_is_source"):
                 out.append("CPU artışının bir kısmı SRE Agent'ın kendisinden; watch interval'ını/concurrency'yi gözden geçirin.")

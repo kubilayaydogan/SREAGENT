@@ -39,10 +39,36 @@ sudo sh -c 'install -d -m700 /root/ag-pkg && cp -p /var/lib/dynatrace/packages/D
 sudo sh -c 'cd /root/ag-pkg && env LANG=C LC_ALL=C /bin/bash ./Dynatrace-Remote-Plugin-Module-Linux-x86-*.sh'
 systemctl is-active dynatracegateway extensionsmodule
 ```
-Bilinen sorun (2026-11-21): PostgreSQL extension 2.9.8 / 3.0.10 / 3.1.0 / 3.2.10 bu ActiveGate'te (1.349, sqlPostgres 1.349.20261013)
-`INVALID_CONFIG_ERROR` veriyor ("Invalid attribute type string", `SqlGroup.validateLogIngest`): veri kaynağı tüm `ingest: log`
-gruplarını reddediyor. Locks kapatılınca hata `host_configurations` (featureSet `default`, kapatılamaz) grubuna geçiyor.
 Yapmayın: aynı installer'ı güncelleme kipinde yeniden çalıştırmak — indirilmiş bileşeni silip yeniden indirir.
+
+### PostgreSQL extension: `INVALID_CONFIG_ERROR` ve çözümü (2026-11-27)
+2026-11-21 – 2026-11-27 arasında extension (2.9.8 / 3.0.10 / 3.1.0 / 3.2.10) her açılışta `INVALID_CONFIG_ERROR` (kod 32) verdi:
+"Invalid attribute type string" (`SqlGroup.validateLogIngest`). Kök neden extension sürümü **değil**, `extensionsmodule`
+servisinin sistem yerel ayarını (`/etc/locale.conf` → `LANG=tr_TR.UTF-8`) devralmasıdır: veri kaynağının JVM'i Türkçe
+yerel ayarda `string` → `STRİNG` dönüşümü yapar ve öznitelik tipi tanınmaz (kurulumdaki `<LiNUX>` hatasıyla aynı sınıf).
+
+Çözüm (yalnız Extensions Module; `dynatracegateway` yeniden başlatılmaz, sistem yerel ayarı değişmez):
+```bash
+sudo mkdir -p /etc/systemd/system/extensionsmodule.service.d
+printf '[Service]\nEnvironment=LANG=C.UTF-8 LC_ALL=C.UTF-8\n' | sudo tee /etc/systemd/system/extensionsmodule.service.d/locale.conf
+sudo systemctl daemon-reload && sudo systemctl restart extensionsmodule
+```
+Geri alma: `locale.conf` dosyasını silin, `daemon-reload`, servisi yeniden başlatın.
+
+Doğrulama (APP_VM ve DB_VM):
+```bash
+sudo sh -c 'grep -a "Fastcheck" /var/lib/dynatrace/remotepluginmodule/log/extensions/ruxitagent_extensionsmodule_*.log | tail -2'   # "ended with code 0: OK"
+ps -eo pid,etime,args | grep dynatracesourcesql | grep -v grep                                  # sürekli çalışan süreç
+sudo -u postgres /usr/pgsql-17/bin/psql -Atc "select datname, application_name, state from pg_stat_activity where usename='dynatrace'"
+```
+Durum (2026-11-27): extension **3.2.10** etkin (09:42 TSİ'den beri), fastcheck `OK`, `dynatrace` kullanıcısı `airlab`
+veritabanına bağlı. Tenant'ta `postgres.*` metrikleri MCP ile okundu (`docs/lab/telemetry-contract.md` §J).
+
+Sürüm notu: 2.9.x her PostgreSQL sürümü için ayrı alt grup çalıştırır ve sunucu sürümüne uymayanlar "column ... does not
+exist" ile başarısız olur (PG17'de DB_VM logunda `dynatrace` kullanıcısı için dakikada ~3 `ERROR` satırı). 3.2.10'da bu
+hatalar yoktur: extension logunda `ERROR` yok, DB_VM logunda da hata satırı kalmadı. 3.2.10'da kalan tek uyarı isteğe
+bağlı `dynatrace.dynatrace_execution_plan` fonksiyonunun olmamasıdır (§5.3). Monitoring configuration'da veritabanı adı
+`airlab` olmalıdır (`pg_hba.conf` yalnız `airlab` ve `postgres` için izin verir).
 
 ### Gerçek kurulumda karşılaşılanlar (2026-11-21) ve çözümleri
 
@@ -51,6 +77,7 @@ Yapmayın: aynı installer'ı güncelleme kipinde yeniden çalıştırmak — in
 | Hyper-V Dynamic Memory: APP_VM 4,8 GB görüyordu | Sabit bellek: APP_VM 8 GB, DB_VM 6 GB (`Set-VMMemory -DynamicMemoryEnabled $false`) |
 | VM saatleri dakikalarca kayıyor (chrony yavaş kapatıyor) | `chrony.conf`: `makestep 1 -1` (kurulum betiklerine eklendi) |
 | OneAgent/ActiveGate kurulumu: `platform not supported: <LiNUX>` | Türkçe yerel ayar (tr_TR) "i" dönüşümünü bozuyor → kurulumları `env LANG=C LC_ALL=C` ile çalıştırın |
+| PostgreSQL extension: `INVALID_CONFIG_ERROR`, "Invalid attribute type string" | Aynı yerel ayar sorunu, bu kez çalışan `extensionsmodule` servisinde → systemd drop-in ile `LANG=C.UTF-8` (yukarıdaki bölüm) |
 | Yavaş/kopan internet (≈400–600 KB/sn): 280–330 MB kurulum dosyaları yarıda kesiliyor | Kurulum dosyalarını Windows'ta `curl --retry` ile indirip imzayı doğrulayın, `scp` ile VM'lere kopyalayın |
 | ActiveGate: `RemotePluginModule` (Extensions Module, 354 MB) indirmesi kopuyor; kurulum 15 dk bekleyip **tamamen geri alıyor** (3 deneme) | Çözüm aşağıda: "ActiveGate'i yavaş bağlantıda kurma" |
 | Lab uçları APP_VM'den 403 | Docker 29 host isteğinde kaynak IP'yi korur → `LAB_ALLOWED_CIDRS`'e APP_VM IP'si (/32) |

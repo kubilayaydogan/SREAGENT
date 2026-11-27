@@ -118,6 +118,50 @@ def _conf(n_sources: int, impact_seen: bool) -> str:
     return "low"
 
 
+def db_cpu_cause(cur_db: dict, base_db: dict, m: dict, lock_active: bool = False) -> dict[str, Any]:
+    """DB CPU artışının olası kaynağı: query yükü mü, maintenance (autovacuum / checkpoint yazma I/O'su) mı.
+
+    Dynatrace PostgreSQL extension'ın postgres.* metric'lerine dayanır; iki dönemin karşılaştırmasıdır. Veri yoksa
+    "unknown" döner (tahmin yürütülmez). Korelasyondur: CPU'yu doğrudan süreç bazında ölçmez.
+    """
+    if not cur_db.get("pg_points") or not base_db.get("pg_points"):
+        which = "incelenen aralıkta" if not cur_db.get("pg_points") else "önceki dönemde"
+        return {"kind": "unknown", "summary": f"postgres.* extension metric'leri {which} yok; ayrım yapılamadı."}
+
+    def pair(key):
+        return base_db.get(key), cur_db.get(key)
+
+    def rose(key, ratio, min_delta) -> bool:
+        b, c = pair(key)
+        return c is not None and (c - (b or 0.0)) >= min_delta and c >= (b or 0.0) * ratio
+
+    query_up = rose("pg_active_ms_per_min", m["db_cpu_query_ratio"], m["db_cpu_query_min_ms"])
+    maint = []
+    if rose("pg_autovacuum_blocks_per_min", m["db_cpu_maint_ratio"], m["db_cpu_autovacuum_min_blocks"]):
+        maint.append("autovacuum buffer activity")
+    if rose("pg_checkpoint_blocks_per_min", m["db_cpu_maint_ratio"], m["db_cpu_checkpoint_min_blocks"]):
+        maint.append("checkpoint write I/O")
+    kind = ("mixed" if query_up and maint else "query_load" if query_up else "maintenance" if maint
+            else "undetermined")
+    rnd = lambda p: [None if x is None else round(x, 1) for x in p]  # noqa: E731
+    out = {"kind": kind, "maintenance_signals": maint,
+           "query_active_ms_per_min": rnd(pair("pg_active_ms_per_min")),            # [önceki dönem, incelenen aralık]
+           "autovacuum_blocks_per_min": rnd(pair("pg_autovacuum_blocks_per_min")),
+           "checkpoint_blocks_per_min": rnd(pair("pg_checkpoint_blocks_per_min")),
+           "tuples_written_per_min": rnd(pair("pg_tup_write_per_min"))}
+    out["summary"] = {
+        "query_load": "Query active time arttı, maintenance aktivitesi belirgin artmadı: CPU artışı query yüküyle uyumlu.",
+        "maintenance": f"Maintenance aktivitesi arttı ({', '.join(maint)}), query active time belirgin artmadı: "
+                       "CPU artışı maintenance ile uyumlu.",
+        "mixed": f"Hem query active time hem maintenance aktivitesi ({', '.join(maint)}) arttı; payları ayrıştırılamadı.",
+        "undetermined": "Ne query active time ne de autovacuum / checkpoint I/O aktivitesi belirgin arttı; "
+                        "CPU artışı postgres.* metric'leriyle açıklanamadı.",
+    }[kind]
+    if lock_active and query_up:        # active_time Lock bekleyen (state=active) session süresini de içerir
+        out["caveat"] = "Query active time, Lock Wait'te geçen süreyi de içerir; artışın bir kısmı CPU değil bekleme olabilir."
+    return out
+
+
 def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]) -> dict[str, Any]:
     m = cfg["mechanisms"]
     imp = impacted_apps(cur, base, cfg)
@@ -240,15 +284,18 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
             if c is not None:
                 incs[app] = c - (b or 0)
         sources = [a for a in sorted(incs, key=incs.get, reverse=True) if incs[a] > 0][:2]
+        cause = db_cpu_cause(db, base["db"], m, lock_active=any(x["id"] == "row_lock" for x in mechs))
         mechs.append({
-            "id": "db_cpu", "title": "DB_VM CPU pressure",
+            "id": "db_cpu", "title": "DB_VM CPU pressure", "cause": cause,
             "source_apps": sources, "affected_apps": sorted(imp),
             "mechanism": "PostgreSQL host'unda CPU saturation tüm query'lerin execution time'ını uzatır; source, "
                          "pg_stat_statements execution time'ı en çok artan role(ler)dir.",
             "db_cpu": round(dbh["cpu"], 1), "baseline_cpu": round(bdbh["cpu"], 1) if bdbh.get("cpu") is not None else None,
             "exec_ms_increase_per_min": {k: round(v, 1) for k, v in incs.items()},
-            "signals": ["dt.host.cpu.usage (db-vm)"] + (["pg_stat_statements exec_time"] if sources else []),
-            "confidence": _conf(1 + bool(sources), bool(imp)), "evidence_ids": ev("hosts", "statements"),
+            "signals": ["dt.host.cpu.usage (db-vm)"] + (["pg_stat_statements exec_time"] if sources else [])
+                       + (["postgres.active_time / postgres.io (extension)"] if cause["kind"] != "unknown" else []),
+            "confidence": _conf(1 + bool(sources), bool(imp)),
+            "evidence_ids": ev("hosts", "statements", "pg_server", "pg_io"),
         })
 
     # 5) APP_VM CPU (agent'ın kendi tüketimi dahil ayrıştırılır)
@@ -352,9 +399,15 @@ def alternatives(attr: dict, quality: dict) -> list[str]:
         out.append("Latency, lock yerine APP_VM CPU saturation'dan da kaynaklanabilir; iki mechanism aynı anda aktif.")
     if "row_lock" in ids and "global_connection_pressure" in ids:
         out.append("Connection pressure, lock wait'in sonucu olabilir (bekleyen session'lar connection tutar).")
-    if "db_cpu" in ids and "row_lock" not in ids:
-        out.append("DB CPU artışı ağır query yerine vacuum/checkpoint gibi maintenance job'larından kaynaklanıyor olabilir; "
-                   "postgres.* extension metric'leri yok, ayrım yapılamaz.")
+    if "db_cpu" in ids:
+        cause = next(m for m in attr["mechanisms"] if m["id"] == "db_cpu").get("cause") or {"kind": "unknown"}
+        if cause["kind"] == "unknown" and "row_lock" not in ids:
+            out.append("DB CPU artışı ağır query yerine vacuum/checkpoint gibi maintenance job'larından kaynaklanıyor "
+                       "olabilir; " + cause.get("summary", "postgres.* extension metric'leri yok; ayrım yapılamadı."))
+        elif cause["kind"] in ("maintenance", "mixed", "undetermined"):
+            out.append("DB CPU: " + cause["summary"])
+        if cause.get("caveat"):
+            out.append(cause["caveat"])
     if attr["unexplained_impacted"]:
         out.append(f"Şu uygulamalardaki impact hiçbir mechanism ile açıklanamadı: {', '.join(attr['unexplained_impacted'])}"
                    " (uygulama içi error, GC veya network olabilir).")

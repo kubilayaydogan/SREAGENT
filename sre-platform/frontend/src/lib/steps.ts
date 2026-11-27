@@ -24,6 +24,8 @@ export const SIGNAL_LABEL: Record<string, string> = {
   collector: "PG collector",
   db_stats: "PG istatistikleri",
   statements: "SQL ifadeleri",
+  pg_server: "PG extension: query ve checkpoint",
+  pg_io: "PG extension: I/O",
   edges: "Blocking edge'ler",
   pg_lock_logs: "PG lock logları",
   spans: "Span latency",

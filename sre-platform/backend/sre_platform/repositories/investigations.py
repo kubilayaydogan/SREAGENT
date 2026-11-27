@@ -31,7 +31,8 @@ SIGNAL_METRIC = {"http": "airlab.app.http.server.requests", "hikari": "airlab.ap
                  "hosts": "dt.host.cpu.usage", "containers": "dt.containers.cpu.*",
                  "db_conn": "airlab.pg.connections.*", "db_sessions": "airlab.pg.sessions",
                  "lock_waiters": "airlab.pg.lock.waiters", "collector": "airlab.pg.collector.up",
-                 "db_stats": "airlab.pg.db.*", "statements": "airlab.pg.statements.*"}
+                 "db_stats": "airlab.pg.db.*", "statements": "airlab.pg.statements.*",
+                 "pg_server": "postgres.* (extension)", "pg_io": "postgres.io.* (extension)"}
 STATUS_MAP = {"complete": InvestigationStatus.COMPLETED, "partial": InvestigationStatus.PARTIAL}
 
 

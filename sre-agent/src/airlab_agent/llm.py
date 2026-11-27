@@ -152,6 +152,9 @@ KURALLAR:
 - Mechanism'de "lock_chain"/"chain_path" varsa yayılımı halka halka anlat: Root Cause uygulaması hangi resource'u
   tuttu, sıradaki uygulama neyi bekledi, beklerken neyi tutarak bir sonrakini etkiledi (wait sayılarıyla).
 - Correlation ≠ causation. `human_review` içindeki öneriler yapılmış kontroller değildir; öneri olarak aktar.
+- `db_cpu` mechanism'inde `cause` varsa CPU artışının query yüküyle mi maintenance ile mi uyumlu olduğunu `cause.summary`
+  ve sayılarıyla (iki elemanlı listeler: önceki dönem, incelenen aralık) aktar. `kind: "unknown"` ise ayrımın neden
+  yapılamadığını söyle; `kind` ne olursa olsun bunu doğrulanmış neden gibi yazma.
 
 VERİ ALANLARI (metinde bu adları değil, karşılıklarını kullan):
 - `windows` içinde `name: "window"` incelenen zaman aralığıdır; `name: "baseline"` karşılaştırma için kullanılan,

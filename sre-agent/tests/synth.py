@@ -20,7 +20,9 @@ NORMAL_APP = {"rpm": 60.0, "mean_ms": 20.0, "err": 0.0, "p95": 30.0, "span_n": 2
 NORMAL = {"apps": {a: dict(NORMAL_APP) for a in APPS},
           "hosts": {"app-vm": 30.0, "db-vm": 10.0}, "conn_ratio": 0.1, "lock_total": 0.0,
           "lock_pairs": {}, "edges": [], "pg_lock_logs": 0, "collector": True, "tooling_cores": {"chaos-controller": 0.1,
-                                                                                                 "sre-agent": 0.05}}
+                                                                                                 "sre-agent": 0.05},
+          # Dynatrace PostgreSQL extension (postgres.*), dakika başına; None → o dönemde extension verisi yok
+          "pg": {"active_ms": 2000.0, "writes": 100.0, "autovac_blocks": 0.0, "ckpt_blocks": 80.0}}
 
 
 def cfg():
@@ -71,7 +73,7 @@ def build_multi(S: dict[str, dict], ws: list[Window], drop: tuple = (), stale: t
     """Pencere adı → senaryo eşlemesinden sonuç üretir (watch testleri dakikalık pencere kullanır)."""
     R: dict[str, list] = {k: [] for k in ("http", "spans", "hikari", "jvm_gc", "jvm_heap", "hosts", "containers",
                                           "db_conn", "db_sessions", "lock_waiters", "collector", "edges",
-                                          "pg_lock_logs", "db_stats", "statements")}
+                                          "pg_lock_logs", "db_stats", "statements", "pg_server", "pg_io")}
     for app in APPS:
         for outcome in ("SUCCESS", "SERVER_ERROR"):
             pw = {}
@@ -119,6 +121,18 @@ def build_multi(S: dict[str, dict], ws: list[Window], drop: tuple = (), stale: t
         if sp["pg_lock_logs"]:
             R["pg_lock_logs"].append({"w": wn, "n": str(sp["pg_lock_logs"])})
     R["db_stats"].append(_ts(ws, {wn: {"dl": 0.0, "rb": 0.0, "cm": 100.0, "tmp": 0.0, "rd": 0.0} for wn in S}, {}))
+    if any(sp.get("pg") for sp in S.values()):
+        nul = dict.fromkeys(("act", "ret", "ins", "upd", "dlt", "cw", "cs", "wal", "bc"))
+        R["pg_server"].append(_ts(ws, {wn: ({"act": sp["pg"]["active_ms"], "ret": 5000.0, "ins": 0.0,
+                                              "upd": sp["pg"]["writes"], "dlt": 0.0,
+                                              "cw": 100.0, "cs": 1.0, "bc": sp["pg"]["ckpt_blocks"],
+                                              "wal": 1e5} if sp.get("pg") else nul) for wn, sp in S.items()}, {}))
+        nio = dict.fromkeys(("rd", "wr", "ext", "hit", "rt", "wt"))
+        for bt in ("autovacuum worker", "client backend"):
+            R["pg_io"].append(_ts(ws, {wn: ({"rd": 0.0 if bt == "autovacuum worker" else 5.0, "wr": 0.0, "ext": 0.0,
+                                              "hit": sp["pg"]["autovac_blocks"] if bt == "autovacuum worker" else 0.0,
+                                              "rt": 0.0, "wt": 0.0} if sp.get("pg") else nio)
+                                       for wn, sp in S.items()}, {"backend_type": bt}))
 
     out = {}
     for k, recs in R.items():

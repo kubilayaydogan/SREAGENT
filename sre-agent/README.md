@@ -17,7 +17,7 @@ geçmez; kısmi rapor yazar.
 ## Akış
 
 ```
-plan ─► collect (15 katalog DQL, tek MCP oturumu) ─► analyze (özellik + veri kalitesi + puan + mekanizma)
+plan ─► collect (17 katalog DQL, tek MCP oturumu) ─► analyze (özellik + veri kalitesi + puan + mekanizma)
      ─► [extra_evidence: row_lock → edges_detail, db_cpu/bağlantı → top_statements; ≤ max_iterations]
      ─► explain (Claude; erişilemezse deterministik) ─► finalize (JSON + Markdown rapor)
 ```

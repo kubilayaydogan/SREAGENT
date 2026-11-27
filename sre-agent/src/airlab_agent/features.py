@@ -18,7 +18,11 @@ TS_FIELDS = {
     "hosts": ["cpu", "io", "mem"], "containers": ["u", "s", "rss"], "db_conn": ["r", "used", "slots"],
     "db_sessions": ["s"], "lock_waiters": ["wt", "wmax"], "collector": ["up", "tot", "tavg"],
     "db_stats": ["dl", "rb", "cm", "tmp", "rd"], "statements": ["et", "calls"],
+    "pg_server": ["act", "ret", "ins", "upd", "dlt", "cw", "cs", "wal", "bc"],
+    "pg_io": ["rd", "wr", "ext", "hit", "rt", "wt"],
 }
+# pg_stat_io backend tipleri: maintenance ile client yükünü ayırmak için
+PG_IO_GROUPS = {"autovacuum worker": "autovacuum", "client backend": "client"}
 
 
 def _empty_window() -> dict:
@@ -186,6 +190,41 @@ def extract(results: dict[str, Any], ws: list[Window], cfg: dict) -> dict[str, d
             if v["cm"]:
                 F[wn]["db"].update(deadlocks=_agg(v["dl"], "sum"), rollbacks=_agg(v["rb"], "sum"),
                                    commits=_agg(v["cm"], "sum"), temp_bytes=_agg(v["tmp"], "sum"))
+
+    # Dynatrace PostgreSQL extension (postgres.*). Değerler dakika başına: toplam / dolu nokta sayısı (boşluklar sayılmaz).
+    # Kayıt yoksa alanlar hiç yazılmaz → "veri yok" (sıfır değil).
+    for rec in ts("pg_server"):
+        for wn, v in split_series(rec, ws, TS_FIELDS["pg_server"]).items():
+            n = len(v["act"])
+            if not n:
+                continue
+            per_min = lambda *fs: sum(sum(v[f]) for f in fs) / n   # noqa: E731
+            d = F[wn]["db"]
+            d.update(pg_points=n, pg_active_ms_per_min=per_min("act"), pg_tup_read_per_min=per_min("ret"),
+                     pg_tup_write_per_min=per_min("ins", "upd", "dlt"))
+            if v["cw"] or v["cs"]:
+                d["pg_checkpoint_ms_per_min"] = (sum(v["cw"]) + sum(v["cs"])) / max(len(v["cw"]), len(v["cs"]))
+            if v["wal"]:
+                d["pg_wal_bytes_per_min"] = sum(v["wal"]) / len(v["wal"])
+            if v["bc"]:
+                d["pg_checkpoint_blocks_per_min"] = sum(v["bc"]) / len(v["bc"])
+
+    io_acc: dict[tuple, dict] = {}
+    for rec in ts("pg_io"):
+        grp = PG_IO_GROUPS.get(str(rec.get("backend_type") or ""))
+        if not grp:
+            continue
+        for wn, v in split_series(rec, ws, TS_FIELDS["pg_io"]).items():
+            n = max(len(v["rd"]), len(v["wr"]), len(v["ext"]), len(v["hit"]))
+            if n:
+                a = io_acc.setdefault((wn, grp), {"blocks": 0.0, "ms": 0.0, "n": 0})
+                # hit dahil: veri shared_buffers'tayken vacuum/query işi disk I/O'su olmadan (yalnız CPU) geçer
+                a["blocks"] += sum(v["rd"]) + sum(v["wr"]) + sum(v["ext"]) + sum(v["hit"])
+                a["ms"] += sum(v["rt"]) + sum(v["wt"])
+                a["n"] = max(a["n"], n)
+    for (wn, grp), a in io_acc.items():
+        F[wn]["db"][f"pg_{grp}_blocks_per_min"] = a["blocks"] / a["n"]
+        F[wn]["db"][f"pg_{grp}_io_ms_per_min"] = a["ms"] / a["n"]
 
     role_map = cfg["db_role_to_app"]
     for rec in ts("statements"):

@@ -39,7 +39,7 @@ Chaos v2 açık maddeleri:
 | Kaynak kod tamamlandı | 4 iş servisi, chaos-controller, db-migrator, lab-common, pg-lock-collector, VM betikleri, belgeler | ✅ derleme + 29 test |
 | Yerelde uçtan uca doğrulandı | Docker Desktop: PG17 + 5 Java container | ✅ smoke 31/31, E1–E8 tek koşu |
 | İki VM üzerinde kuruldu ve doğrulandı | `app-vm` 172.20.229.26 + `db-vm` 172.20.233.108 (Hyper-V, Rocky 10.1) | ✅ PG17 systemd, Docker, 5 servis + collector, smoke 31/31, gerçek kilit zinciri |
-| Gerçek Dynatrace + MCP | tenant `mfi74785`, Remote MCP `execute-dql` | ✅ 13/15 kapı sinyali veriyle okundu; ❌ PostgreSQL extension (ActiveGate hazır; extension 3.x bu ActiveGate'te INVALID_CONFIG_ERROR) |
+| Gerçek Dynatrace + MCP | tenant `mfi74785`, Remote MCP `execute-dql` | ✅ 13/15 kapı sinyali veriyle okundu; ✅ PostgreSQL extension 2026-11-27'de çalışır hale geldi (fastcheck OK, DB bağlantısı var; tenant'ta `postgres.*` ayrıca sorgulanmadı) |
 | VM'de kontrollü deneyler | E0 → E2 → E1×3 + durdurma testi | ✅ hepsi COMPLETED, 5xx/timeout/drop 0, integrity 0; Dynatrace'te E2 etkisi var, E1'de yok |
 
 Ayrıntı ve kanıt: `docs/lab/acceptance-gate.md`, `deploy/evidence/vm/`, `deploy/evidence/mcp-gate-*.json`.
@@ -53,7 +53,7 @@ Ayrıntı ve kanıt: `docs/lab/acceptance-gate.md`, `deploy/evidence/vm/`, `depl
 | 9 | Etkisiz yük | **VM ✅ + TENANT ✅** E1×3 |
 | 10 | Kilit kanıtı | **VM ✅ + TENANT ✅** (collector kenarı + PG `log_lock_waits` Dynatrace'te) |
 | 11 | Durdurma | **VM ✅** stop-all → 1 sn içinde aktif sorgu/kilit bekleyen 0 |
-| 12 | Telemetri | **TENANT ✅**: servisler, p95, hostlar, container, Hikari, HTTP, collector, loglar. ❌ `postgres.*` extension |
+| 12 | Telemetri | **TENANT ✅**: servisler, p95, hostlar, container, Hikari, HTTP, collector, loglar. `postgres.*` extension 2026-11-27'de açıldı (tenant verisi sorgulanmadı) |
 | 13 | MCP veri yolu | **TENANT ✅** kapı sorguları + deney pencereleri (`mcp-experiment-windows.json`) |
 | 14 | Eksikler | aşağıda |
 
@@ -86,14 +86,12 @@ Docker 29'un kaynak IP'yi koruması (lab uçları 403 → `LAB_ALLOWED_CIDRS`), 
 
 ## Açık maddeler
 
-1. **PostgreSQL extension çalışmıyor (Dynatrace tarafı uyumsuzluk).** `com.dynatrace.extension.postgres` 3.2.10, 3.1.0, 3.0.10 ve 2.9.8
-   ActiveGate 1.349 / sqlPostgres veri kaynağı `1.349.20261013` üzerinde `INVALID_CONFIG_ERROR` (kod 32) veriyor:
-   `Verification failed! Invalid attribute type string` (`SqlGroup.validateLogIngest`). İlk takılan grup `blocking_statements`
-   (Locks); Locks kapatılınca hata `host_configurations` (`pg_settings`, **featureSet `default`**, kapatılamaz) grubuna geçiyor →
-   veri kaynağı **tüm `ingest: log` gruplarını** reddediyor; hiçbir özellik seçimiyle çalışmaz, DB'ye hiç bağlanılmıyor. Kanıt (APP_VM):
-   `/var/lib/dynatrace/remotepluginmodule/log/extensions/datasources/com.dynatrace.extension.postgres/dynatracesourcesql.jar_fastcheck.log`.
-   Etki: `postgres.*` metrikleri ve extension top-queries yok. DB sinyalleri collector (`airlab.pg.*`, `blocking_edge`, `pg_stat_statements` özeti),
-   PostgreSQL sunucu logları ve OneAgent DB çağrılarıyla karşılanıyor. ActiveGate/extension güncellenince yeniden denenebilir.
+1. **PostgreSQL extension (çözüldü, 2026-11-27).** 2026-11-21'den beri görülen `INVALID_CONFIG_ERROR` (kod 32,
+   "Invalid attribute type string") extension sürümünden değil, `extensionsmodule` servisinin `LANG=tr_TR.UTF-8` ile
+   çalışmasından kaynaklanıyordu. systemd drop-in ile `LANG=C.UTF-8` verildi; monitoring configuration'da veritabanı adı
+   `airlab` yapıldı. Durum: 2.9.8 etkin, fastcheck `OK`, `dynatrace` kullanıcısı `airlab`'a bağlı. Tenant'ta 82 `postgres.*`
+   metric key'i MCP ile okundu; SRE Agent kataloğuna `pg_server` ve `pg_io` sinyalleri eklendi. Ayrıntı ve doğrulama komutları:
+   `docs/lab/deploy-plan.md` → "PostgreSQL extension: `INVALID_CONFIG_ERROR` ve çözümü".
 2. **Trace ↔ log:** ✅ OneAgent Java log zenginleştirmesi açıldı (2026-11-21 16:42); ECS loglarında `dt.trace_id`/`dt.span_id`,
    MCP ile log ↔ span eşleşmesi 13/13 (`deploy/evidence/mcp-trace-log-join.json`). Kalan: kimlik ayrı log özniteliği değil
    (sorguda JSON parse gerekiyor); Dynatrace UI'daki log→trace bağlantısı için OpenPipeline kuralı gerekir (yapılmadı).
@@ -124,6 +122,6 @@ Kod `sre-agent/`; mimari kararlar `docs/lab/decisions/ADR-007-sre-agent.md`; iş
 Aşama 2 açık maddeleri:
 1. Eşikler 2026-11-21 deneylerine göre kalibre edildi. E3–E8 (havuz, global bağlantı, DB/APP CPU) VM'de koşulmadı; bu
    mekanizmalar yalnız sentetik senaryolarla doğrulandı.
-2. `postgres.*` extension metrikleri yok: DB CPU'nun nedeni (sorgu ya da bakım) ayrıştırılamaz.
+2. DB CPU nedeni ayırımı (`attribution.db_cpu_cause`: query yükü / maintenance) `postgres.*` metrikleriyle yapılıyor; query tarafı 2026-11-27 S04 deneyiyle uçtan uca doğrulandı (`query_load`), maintenance eşikleri (autovacuum buffer aktivitesi, checkpoint blokları) boşta ölçüme göre seçildi ve gerçek bir ağır maintenance olayıyla doğrulanmadı.
 3. Trial (~2026-12-06) bitince yeni tenant için `DT_ENV`/`T_MCP` değiştirilip `doctor` çalıştırılmalı.
 4. Çalışma bitince tüm token ve anahtarlar (Dynatrace, Anthropic, LangSmith) döndürülmeli.
