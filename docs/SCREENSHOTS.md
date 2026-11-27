@@ -336,8 +336,8 @@ bağlantısı yoktur.
 
 | Ekran | Neden alınmadı | Eklemek için |
 |---|---|---|
-| Giriş ekranı (`/login`) | Görüntü almak için açık oturumu kapatmak gerekiyordu | Çıkış yapıp ekranı boş alanlarla görüntüleyin |
-| Hesabım (`/account`) | Oturum listesi istemci IP adreslerini gösterir | IP alanlarını kapatarak görüntüleyin |
+| Giriş ekranı (`/login`) | Görüntü almak için açık oturumu kapatmak gerekiyordu | 
+| Hesabım (`/account`) | Oturum listesi istemci IP adreslerini gösterir | 
 | Settings › MCP Servers | Connector adresi Dynatrace tenant kimliğini içerir | Adres alanını kapatarak görüntüleyin |
 | Settings › Agent, Risk Scoring, Observability, Notifications, Retention & Memory, Security & Governance, Users & API Keys | Kapsam dışında bırakıldı; Users & API Keys kullanıcı adlarını gösterir | İsteğe bağlı |
 | Incident ayrıntısı | Alınmadı | Bir incident açıp görüntüleyin |
