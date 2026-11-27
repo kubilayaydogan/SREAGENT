@@ -38,7 +38,7 @@ Konuya özel ayrıntılı dokümanlar [Ek dokümanlar](#ek-dokümanlar) bölüm�
 
 | Bileşen | Dizin | Açıklama |
 |---|---|---|
-| **SRE Agent** | [`sre-agent/`](sre-agent/) | `airlab_agent` Python paketi. Sabit bir DQL (Dynatrace Query Language) kataloğunu Dynatrace Remote MCP üzerinden çalıştıran bir LangGraph akışıdır. Feature çıkarır, risk score hesaplar ve olası mechanism'i (row lock, Connection Pool saturation, DB CPU, network latency vb.) deterministik olarak belirler. LLM yalnızca soruyu yorumlar ve bulguları açıklar. |
+| **SRE Agent** | [`sre-agent/`](sre-agent/) | `airlab_agent` Python paketi. Sabit bir DQL (Dynatrace Query Language) kataloğunu Dynatrace Remote MCP üzerinden çalıştıran bir LangGraph akışıdır. Feature çıkarır, risk score hesaplar ve olası sorunları (row lock, Connection Pool saturation, DB CPU, network latency vb.) deterministik olarak belirler. LLM yalnızca soruyu yorumlar ve bulguları açıklar. |
 | **SRE Agent Management Platform** | [`sre-platform/`](sre-platform/) | FastAPI backend, arka plan worker'ı ve React arayüzü. Agent'ı kütüphane olarak içine alır; kalıcı kayıt (PostgreSQL), kimlik doğrulama ve roller, canlı adım akışı (SSE), incident, RCA raporu, bilgi bankası, onay, sürekli izleme (watch) ve zamanlanmış health check ekler. |
 | **airlab laboratuvarı** | [`lab/`](lab/), [`db-vm/`](db-vm/), [`observability/`](observability/) | Ortak bir PostgreSQL 17 veritabanını kullanan dört Spring Boot servisi (reservation, check-in, flight operations, baggage) ve 20 arıza senaryolu Chaos Controller. *İzlenen* sistem budur. |
 
