@@ -285,11 +285,19 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
                 incs[app] = c - (b or 0)
         sources = [a for a in sorted(incs, key=incs.get, reverse=True) if incs[a] > 0][:2]
         cause = db_cpu_cause(db, base["db"], m, lock_active=any(x["id"] == "row_lock" for x in mechs))
+        # Neden maintenance ise CPU'yu uygulama query'leri harcamıyor: exec time artışı CPU sıkışmasının sonucudur,
+        # bu yüzden source uygulama gösterilmez (2026-11-27 gerçek autovacuum olayında görüldü).
+        maint = cause["kind"] == "maintenance"
+        if maint:
+            sources = []
         mechs.append({
             "id": "db_cpu", "title": "DB_VM CPU pressure", "cause": cause,
             "source_apps": sources, "affected_apps": sorted(imp),
-            "mechanism": "PostgreSQL host'unda CPU saturation tüm query'lerin execution time'ını uzatır; source, "
-                         "pg_stat_statements execution time'ı en çok artan role(ler)dir.",
+            "mechanism": ("PostgreSQL host'unda CPU saturation tüm query'lerin execution time'ını uzatır; CPU artışı "
+                          "maintenance aktivitesiyle uyumlu olduğu için source uygulama gösterilmez, uygulamalardaki "
+                          "execution time artışı CPU pressure'ın sonucu sayılır." if maint else
+                          "PostgreSQL host'unda CPU saturation tüm query'lerin execution time'ını uzatır; source, "
+                          "pg_stat_statements execution time'ı en çok artan role(ler)dir."),
             "db_cpu": round(dbh["cpu"], 1), "baseline_cpu": round(bdbh["cpu"], 1) if bdbh.get("cpu") is not None else None,
             "exec_ms_increase_per_min": {k: round(v, 1) for k, v in incs.items()},
             "signals": ["dt.host.cpu.usage (db-vm)"] + (["pg_stat_statements exec_time"] if sources else [])

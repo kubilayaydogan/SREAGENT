@@ -122,6 +122,6 @@ Kod `sre-agent/`; mimari kararlar `docs/lab/decisions/ADR-007-sre-agent.md`; iş
 Aşama 2 açık maddeleri:
 1. Eşikler 2026-11-21 deneylerine göre kalibre edildi. E3–E8 (havuz, global bağlantı, DB/APP CPU) VM'de koşulmadı; bu
    mekanizmalar yalnız sentetik senaryolarla doğrulandı.
-2. DB CPU nedeni ayırımı (`attribution.db_cpu_cause`: query yükü / maintenance) `postgres.*` metrikleriyle yapılıyor; query tarafı 2026-11-27 S04 deneyiyle uçtan uca doğrulandı (`query_load`), maintenance eşikleri (autovacuum buffer aktivitesi, checkpoint blokları) boşta ölçüme göre seçildi ve gerçek bir ağır maintenance olayıyla doğrulanmadı.
+2. DB CPU nedeni ayırımı (`attribution.db_cpu_cause`: query yükü / maintenance) `postgres.*` metrikleriyle yapılıyor; query tarafı 2026-11-27 S04 deneyiyle uçtan uca doğrulandı (`query_load`), autovacuum tarafı aynı gün gerçek bir autovacuum olayıyla doğrulandı (geçici şemada 40 tablo, 3 worker, DB CPU %1,3 → %49,9, sonuç `maintenance`). Ağır checkpoint kuralı gerçek bir olayla doğrulanmadı. Neden `maintenance` ise mechanism source uygulama listelemez (exec time artışı CPU pressure sonucu sayılır).
 3. Trial (~2026-12-06) bitince yeni tenant için `DT_ENV`/`T_MCP` değiştirilip `doctor` çalıştırılmalı.
 4. Çalışma bitince tüm token ve anahtarlar (Dynatrace, Anthropic, LangSmith) döndürülmeli.

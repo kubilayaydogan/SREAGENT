@@ -182,7 +182,10 @@ def deterministic_explanation(r: dict) -> str:
                    + (f"{_clock(base['start'])} – {_clock(base['end'])} arasındaki önceki dönemle " if base
                       else "önceki dönemle ")
                    + f"karşılaştırıldı. Tespit edilen mechanism: **{prim['title']}**. "
-                   f"Root cause source'u {_join(prim['source_apps']) or 'belirlenemeyen bir uygulama'}, etkilenen "
+                   + ("Source bir uygulama değil; CPU artışı veritabanı maintenance aktivitesiyle uyumlu, etkilenen "
+                      if (prim.get("cause") or {}).get("kind") == "maintenance" else
+                      f"Root cause source'u {_join(prim['source_apps']) or 'belirlenemeyen bir uygulama'}, etkilenen ")
+                   +
                    f"uygulamalar {_join(prim['affected_apps']) or 'yok'}. ")
     elif r["impacted"]:
         summary = (f"{period}nda {_join(list(r['impacted']))} uygulamalarında kötüleşme ölçüldü, ancak eldeki "

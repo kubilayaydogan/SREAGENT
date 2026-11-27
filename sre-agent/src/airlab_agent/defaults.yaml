@@ -70,7 +70,9 @@ mechanisms:
   cpu_increase_pp: 20        # host CPU'da baseline'a göre asgari artış (yüzde puan)
   # DB CPU nedeni (postgres.* extension metric'leri; attribution.db_cpu_cause). İLK DEĞERLER: 2026-11-27'de boşta lab
   # ölçümüne göre seçildi (active time ~2-2,5 sn/dk). Query tarafı S04 deneyiyle doğrulandı
-  # (1,9 → 170,7 sn/dk); maintenance eşikleri gerçek bir autovacuum / ağır checkpoint olayıyla doğrulanmadı.
+  # (1,9 → 170,7 sn/dk); autovacuum tarafı 2026-11-27 gerçek autovacuum olayıyla doğrulandı
+  # (3 worker, DB CPU %1,3 → %49,9; 635 → 661.861 blok/dk, active time 1,7 → 2,1 sn/dk → maintenance).
+  # Ağır checkpoint kuralı gerçek bir olayla doğrulanmadı.
   db_cpu_query_ratio: 1.5        # query active time önceki dönemin en az 1,5 katı
   db_cpu_query_min_ms: 5000      # ...ve dakikada en az +5 sn active time
   db_cpu_maint_ratio: 2.0        # autovacuum buffer aktivitesi (hit + read + write + extend) önceki dönemin en az 2 katı

@@ -47,9 +47,14 @@ def test_db_cpu_with_rising_query_time_is_query_load():
 
 
 def test_db_cpu_with_autovacuum_and_flat_query_time_is_maintenance():
-    _, _, a = run(deep(NORMAL, pg={"autovac_blocks": 700.0}), deep(NORMAL, pg={"autovac_blocks": 90000.0}, **HOT))
+    _, _, a = run(deep(NORMAL, pg={"autovac_blocks": 700.0}), deep(NORMAL, pg={"autovac_blocks": 90000.0},
+                                                                   apps={"baggage-service": {"exec_ms": 350.0}}, **HOT))
     c = cause(a)
     assert c["kind"] == "maintenance" and c["maintenance_signals"] == ["autovacuum buffer activity"]
+    mech = next(x for x in a["mechanisms"] if x["id"] == "db_cpu")
+    # CPU sıkışınca uygulamaların exec time'ı da artar; maintenance'ta bunlar source sayılmaz
+    assert any(v > 0 for v in mech["exec_ms_increase_per_min"].values())
+    assert mech["source_apps"] == [] and "pg_stat_statements exec_time" not in mech["signals"]
     alt = alternatives(a, {"spans": {"status": "OK"}})
     assert any("maintenance" in x and "autovacuum buffer activity" in x for x in alt)
 
