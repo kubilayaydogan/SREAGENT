@@ -133,7 +133,7 @@ export default function RcaDetailPage() {
                     <tr>
                       <th>Anahtar</th>
                       <th>Tür</th>
-                      <th>Mechanism</th>
+                      <th>Problem</th>
                       <th>Özet</th>
                       <th>Referans</th>
                     </tr>
@@ -156,11 +156,11 @@ export default function RcaDetailPage() {
                 </table>
               </div>
             ) : (
-              <p className="text-muted">Mechanism için destekleyen evidence yok.</p>
+              <p className="text-muted">Problemi destekleyen evidence yok.</p>
             )}
           </Section>
           <Section id="root-cause" title="Root Cause">
-            <p className="text-ink">{r.suspected_root_cause ?? "Tanımlı mechanism'lerle açıklanamadı."}</p>
+            <p className="text-ink">{r.suspected_root_cause ?? "Bilinen problem türleriyle açıklanamadı."}</p>
             <p className="mt-1 text-2xs text-muted">Korelasyon temelli hipotezdir; değişiklik öncesi doğrulanmalıdır.</p>
           </Section>
           <Section id="factors" title="Katkıda bulunan faktörler">

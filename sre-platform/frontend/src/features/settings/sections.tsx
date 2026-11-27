@@ -201,7 +201,7 @@ function SchedulingAgents() {
 // ------------------------------------------------------------------ Risk
 const COMP_LABEL: Record<string, string> = { latency: "Latency", errors: "Errors", saturation: "Saturation", lock: "Lock", resource: "Resource" };
 const RAMP_LABEL: Record<string, string> = {
-  latency_ratio: "Latency oranı (× baseline)",
+  latency_ratio: "Latency oranı (× önceki dönem)",
   error_rate: "Error rate (oran)",
   pool_ratio: "Connection Pool doluluğu (oran)",
   lock_waiters: "Lock waiter (ortalama)",

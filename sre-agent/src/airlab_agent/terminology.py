@@ -6,6 +6,8 @@ Tek kaynak `terminology.yaml`dır. Buradan üç şey üretilir:
     rapor metinlerini, UI metinlerini ve prompt'ları bununla denetler; LLM çıktısında yalnız log/telemetri için
     kullanılır (model çıktısı hiçbir zaman otomatik değiştirilmez: log, metric, DQL, entity adı gibi değerler bozulmasın).
   * `glossary()`     — UI/doküman için alan bazlı terim listesi.
+  * `find_internal` / `reader_lines` — uygulamanın iç adlarının (mechanism, window, source, signal …) okur diline
+    çevrilmesi: sektör terimi olmayan bu adlar metne taşınmaz (bkz. `reader_terms`, style.STYLE_PROMPT).
 
 Policy sabit listeye dayanmaz: prompt, listelenen alanlardaki TÜM standart terimlerin (listede olmasa da)
 İngilizce korunmasını ister; liste yalnızca örnek ve test kapsamıdır.
@@ -81,8 +83,40 @@ def find_violations(text: str | None) -> list[Violation]:
     return sorted(found, key=lambda v: v.start)
 
 
+@dataclass(frozen=True)
+class ReaderTerm:
+    pattern: re.Pattern
+    internal: str
+    say: str
+
+
+@lru_cache(maxsize=1)
+def reader_terms() -> tuple[ReaderTerm, ...]:
+    """Uygulamanın iç adları ve okura yazılacak karşılıkları (terminology.yaml `reader_terms`)."""
+    return tuple(ReaderTerm(re.compile(rf"(?<![{_TR_WORD}])(?:{t['pattern']})", re.I | re.U), t["internal"], t["say"])
+                 for t in _data().get("reader_terms") or [])
+
+
+def find_internal(text: str | None) -> list[Violation]:
+    """Metne sızan iç adları döndürür (kod / veri bölgeleri hariç). `term` alanı okura yazılacak karşılıktır.
+    Deterministik metinler testlerde bununla denetlenir; LLM çıktısında yalnız log'lanır, metin değiştirilmez."""
+    if not text:
+        return []
+    masked = _CODE.sub(lambda m: " " * len(m.group(0)), text)
+    low = _tr_lower(masked)
+    found = [Violation(text[m.start():m.end()], t.say, m.start())
+             for t in reader_terms() for m in t.pattern.finditer(low)]
+    return sorted(found, key=lambda v: v.start)
+
+
+def reader_lines() -> str:
+    """Prompt için "iç ad → okura yazılacak karşılık" satırları."""
+    return "\n".join(f"  · {t.internal} → {t.say}" for t in reader_terms())
+
+
 def glossary() -> dict:
-    return {"domains": domains(), "calques": [{"pattern": c.pattern.pattern, "term": c.term} for c in calques()]}
+    return {"domains": domains(), "calques": [{"pattern": c.pattern.pattern, "term": c.term} for c in calques()],
+            "reader_terms": [{"internal": t.internal, "say": t.say} for t in reader_terms()]}
 
 
 def _examples() -> str:

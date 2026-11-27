@@ -131,7 +131,7 @@ export function AgentSchedulesCard({ canEdit }: { canEdit: boolean }) {
             <p className="mt-0.5 text-2xs text-muted">Yalnız zamanlanmış modu destekleyen agent'lar listelenir.</p>
           </div>
           {edit.system ? (
-            <p className="text-xs text-muted">Health check aralığı ve penceresi Scheduling ayarlarından yönetilir; burada yalnız agent seçilir.</p>
+            <p className="text-xs text-muted">Health check sıklığı ve incelenen zaman aralığı Scheduling ayarlarından yönetilir; burada yalnız agent seçilir.</p>
           ) : (
             <>
               <div className="mb-3 grid grid-cols-2 gap-2">

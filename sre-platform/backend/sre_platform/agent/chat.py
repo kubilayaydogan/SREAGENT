@@ -154,10 +154,10 @@ def _when(v) -> str:
 
 
 def _det_episodes(items: list[dict]) -> list[str]:
-    out = ["### Benzer geçmiş episode'lar"]
+    out = ["### Benzer geçmiş investigation'lar"]
     for e in items:
         sim = f" · benzerlik {e['similarity']:.2f}" if e.get("similarity") is not None else ""
-        out.append(f"- `{e['ref']}` {_when(e.get('at'))} {e.get('mechanism') or 'mechanism yok'}{sim} — "
+        out.append(f"- `{e['ref']}` {_when(e.get('at'))} {e.get('mechanism') or 'problem tespit edilmedi'}{sim} — "
                    f"{OUTCOME_TR.get(e.get('outcome'), e.get('outcome'))}")
         if e.get("shared_symptoms"):
             out.append(f"  ortak belirtiler: {', '.join(e['shared_symptoms'][:6])}")
@@ -185,7 +185,7 @@ def _det_history(memory: dict) -> str:
             lines.append(f"- `{i.get('ref', '')}` {i.get('title') or i.get('excerpt', '')} {when} {extra}".rstrip())
     if memory.get("last_investigation"):
         li = memory["last_investigation"]
-        lines.append(f"\nSon araştırma: `{li['ref']}` {li['title']} — {li.get('mechanism') or 'mechanism yok'}")
+        lines.append(f"\nSon araştırma: `{li['ref']}` {li['title']} — {li.get('mechanism') or 'problem tespit edilmedi'}")
         any_ = True
     return "\n".join(lines) if any_ else ("Bu soruya uyan kayıt bulunamadı. Güncel durum için örneğin "
                                           "\"Son 30 dakikayı analiz et\" diye sorabilirsiniz.")

@@ -65,7 +65,7 @@ export function ToolTable({ rows, callUrlTemplate, runId, onEvidence }: {
             <tr>
               <th className="w-6" />
               <th>Adım</th>
-              <th>Sinyal / tool</th>
+              <th>Ölçüm / tool</th>
               <th>Durum</th>
               <th className="num">Kayıt</th>
               <th className="num">Süre</th>
@@ -174,7 +174,7 @@ export function EvidenceTable({ rows, highlight, callHref }: {
             <tr>
               <th className="w-6" />
               <th>Anahtar</th>
-              <th>Sinyal</th>
+              <th>Ölçüm</th>
               <th>Uygulama</th>
               <th>Özet</th>
               <th>Zaman</th>

@@ -1,13 +1,13 @@
 /** Agent Activity adımları — backend sre_platform/agent/events.py STEPS ile aynı sıra. */
 export const STEPS: { id: string; label: string; hint: string }[] = [
-  { id: "start", label: "Investigation başladı", hint: "pencere ve baseline belirlenir" },
+  { id: "start", label: "Investigation başladı", hint: "incelenen aralık ve önceki dönem belirlenir" },
   { id: "app_metrics", label: "Uygulama metric'leri", hint: "HTTP, Hikari Connection Pool, JVM" },
   { id: "db_metrics", label: "PostgreSQL metric'leri", hint: "connection, session, Lock Wait" },
   { id: "logs", label: "Error / lock logları", hint: "blocking edge'ler, PG logları" },
   { id: "traces", label: "Distributed Tracing", hint: "span latency, yavaş trace'ler" },
   { id: "infra", label: "Host / container", hint: "CPU, bellek, container" },
-  { id: "extra", label: "Ek evidence", hint: "mechanism doğrulama" },
-  { id: "correlate", label: "Evidence correlation", hint: "mechanism ve risk score" },
+  { id: "extra", label: "Ek evidence", hint: "problemi doğrulama" },
+  { id: "correlate", label: "Evidence correlation", hint: "problem ve risk score" },
   { id: "memory", label: "Geçmiş kayıtlar", hint: "benzer investigation, incident, runbook" },
   { id: "rca", label: "RCA / yanıt", hint: "özet ve öneriler" },
   { id: "save", label: "Kaydetme", hint: "PostgreSQL" },

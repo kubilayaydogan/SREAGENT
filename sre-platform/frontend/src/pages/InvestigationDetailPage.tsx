@@ -40,9 +40,9 @@ function Facts({ inv, canSettings }: { inv: InvestigationDetail; canSettings: bo
             <ConfidenceBadge confidence={inv.confidence} />
           </Field>
           <Field label="Data coverage">{fmtPct(toNum(inv.data_coverage), 0)}</Field>
-          <Field label="Mechanism">{mechanismLabel(inv.primary_mechanism)}</Field>
+          <Field label="Problem">{mechanismLabel(inv.primary_mechanism)}</Field>
           {!!inv.source_apps.length && (
-            <Field label="Source">
+            <Field label="Problemi başlatan">
               <span className="inline-flex flex-wrap justify-end gap-2">
                 {inv.source_apps.map((a) => (
                   <AppTag key={a} id={a} />
@@ -50,13 +50,13 @@ function Facts({ inv, canSettings }: { inv: InvestigationDetail; canSettings: bo
               </span>
             </Field>
           )}
-          <Field label="Pencere">
+          <Field label="İncelenen aralık">
             <span className="tabular-nums">
               {fmtTime(inv.window_start, false)}–{fmtTime(inv.window_end, false)}
             </span>
           </Field>
           {inv.baseline_start && (
-            <Field label="Baseline">
+            <Field label="Önceki dönem">
               <span className="tabular-nums">
                 {fmtTime(inv.baseline_start, false)}–{fmtTime(inv.baseline_end, false)}
               </span>
@@ -93,7 +93,7 @@ function Similar({ inv }: { inv: InvestigationDetail }) {
   const sim = useSimilar(inv.id);
   if (sim.isLoading) return <Skeleton className="m-3 h-32" />;
   if (sim.error) return <ErrorState error={sim.error} />;
-  if (!sim.data?.length) return <EmptyState icon={<GitCompare />} title="Benzer geçmiş kayıt yok" description="Bu mechanism / servis kombinasyonu ilk kez görülüyor." />;
+  if (!sim.data?.length) return <EmptyState icon={<GitCompare />} title="Benzer geçmiş kayıt yok" description="Bu problem / servis kombinasyonu ilk kez görülüyor." />;
   const rows = [{ ...inv, _self: true }, ...sim.data.map((s) => ({ ...s, _self: false }))];
   return (
     <div className="overflow-x-auto">
@@ -101,7 +101,7 @@ function Similar({ inv }: { inv: InvestigationDetail }) {
         <thead>
           <tr>
             <th>Investigation</th>
-            <th>Mechanism</th>
+            <th>Problem</th>
             <th className="num">Risk</th>
             <th>Önem</th>
             <th className="num">Zaman</th>

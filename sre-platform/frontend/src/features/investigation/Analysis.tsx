@@ -116,7 +116,7 @@ function LockChain({ m }: { m: Mechanism }) {
             {n.level > 0 && <span className="text-muted">└</span>}
             <AppTag id={n.app} />
             {n.level === 0 ? (
-              <span className="text-muted">blocker (source)</span>
+              <span className="text-muted">blocker (problemi başlatan)</span>
             ) : (
               <span className="text-muted tabular-nums">
                 bekler → {n.waits_on.map((w) => `${w.app.replace(/-service$/, "")} (${fmtNum(w.n)})`).join(", ")}
@@ -146,8 +146,8 @@ function RootCause({ inv, evIndex, onEvidence }: { inv: InvestigationDetail; evI
   if (!primary)
     return (
       <div>
-        <p className="text-[13px] text-ink">{inv.root_cause_hypothesis ?? "Tanımlı mechanism'lerle açıklanamadı."}</p>
-        <p className="mt-1 text-xs text-muted">Baseline'a göre anlamlı bir bozulma veya tanımlı bir mechanism bulunamadı.</p>
+        <p className="text-[13px] text-ink">{inv.root_cause_hypothesis ?? "Bilinen problem türleriyle açıklanamadı."}</p>
+        <p className="mt-1 text-xs text-muted">Önceki döneme göre anlamlı bir bozulma ya da bilinen bir problem bulunamadı.</p>
       </div>
     );
   return (
@@ -159,7 +159,7 @@ function RootCause({ inv, evIndex, onEvidence }: { inv: InvestigationDetail; evI
       {inv.root_cause_hypothesis && inv.root_cause_hypothesis !== primary.title && <p className="text-[13px] text-ink">{inv.root_cause_hypothesis}</p>}
       {primary.mechanism && !inv.root_cause_hypothesis?.includes(primary.mechanism) && <p className="text-[13px] leading-relaxed text-ink-2">{primary.mechanism}</p>}
       <dl className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
-        <dt className="text-muted">Source</dt>
+        <dt className="text-muted">Problemi başlatan</dt>
         <dd>
           <AppList ids={primary.source_apps} />
         </dd>
@@ -169,7 +169,7 @@ function RootCause({ inv, evIndex, onEvidence }: { inv: InvestigationDetail; evI
         </dd>
         {!!primary.signals?.length && (
           <>
-            <dt className="text-muted">Dayanak sinyaller</dt>
+            <dt className="text-muted">Dayandığı ölçümler</dt>
             <dd className="text-ink-2">{primary.signals.join(" · ")}</dd>
           </>
         )}
@@ -216,7 +216,7 @@ function Confidence({ inv }: { inv: InvestigationDetail }) {
           ))}
         </ul>
       )}
-      <p className="text-2xs text-muted">Güven, mechanism kurallarının karşılanan evidence sayısı ve data coverage'dan deterministik olarak türetilir.</p>
+      <p className="text-2xs text-muted">Confidence, problemi destekleyen evidence sayısından ve data coverage'dan kural tabanlı hesaplanır.</p>
     </div>
   );
 }
@@ -226,14 +226,14 @@ function Impacted({ inv }: { inv: InvestigationDetail }) {
   const impacted = Object.entries(r.impacted ?? {});
   const unexplained = new Set(r.unexplained_impacted ?? []);
   const riskApps = (r.risk?.apps ?? {}) as Record<string, AppRisk>;
-  if (!impacted.length) return <Muted>Baseline'a göre etkilenen servis tespit edilmedi.</Muted>;
+  if (!impacted.length) return <Muted>Önceki döneme göre etkilenen servis tespit edilmedi.</Muted>;
   return (
     <table className="data-table">
       <thead>
         <tr>
           <th>Servis</th>
           <th>Bulgu</th>
-          <th className="num">Latency / baseline</th>
+          <th className="num">Latency / önceki dönem</th>
           <th className="num">Risk</th>
         </tr>
       </thead>
@@ -310,7 +310,7 @@ function BaselineCompare({ inv }: { inv: InvestigationDetail }) {
   const fs = inv.report?.features_summary;
   const apps = Object.keys(fs?.window?.apps ?? {}).sort();
   const [app, setApp] = useState(() => inv.affected_apps[0] ?? inv.source_apps[0] ?? apps[0]);
-  if (!fs?.window?.apps || !fs.baseline?.apps || !apps.length) return <Muted>Baseline karşılaştırması bu kayıtta yok.</Muted>;
+  if (!fs?.window?.apps || !fs.baseline?.apps || !apps.length) return <Muted>Önceki dönemle karşılaştırma bu kayıtta yok.</Muted>;
   const cur = fs.window.apps[app] ?? {};
   const base = fs.baseline.apps[app] ?? {};
   return (
@@ -332,8 +332,8 @@ function BaselineCompare({ inv }: { inv: InvestigationDetail }) {
         <thead>
           <tr>
             <th>Metric</th>
-            <th className="num">Baseline</th>
-            <th className="num">Analiz penceresi</th>
+            <th className="num">Önceki dönem</th>
+            <th className="num">İncelenen aralık</th>
             <th className="num">Değişim</th>
           </tr>
         </thead>
@@ -370,7 +370,7 @@ function SupportingEvidence({ inv, evIndex, onEvidence }: { inv: InvestigationDe
     <div className="space-y-3">
       {mechs.length > 0 && (
         <div>
-          <div className="mb-1 text-xs font-medium text-ink">Mechanism'i destekleyen evidence</div>
+          <div className="mb-1 text-xs font-medium text-ink">Problemi destekleyen evidence</div>
           {support.length ? (
             <div className="divide-y divide-line rounded-md border border-line">
               {support.map((e) => (
@@ -378,16 +378,16 @@ function SupportingEvidence({ inv, evIndex, onEvidence }: { inv: InvestigationDe
               ))}
             </div>
           ) : (
-            <Muted>Mechanism'e bağlı evidence kaydı yok.</Muted>
+            <Muted>Probleme bağlı evidence kaydı yok.</Muted>
           )}
         </div>
       )}
       <div>
-        <div className="mb-1 text-xs font-medium text-ink">Baseline karşılaştırması</div>
+        <div className="mb-1 text-xs font-medium text-ink">Önceki dönemle karşılaştırma</div>
         <BaselineCompare inv={inv} />
       </div>
       {rest.length > 0 && (
-        <Disclosure title={<span className="text-xs text-ink-2">Diğer toplanan sinyaller</span>} meta={`${rest.length} DQL query`}>
+        <Disclosure title={<span className="text-xs text-ink-2">Diğer toplanan ölçümler</span>} meta={`${rest.length} DQL query`}>
           <div className="divide-y divide-line rounded-md border border-line">
             {rest.map((e) => (
               <EvidenceRow key={e.id} e={e} onOpen={onEvidence} />
@@ -438,8 +438,8 @@ function Timeline({ inv }: { inv: InvestigationDetail }) {
   const win = r.windows?.find((w) => w.name === "window");
   type Item = { at: string | null; label: string; detail?: string; tone?: "muted" | "ink" | "warn" };
   const all: Item[] = [
-    { at: base?.start ?? inv.baseline_start, label: "Baseline penceresi başlar", detail: base || inv.baseline_end ? `→ ${fmtTime(base?.end ?? inv.baseline_end, false)}` : undefined, tone: "muted" },
-    { at: win?.start ?? inv.window_start, label: "Analiz penceresi başlar", detail: `→ ${fmtTime(win?.end ?? inv.window_end, false)}`, tone: "ink" },
+    { at: base?.start ?? inv.baseline_start, label: "Önceki dönem başlar", detail: base || inv.baseline_end ? `→ ${fmtTime(base?.end ?? inv.baseline_end, false)}` : undefined, tone: "muted" },
+    { at: win?.start ?? inv.window_start, label: "İncelenen zaman aralığı başlar", detail: `→ ${fmtTime(win?.end ?? inv.window_end, false)}`, tone: "ink" },
     ...Object.entries(r.impacted ?? {}).map(([a, v]): Item => ({ at: null, label: `${a.replace(/-service$/, "")} etkilendi`, detail: (v.reasons ?? []).join("; "), tone: "warn" })),
     { at: inv.started_at ?? inv.created_at, label: "Investigation başladı", tone: "muted" },
     { at: inv.completed_at, label: inv.status === "FAILED" ? "Investigation başarısız" : "Investigation tamamlandı", detail: inv.duration_ms != null ? fmtDuration(inv.duration_ms) : undefined, tone: "muted" },
@@ -457,7 +457,7 @@ function Timeline({ inv }: { inv: InvestigationDetail }) {
             )}
           />
           <div className="flex flex-wrap items-baseline gap-x-2">
-            <span className="w-28 shrink-0 text-muted tabular-nums">{x.at ? fmtTime(x.at) : "pencere içinde"}</span>
+            <span className="w-28 shrink-0 text-muted tabular-nums">{x.at ? fmtTime(x.at) : "incelenen aralıkta"}</span>
             <span className={x.tone === "muted" ? "text-ink-2" : "text-ink"}>{x.label}</span>
             {x.detail && <span className="text-muted">{x.detail}</span>}
           </div>
@@ -471,7 +471,7 @@ function Alternatives({ inv }: { inv: InvestigationDetail }) {
   const r = inv.report ?? {};
   const secondary = (r.mechanisms ?? []).filter((m) => m.id !== inv.primary_mechanism);
   const alts = r.alternatives ?? [];
-  if (!secondary.length && !alts.length) return <Muted>Alternatif hipotez yok: veri tek bir açıklamayı destekliyor ya da mechanism tespit edilmedi.</Muted>;
+  if (!secondary.length && !alts.length) return <Muted>Alternatif hipotez yok: veri tek bir açıklamayı destekliyor ya da problem tespit edilmedi.</Muted>;
   return (
     <ul className="space-y-1.5 text-[13px]">
       {secondary.map((m) => (
@@ -559,7 +559,7 @@ function DataQuality({ inv, evIndex }: { inv: InvestigationDetail; evIndex: Map<
           <div className={cn("h-full rounded-full", (cov?.ratio ?? 0) >= 0.9 ? "bg-st-good" : "bg-st-warning")} style={{ width: `${Math.round((cov?.ratio ?? 0) * 100)}%` }} />
         </div>
         <span className="text-ink tabular-nums">
-          {cov?.signals_total != null ? `${cov.signals_ok}/${cov.signals_total} sinyal` : "—"} · {fmtPct(cov?.ratio ?? (inv.data_coverage == null ? null : Number(inv.data_coverage)), 0)} coverage
+          {cov?.signals_total != null ? `${cov.signals_ok}/${cov.signals_total} ölçüm grubu` : "—"} · {fmtPct(cov?.ratio ?? (inv.data_coverage == null ? null : Number(inv.data_coverage)), 0)} coverage
         </span>
       </div>
       {gaps.length > 0 ? (
@@ -573,7 +573,7 @@ function DataQuality({ inv, evIndex }: { inv: InvestigationDetail; evIndex: Map<
         </ul>
       ) : (
         <p className="inline-flex items-center gap-1.5 text-ink-2">
-          <CheckCircle2 className="size-3.5 text-st-good" /> Data gap yok
+          <CheckCircle2 className="size-3.5 text-st-good" /> Eksik veri yok
         </p>
       )}
       {failed.length > 0 && (

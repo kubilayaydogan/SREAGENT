@@ -209,14 +209,14 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
             "id": "row_lock",
             "title": "Zincirleme row lock wait" if depth >= 2 else "Row lock wait",
             "source_apps": sources, "affected_apps": affected,
-            "mechanism": "Source uygulamanın açık transaction'ı row lock'u tutarken etkilenen uygulamanın "
+            "mechanism": "Problemi başlatan uygulamanın açık transaction'ı row lock'u tutarken etkilenen uygulamanın "
                          "UPDATE/SELECT FOR UPDATE işlemleri Lock/transactionid wait'e düşüyor; bekleyen request'ler "
                          "Hikari connection'ını tuttuğu için connection pool doluluğu ve latency artıyor.",
             "signals": lock_srcs, "edges_total": edges_total, "edge_pairs": edges[:10],
             "blocker_states": blocker_states, "chain_blockers": chain,
             "lock_chain": chain_hops, "chain_depth": depth, "chain_path": chain_text(chain_hops) if depth else None,
             **({"cascade": "Bekleyen her halka kendi transaction'ında tuttuğu row lock'u ve Hikari connection'ını "
-                           "bırakamadığı için bir sonraki uygulamayı bekletiyor; impact source uygulamadan zincir "
+                           "bırakamadığı için bir sonraki uygulamayı bekletiyor; etki, problemi başlatan uygulamadan zincir "
                            "boyunca yayılıyor."} if depth >= 2 else {}),
             "confidence": _conf(len(lock_srcs), any(a in imp for a in affected)),
             "evidence_ids": ev("edges", "collector", "lock_waiters", "pg_lock_logs"),
@@ -294,9 +294,9 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
             "id": "db_cpu", "title": "DB_VM CPU pressure", "cause": cause,
             "source_apps": sources, "affected_apps": sorted(imp),
             "mechanism": ("PostgreSQL host'unda CPU saturation tüm query'lerin execution time'ını uzatır; CPU artışı "
-                          "maintenance aktivitesiyle uyumlu olduğu için source uygulama gösterilmez, uygulamalardaki "
+                          "maintenance aktivitesiyle uyumlu olduğu için problemi başlatan bir uygulama gösterilmez, uygulamalardaki "
                           "execution time artışı CPU pressure'ın sonucu sayılır." if maint else
-                          "PostgreSQL host'unda CPU saturation tüm query'lerin execution time'ını uzatır; source, "
+                          "PostgreSQL host'unda CPU saturation tüm query'lerin execution time'ını uzatır; problemi başlatan, "
                           "pg_stat_statements execution time'ı en çok artan role(ler)dir."),
             "db_cpu": round(dbh["cpu"], 1), "baseline_cpu": round(bdbh["cpu"], 1) if bdbh.get("cpu") is not None else None,
             "exec_ms_increase_per_min": {k: round(v, 1) for k, v in incs.items()},
@@ -385,7 +385,7 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
                 "id": "independent_load", "title": f"{app} bağımsız load artışı",
                 "source_apps": [app], "affected_apps": [app] if app in imp else [],
                 "mechanism": "Request rate arttı; paylaşılan resource'ta (lock, DB connection, CPU) pressure ölçülmedi. "
-                             + ("Başka uygulamalarda da impact var — ilişki için evidence yok." if others else
+                             + ("Başka uygulamalarda da etki var — ilişki için evidence yok." if others else
                                 "Diğer uygulamalara yayılma gözlenmedi."),
                 "rpm_ratio": round(r, 2), "unexplained_impact": others,
                 "signals": ["Micrometer istek hızı"], "confidence": "medium" if not others else "low",
@@ -404,7 +404,7 @@ def alternatives(attr: dict, quality: dict) -> list[str]:
     ids = {m["id"] for m in attr["mechanisms"]}
     out = []
     if "row_lock" in ids and "app_vm_cpu" in ids:
-        out.append("Latency, lock yerine APP_VM CPU saturation'dan da kaynaklanabilir; iki mechanism aynı anda aktif.")
+        out.append("Latency, lock yerine APP_VM CPU saturation'dan da kaynaklanabilir; iki problem aynı anda aktif.")
     if "row_lock" in ids and "global_connection_pressure" in ids:
         out.append("Connection pressure, lock wait'in sonucu olabilir (bekleyen session'lar connection tutar).")
     if "db_cpu" in ids:
@@ -417,10 +417,10 @@ def alternatives(attr: dict, quality: dict) -> list[str]:
         if cause.get("caveat"):
             out.append(cause["caveat"])
     if attr["unexplained_impacted"]:
-        out.append(f"Şu uygulamalardaki impact hiçbir mechanism ile açıklanamadı: {', '.join(attr['unexplained_impacted'])}"
+        out.append(f"Şu uygulamalardaki etki bilinen problem türlerinden hiçbiriyle açıklanamadı: {', '.join(attr['unexplained_impacted'])}"
                    " (uygulama içi error, GC veya network olabilir).")
     if quality.get("spans", {}).get("status") != "OK":
         out.append("Span verisi eksik/seyrek: latency Micrometer mean'den hesaplandı, p95 değil.")
     if not ids and attr["impacted"]:
-        out.append("Impact var ama ölçülen shared resource pressure yok; external dependency veya uygulama içi sorun olabilir.")
+        out.append("Etki var ama ölçülen shared resource pressure yok; external dependency veya uygulama içi sorun olabilir.")
     return out

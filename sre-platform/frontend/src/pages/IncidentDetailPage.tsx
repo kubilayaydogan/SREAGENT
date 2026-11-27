@@ -286,7 +286,7 @@ export default function IncidentDetailPage() {
                   <tr>
                     <th>Investigation</th>
                     <th>İlişki</th>
-                    <th>Mechanism</th>
+                    <th>Problem</th>
                     <th className="num">Risk</th>
                     <th>Durum</th>
                   </tr>

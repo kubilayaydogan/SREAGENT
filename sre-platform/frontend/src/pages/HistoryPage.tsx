@@ -48,7 +48,7 @@ export default function HistoryPage() {
           more={
             <>
               <div>
-                <Label htmlFor="f-mech">Mechanism</Label>
+                <Label htmlFor="f-mech">Problem</Label>
                 <Select id="f-mech" value={g("mechanism")} onChange={(e) => set("mechanism", e.target.value)} className="w-56">
                   <option value="">Tümü</option>
                   {Object.entries(MECHANISM_LABEL).map(([k, l]) => (
@@ -115,7 +115,7 @@ export default function HistoryPage() {
                       Investigation
                     </SortTh>
                     <th>Servisler</th>
-                    <th>Mechanism</th>
+                    <th>Problem</th>
                     <SortTh field="severity" sort={sort} onSort={(s) => set("sort", s)}>
                       Önem
                     </SortTh>

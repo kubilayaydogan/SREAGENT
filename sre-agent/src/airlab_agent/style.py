@@ -6,6 +6,8 @@ analiz açıklaması, RCA özeti ve Agent Builder ile kurulan agent'ların LLM n
 """
 from __future__ import annotations
 
+from .terminology import reader_lines
+
 STYLE_MARK = "YAZIM ÜSLUBU"
 
 STYLE_PROMPT = f"""
@@ -44,6 +46,28 @@ istiyorsa o biçime uy; bu kurallar o biçimin içindeki cümlelerin nasıl yaz�
   anlat. Veri azsa uzatma: eldeki bulguyu ve eksik evidence'ı yaz.
 - Birkaç bulgu ya da adım yan yana anlatılacaksa liste kullan; aksi halde düz cümle yaz. Başlık ya da etiketi yalnız
   içerik birden çok bölüm gerektiriyorsa kullan.
+- Okur uygulamanın iç yapısını bilmez. Veri bloklarındaki alan adlarını, analiz adımlarının adlarını ve iç kodları
+  metne taşıma; okurun anlayacağı karşılığı yaz. Bu, sektör terimlerini İngilizce koruma kuralından AYRIDIR:
+  Lock Wait, Connection Pool, latency, Root Cause, evidence sektör terimidir ve korunur. Aşağıdakiler ise
+  uygulamanın iç adlarıdır; metinde soldakini değil sağdakini yaz:
+{reader_lines()}
+- Problemi adıyla söyle (ör. "Row lock wait", "checkin-service Connection Pool saturation"); `row_lock`,
+  `pool_saturation` gibi iç kodları yazma. "Tespit edilen problem …", "problemi başlatan uygulama …",
+  "etkilenen uygulamalar …" de. Dynatrace'in kendi Problem kaydından söz ediyorsan karışmaması için
+  "Dynatrace Problem" diye yaz.
+- Veri bloğundaki alan anahtarlarını (ör. `http_mean_ms`, `span_p95_ms`, `pool_ratio_avg`, `conn_ratio`) metne
+  yazma; neyi ölçtüğünü yaz: "ortalama latency", "p95 latency", "Connection Pool doluluğu", "PostgreSQL
+  connection kullanımı". Dynatrace'teki gerçek metric adını (ör. `dt.host.cpu.usage`) yalnız okurun o metric'i
+  açması gerekiyorsa backtick içinde ver.
+- 0 ile 1 arasında verilen oranları yüzde olarak yaz: 0.202 → %20, 1.0 → %100, data coverage 0.93 → %93.
+  "oran 0.202" yazma.
+- Düzey ve durum değerlerini Türkçe yaz: high / medium / low → yüksek / orta / düşük; confirmed → doğrulandı;
+  rejected → yanlış çıktı; unverified ya da `verified: false` → doğrulanmadı. Query durum kodlarını kod olarak
+  değil anlamıyla yaz: EMPTY → veri gelmedi; STALE → veri eski; ERROR → query hata verdi; TIMEOUT → query timeout
+  oldu; PERMISSION → yetki yok; UNAVAILABLE → veri kaynağına ulaşılamadı; SKIPPED_BUDGET → query sınırı dolduğu
+  için çalıştırılmadı.
+- Analizi yapan parçayı özne yapma ("motor şunu işaretliyor", "sistem şunu hesapladı"). Bulguyu doğrudan söyle;
+  özne gerekiyorsa "analiz … gösteriyor" de.
 - Zaman aralığını ve karşılaştırmayı günlük dille anlat. Metinde "pencere", "window", "baseline" ve "referans
   penceresi" kelimelerini KULLANMA (veri alanı adı olarak geçseler bile):
   · incelenen aralık: "15:05–15:15 arasında", "son 15 dakikada", "incelenen zaman aralığında".

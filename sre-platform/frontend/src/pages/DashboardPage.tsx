@@ -366,7 +366,7 @@ export default function DashboardPage() {
                   <thead>
                     <tr>
                       <th>Investigation</th>
-                      <th>Mechanism</th>
+                      <th>Problem</th>
                       <th className="num">Risk</th>
                       <th>Önem</th>
                       <th>Durum</th>

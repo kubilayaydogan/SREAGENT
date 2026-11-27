@@ -54,7 +54,7 @@ function ManualInvestigation() {
             <AppSelect value={app} onChange={setApp} className="w-full" />
           </div>
           <div>
-            <Label htmlFor="mi-win">Pencere</Label>
+            <Label htmlFor="mi-win">Zaman aralığı</Label>
             <Select id="mi-win" value={minutes} onChange={(e) => setMinutes(e.target.value)}>
               {[
                 ["15", "Son 15 dk"],

@@ -20,7 +20,7 @@ def human_review(attr: dict, quality: dict, scores: dict) -> list[str]:
     out = []
     for m in attr.get("mechanisms", []):
         if m["id"] == "row_lock":
-            out.append("Source uygulamanın long-running/idle transaction'larını (blocker_state, xact_age) inceleyin; "
+            out.append("Problemi başlatan uygulamanın long-running/idle transaction'larını (blocker_state, xact_age) inceleyin; "
                        "pg_stat_activity'de 'idle in transaction' session'ları ve uygulamanın transaction boundary'lerini doğrulayın.")
         if m["id"] == "pool_saturation" and not m.get("secondary_to"):
             out.append(f"{m['affected_apps'][0]} için connection pool size'ı ve gelen load'un beklenen olup olmadığını teyit edin.")
@@ -81,6 +81,30 @@ def build(state: dict) -> dict:
     return redact(rep)
 
 
+LEVEL_TR = {"high": "yüksek", "medium": "orta", "low": "düşük"}
+GAP_TR = {"EMPTY": "veri gelmedi", "STALE": "veri eski", "ERROR": "query hata verdi", "TIMEOUT": "query timeout oldu",
+          "PERMISSION": "yetki yok", "UNAVAILABLE": "veri kaynağına ulaşılamadı",
+          "SKIPPED_BUDGET": "query sınırı dolduğu için çalıştırılmadı", "PARTIAL": "veri eksik geldi"}
+
+
+def level_text(v: str | None) -> str:
+    """confidence düzeyi (high/medium/low) → okura yazılan karşılık."""
+    return LEVEL_TR.get(v or "", v or "—")
+
+
+def gap_text(line: str) -> str:
+    """`data_gaps` satırı ('hikari: EMPTY — ayrıntı') → 'hikari (veri gelmedi; ayrıntı)'. Alan değeri değişmez."""
+    name, _, rest = line.partition(": ")
+    status, _, detail = rest.partition(" — ")
+    return f"{name} ({GAP_TR.get(status.strip(), status.strip())}" + (f"; {detail}" if detail else "") + ")"
+
+
+def reason_text(reason: str) -> str:
+    """`impacted[].reasons` satırındaki iç ölçüm adlarını okur diline çevirir. Alan değeri değişmez."""
+    return (reason.replace("http_mean (tail)", "en yavaş istekler").replace("http_mean", "ortalama")
+            .replace("span_p95", "p95"))
+
+
 def _fmt(v: Any, pct=False) -> str:
     if v is None:
         return "veri yok"
@@ -97,18 +121,20 @@ def to_markdown(r: dict) -> str:
     L.append(f"# airlab SRE report `{r['id']}`")
     L.append(f"- Kind: {r['kind']} · Status: **{r['status']}** · Generated: {_stamp(r['generated_at'])}")
     for w in r.get("windows") or []:
-        L.append(f"- Window `{w['name']}`: {_stamp(w['start'])} → {_stamp(w['end'])}")
+        label = {"window": "İncelenen zaman aralığı", "baseline": "Önceki dönem"}.get(w["name"], w["name"])
+        L.append(f"- {label}: {_stamp(w['start'])} → {_stamp(w['end'])}")
     if r.get("question"):
         L.append(f"- Soru: {r['question']}")
     for n in r.get("notes", []):
         L.append(f"- Not: {n}")
     c = r["causality"]
+    prim_title = next((m["title"] for m in r["mechanisms"] if m["id"] == c["primary_mechanism"]), None)
     L += ["", "## Üç ayrı değerlendirme", "| Boyut | Value |", "|---|---|",
           f"| Risk score (0–100) | {_fmt(o['score'])} ({o.get('band') or 'hesaplanamadı'}) |",
-          f"| Data coverage | {r['data_coverage']['signals_ok']}/{r['data_coverage']['signals_total']} signal OK, "
+          f"| Data coverage | {r['data_coverage']['signals_ok']}/{r['data_coverage']['signals_total']} ölçüm grubu alındı, "
           f"score coverage ort. {_fmt(o.get('coverage'), pct=True)} |",
-          f"| Causality confidence | {c['confidence'] or '—'} "
-          f"({c['primary_mechanism'] or 'mechanism yok'}) |", ""]
+          f"| Causality confidence | {level_text(c['confidence'])} "
+          f"({prim_title or 'problem tespit edilmedi'}) |", ""]
     L += ["## Uygulama risk score'ları", "| Uygulama | Score | Band | Coverage | Latency ratio | Eksik component |", "|---|---|---|---|---|---|"]
     for a, s in r["risk"]["apps"].items():
         comp = s.get("components", {})
@@ -116,31 +142,32 @@ def to_markdown(r: dict) -> str:
         lat = f"×{lr:.2f} ({src})" if lr else "veri yok"
         L.append(f"| {a} | {_fmt(s['score'])} | {s.get('band') or '—'} | {_fmt(s['coverage'], pct=True)} | {lat} | "
                  f"{', '.join(s.get('missing', [])) or '—'} |")
-    L += ["", "## Source → Etkilenen",
-          f"- Source: {', '.join(c['source_apps']) or 'belirlenemedi'}",
+    L += ["", "## Problemi başlatan → etkilenen",
+          f"- Problemi başlatan: {', '.join(c['source_apps']) or 'belirlenemedi'}",
           f"- Etkilenen: {', '.join(c['affected_apps']) or 'yok'}"]
     for a, i in r["impacted"].items():
-        L.append(f"  - {a}: {'; '.join(i['reasons'])}")
+        L.append(f"  - {a}: {'; '.join(reason_text(x) for x in i['reasons'])}")
     prim = next((m for m in r["mechanisms"] if m["id"] == c["primary_mechanism"]), None)
     if prim and prim.get("chain_path"):
         L.append(f"- Lock wait chain: {prim['chain_path']} ({prim['chain_depth']} halka)")
-    L += ["", "## Mechanism'ler"]
+    L += ["", "## Tespit edilen problemler"]
     if not r["mechanisms"]:
-        L.append("- Tespit edilen mechanism yok.")
+        L.append("- Tespit edilen problem yok.")
     for m in r["mechanisms"]:
-        L.append(f"- **{m['title']}** (`{m['id']}`, confidence: {m['confidence']}"
-                 + (f", secondary → {m['secondary_to']}" if m.get("secondary_to") else "") + ")")
-        L.append(f"  - Source: {', '.join(m['source_apps']) or '—'} · Etkilenen: {', '.join(m['affected_apps']) or '—'}")
+        L.append(f"- **{m['title']}** (`{m['id']}`, confidence: {level_text(m['confidence'])}"
+                 + (f", `{m['secondary_to']}` sonucu" if m.get("secondary_to") else "") + ")")
+        L.append(f"  - Problemi başlatan: {', '.join(m['source_apps']) or '—'} · Etkilenen: "
+                 f"{', '.join(m['affected_apps']) or '—'}")
         L.append(f"  - {m['mechanism']}")
-        L.append(f"  - Signal'ler: {', '.join(m['signals'])} · Evidence: {', '.join(m['evidence_ids']) or '—'}")
+        L.append(f"  - Dayandığı ölçümler: {', '.join(m['signals'])} · Evidence: {', '.join(m['evidence_ids']) or '—'}")
     L += ["", "## Alternatif açıklamalar"] + ([f"- {x}" for x in r["alternatives"]] or ["- —"])
-    L += ["", "## Data gap'ler"] + ([f"- {x}" for x in r["data_gaps"]] or ["- Yok"])
-    L += ["", "## Önerilen human review"] + [f"- {x}" for x in r["human_review"]]
+    L += ["", "## Eksik veri"] + ([f"- {gap_text(x)}" for x in r["data_gaps"]] or ["- Yok"])
+    L += ["", "## Önerilen kontroller"] + [f"- {x}" for x in r["human_review"]]
     if r.get("explanation"):
         L += ["", f"## Açıklama ({r.get('explanation_source')})", r["explanation"]]
     if r.get("errors"):
         L += ["", "## Error'lar"] + [f"- {e}" for e in r["errors"]]
-    L += ["", "## Evidence", "| ID | Signal | Status | Record | Dynatrace queryId |", "|---|---|---|---|---|"]
+    L += ["", "## Evidence", "| ID | Ölçüm grubu | Status | Record | Dynatrace queryId |", "|---|---|---|---|---|"]
     for e in r["evidence"]:
         L.append(f"| {e['id']} | {e['signal']} | {e['status']} | {e['records']} | {e.get('dynatrace_query_id') or '—'} |")
     b = r.get("budget") or {}
@@ -181,29 +208,28 @@ def deterministic_explanation(r: dict) -> str:
         summary = (f"{period}, "
                    + (f"{_clock(base['start'])} – {_clock(base['end'])} arasındaki önceki dönemle " if base
                       else "önceki dönemle ")
-                   + f"karşılaştırıldı. Tespit edilen mechanism: **{prim['title']}**. "
-                   + ("Source bir uygulama değil; CPU artışı veritabanı maintenance aktivitesiyle uyumlu, etkilenen "
+                   + f"karşılaştırıldı. Tespit edilen problem: **{prim['title']}**. "
+                   + ("Problemi bir uygulama başlatmadı; CPU artışı veritabanı maintenance aktivitesiyle uyumlu. "
                       if (prim.get("cause") or {}).get("kind") == "maintenance" else
-                      f"Root cause source'u {_join(prim['source_apps']) or 'belirlenemeyen bir uygulama'}, etkilenen ")
-                   +
-                   f"uygulamalar {_join(prim['affected_apps']) or 'yok'}. ")
+                      f"Problemi başlatan uygulama: {_join(prim['source_apps']) or 'belirlenemedi'}. ")
+                   + f"Etkilenen uygulamalar: {_join(prim['affected_apps']) or 'yok'}. ")
     elif r["impacted"]:
         summary = (f"{period}nda {_join(list(r['impacted']))} uygulamalarında kötüleşme ölçüldü, ancak eldeki "
-                   "evidence tek bir mechanism'e bağlanamadı. ")
+                   "evidence bilinen tek bir probleme bağlanamadı. ")
     else:
         summary = f"{period}nda önceki döneme göre anlamlı bir kötüleşme ölçülmedi. "
-    summary += (f"Genel risk score {_fmt(o['score'])}/100 ({o.get('band') or 'hesaplanamadı'}); bu puan şiddeti "
-                "gösterir, nedenselliğin kesinliğini değil.")
+    summary += (f"Genel risk score {_fmt(o['score'])}/100 ({o.get('band') or 'hesaplanamadı'}); risk score etkinin "
+                "büyüklüğünü gösterir, nedenin ne kadar kesin olduğunu değil.")
     paras.append("**Özet.** " + summary)
 
     # 2) Etki
     if r["impacted"]:
-        parts = [f"{a} uygulamasında {', '.join(i['reasons'])}" for a, i in r["impacted"].items()]
+        parts = [f"{a} uygulamasında {', '.join(reason_text(x) for x in i['reasons'])}" for a, i in r["impacted"].items()]
         unaffected = [a for a in r["risk"]["apps"] if a not in r["impacted"]]
-        txt = "Ölçülen impact şöyle: " + "; ".join(parts) + "."
+        txt = "Ölçülen etki: " + "; ".join(parts) + "."
         if unaffected:
             txt += f" {_join(unaffected)} uygulamalarında önceki döneme göre anlamlı değişiklik görülmedi."
-        paras.append("**Impact.** " + txt)
+        paras.append("**Etki.** " + txt)
 
     # 3) Kök neden ve yayılım
     if prim:
@@ -220,26 +246,27 @@ def deterministic_explanation(r: dict) -> str:
         secondary = [m["title"] for m in r["mechanisms"] if m.get("secondary_to") == prim["id"]]
         if secondary:
             txt += f" Buna bağlı ikincil etkiler: {_join(secondary)}."
-        paras.append("**Root cause ve yayılım.** " + txt.strip())
+        paras.append("**Root Cause ve yayılım.** " + txt.strip())
 
     # 4) Kanıt ve güven
     dc = r["data_coverage"]
-    txt = (f"Değerlendirme {dc['signals_ok']}/{dc['signals_total']} signal ile yapıldı. Causality confidence "
-           f"{c['confidence'] or '—'}")
+    txt = (f"Gereken {dc['signals_total']} ölçüm grubundan {dc['signals_ok']} tanesi alınabildi. Nedene ilişkin "
+           f"confidence: {level_text(c['confidence'])}")
     if prim:
-        txt += f"; mechanism'i destekleyen signal'ler: {', '.join(prim['signals'])}"
+        txt += f"; problemi destekleyen ölçümler: {', '.join(prim['signals'])}"
         if prim.get("evidence_ids"):
             txt += f" (evidence: {', '.join(prim['evidence_ids'])})"
     txt += "."
     if r["data_gaps"]:
-        txt += f" Data gap'ler: {'; '.join(r['data_gaps'])}. Eksik veri sıfır olarak yorumlanmadı."
+        txt += (f" Eksik veri: {'; '.join(gap_text(x) for x in r['data_gaps'])}. Eksik veri sıfır olarak "
+                "yorumlanmadı.")
     if r.get("alternatives"):
         txt += " Dışlanamayan alternatif açıklamalar: " + " ".join(r["alternatives"])
     paras.append("**Evidence ve confidence.** " + txt)
 
     # 5) Öneri
-    paras.append("**Önerilen inceleme.** " + " ".join(r["human_review"])
-                 + " Ajan salt-okunurdur; değişiklik gerektiren adımlar onay akışından geçmelidir.")
+    paras.append("**Önerilen kontrol.** " + " ".join(r["human_review"])
+                 + " Agent yalnız okuma yapar; değişiklik gerektiren adımlar onay akışından geçmelidir.")
     return "\n\n".join(paras)
 
 

@@ -94,3 +94,23 @@ def test_user_text_names_periods_in_plain_language(settings):  # noqa: F811
     # analiz prompt'u alan adlarini karsiliklariyla esler ve eksik karsilastirma verisinde tahmini yasaklar
     for must in ('name: "window"', 'name: "baseline"', "karşılaştırma verisi yok", "Sonraki kontrol"):
         assert must in SYSTEM_EXPLAIN_BASE, must
+
+
+def test_user_text_does_not_leak_internal_names(settings):  # noqa: F811
+    """Uygulamanin ic adlari (mechanism, source, impact, signal, data gap ...) okura giden metne tasinmaz."""
+    from airlab_agent.report import deterministic_explanation, gap_text, level_text, reason_text
+
+    st, _ = _run(settings, llm=_Capture())
+    r = _report(st)
+    assert r["mechanisms"] and "mechanism" in r["mechanisms"][0]                       # sema anahtarlari degismez
+    text = deterministic_explanation(r)
+    assert T.find_internal(text) == [], [str(v) for v in T.find_internal(text)]
+    assert "Tespit edilen problem" in text
+    # ic adlarin karsiliklari her system prompt'a eklenir
+    for must in ("mechanism →", "source →", "signal →", "data gap →", "yüzde olarak", "iç kodları"):
+        assert must in STYLE_PROMPT, must
+    assert [v.text.lower() for v in T.find_internal("Mechanism bulundu; baseline `window` alanı")] == ["mechanism", "baseline"]
+    assert T.find_internal("shared resource pressure") == []                           # "resource" ic ad degildir
+    assert level_text("high") == "yüksek" and level_text(None) == "—"
+    assert gap_text("hikari: EMPTY — kaynak yazmadı") == "hikari (veri gelmedi; kaynak yazmadı)"
+    assert reason_text("latency ×3.0 (http_mean, +40 ms)") == "latency ×3.0 (ortalama, +40 ms)"

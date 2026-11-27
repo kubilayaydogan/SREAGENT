@@ -32,7 +32,7 @@ export function InvestigationCard({ inv }: { inv: InvestigationSummary }) {
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 px-3 py-2 text-xs sm:grid-cols-4">
         <div>
-          <dt className="text-muted">Olası mechanism</dt>
+          <dt className="text-muted">Olası problem</dt>
           <dd className="text-ink">{inv.mechanism ? mechanismLabel(inv.mechanism) : "tespit edilmedi"}</dd>
         </div>
         <div>
@@ -44,7 +44,7 @@ export function InvestigationCard({ inv }: { inv: InvestigationSummary }) {
           <dd className={inv.data_coverage != null && inv.data_coverage < 0.6 ? "text-st-warning-ink" : "text-ink"}>{fmtPct(inv.data_coverage, 0)}</dd>
         </div>
         <div>
-          <dt className="text-muted">Pencere</dt>
+          <dt className="text-muted">İncelenen aralık</dt>
           <dd className="text-ink">
             {fmtTime(inv.window?.[0], false)}–{fmtTime(inv.window?.[1], false)} · {fmtDuration(inv.duration_ms)}
           </dd>

@@ -7,7 +7,7 @@ import uuid
 from datetime import timezone
 from typing import Any
 
-from airlab_agent.report import deterministic_explanation
+from airlab_agent.report import deterministic_explanation, gap_text, level_text, reason_text
 from airlab_agent.terminology import with_policy
 
 from ..agent import prompts
@@ -91,17 +91,20 @@ def build_sections(inv: Investigation, evidence: list, inc_events: list | None, 
             supporting.append({"key": e.evidence_key, "mechanism": None, "type": "TRACE", "signal": e.signal,
                                "summary": e.content, "trace_id": e.trace_id})
 
-    impact_lines = [f"- **{a}**: " + "; ".join(v.get("reasons", [])) for a, v in impacted.items()]
+    impact_lines = [f"- **{a}**: " + "; ".join(reason_text(x) for x in v.get("reasons", []))
+                    for a, v in impacted.items()]
     impact = ("Risk score " + (f"{risk['score']} ({risk.get('band')})" if risk.get("score") is not None
                                else "hesaplanamadı (data coverage yetersiz)")
-              + f"; data coverage {cov.get('signals_ok', 0)}/{cov.get('signals_total', 0)} signal.\n"
+              + f"; data coverage {cov.get('signals_ok', 0)}/{cov.get('signals_total', 0)} ölçüm grubu.\n"
               + ("\n".join(impact_lines) if impact_lines else "Önceki döneme göre anlamlı etki tespit edilmedi."))
 
     root = None
     if primary:
-        root = (f"{primary['title']} — source: {', '.join(primary.get('source_apps') or []) or '—'}, "
+        root = (f"{primary['title']} — problemi başlatan: {', '.join(primary.get('source_apps') or []) or '—'}, "
                 f"etkilenen: {', '.join(primary.get('affected_apps') or []) or '—'}. {primary.get('mechanism', '')}")
-    contributing = [f"{m['title']} (secondary: {m['secondary_to']})" if m.get("secondary_to") else m["title"]
+    titles = {m["id"]: m["title"] for m in mechs}
+    contributing = [f"{m['title']} ({titles.get(m['secondary_to'], m['secondary_to'])} sonucu)"
+                    if m.get("secondary_to") else m["title"]
                     for m in mechs if m is not primary]
     for p in (primary or {}).get("edge_pairs", [])[:3]:
         contributing.append(f"Blocking edge: {p['waiter_app']}/{p.get('waiter_op')} işlemi {p['blocker_app']}/"
@@ -116,15 +119,15 @@ def build_sections(inv: Investigation, evidence: list, inc_events: list | None, 
             actions.append(f"Bilinen sorun '{ki.title}' çözümü: {ki.resolution}")
     # Bekleyen ve bloklayan uygulamayı eşleyen kayıt varsa ilişki doğrudan görülmüştür; yoksa sonuç hipotezdir.
     paired = bool((primary or {}).get("edge_pairs"))
-    unc = [f"Causality confidence: {caus.get('confidence') or '—'}. "
+    unc = [f"Causality confidence: {level_text(caus.get('confidence'))}. "
            + ("Bekleme ilişkisini blocking edge kayıtları doğrudan gösteriyor; lock'un neden tutulduğu doğrulanmadı."
               if paired else "Bu bir correlation temelli hipotezdir.")]
     if r.get("data_gaps"):
-        unc.append("Data gap'ler: " + "; ".join(r["data_gaps"][:8]))
+        unc.append("Eksik veri: " + "; ".join(gap_text(x) for x in r["data_gaps"][:8]))
     if r.get("alternatives"):
         unc.append("Alternatif açıklamalar: " + "; ".join(r["alternatives"][:5]))
     if r.get("unexplained_impacted"):
-        unc.append("Mechanism ile açıklanamayan impact: " + ", ".join(r["unexplained_impacted"]))
+        unc.append("Bilinen problem türleriyle açıklanamayan etki: " + ", ".join(r["unexplained_impacted"]))
     problem = (f"Soru/tetikleyici: {inv.description or inv.title}. İncelenen zaman aralığı: "
                f"{_span(windows.get('window'))}."
                + (f" Karşılaştırma için kullanılan önceki dönem: {_span(windows['baseline'])}."

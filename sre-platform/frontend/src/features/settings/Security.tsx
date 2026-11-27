@@ -646,7 +646,7 @@ function SecurityOpsCard({ ops }: { ops: SecurityOps }) {
           </dd>
           <dt className="text-muted">Alarmlar</dt>
           <dd>
-            {ops.alerts.enabled ? `Açık · pencere ${ops.alerts.window_minutes} dk` : "Kapalı"}
+            {ops.alerts.enabled ? `Açık · son ${ops.alerts.window_minutes} dk değerlendirilir` : "Kapalı"}
             {ops.alerts.enabled && !ops.alerts.slack && " · Slack webhook yok (yalnız audit)"}
           </dd>
         </dl>

@@ -95,4 +95,49 @@ yazılır. Veri azsa metin uzatılmaz: eldeki bulgu ve eksik evidence yazılır.
 olağan işleyişi temsil ettiği veride doğrulanmış değildir. Bir ölçümün önceki dönem değeri yoksa metin "karşılaştırma
 verisi yok" der; değer tahmin edilmez. Terminology policy'deki "baseline" zorunluluğu bu nedenle kaldırıldı.
 
-Kapsam dışı: arayüzdeki sabit etiketler (ör. Analysis sayfasındaki "Baseline" / "Analiz penceresi" sütun başlıkları).
+Arayüzdeki sabit etiketler de aynı dili kullanır (ör. "Problem", "Problemi başlatan", "İncelenen aralık", "Önceki dönem", "Eksik veri yok").
+
+## Okur dili: iç adlar metne taşınmaz
+
+Terminology policy sektör terimlerini (Lock Wait, Connection Pool, latency, Root Cause, evidence) İngilizce korur.
+Bundan ayrı olarak uygulamanın **kendi iç adları** vardır: veri alanları, analiz adımları, iç kodlar. Okur bunları
+bilmez; metinde karşılıkları yazılır. Liste tek yerdedir: `terminology.yaml` içindeki `reader_terms`. Buradan
+`STYLE_PROMPT`'a "iç ad → okura yazılacak karşılık" tablosu üretilir (her system prompt'a eklenir).
+
+| İç ad | Metindeki ifade |
+|---|---|
+| mechanism | "problem" (tespit edilen sorun türü); nedeni anlatırken "olası neden" |
+| window / pencere | "incelenen zaman aralığı" |
+| baseline | "önceki dönem" |
+| source | "problemi başlatan uygulama" |
+| impact / impacted / affected | "etki", "etkilenen uygulama" |
+| signal | "ölçüm" ya da "veri kaynağı"; sayılırken "ölçüm grubu" |
+| data gap | "eksik veri" |
+| motor / engine | "analiz … gösteriyor"; çoğu zaman özne gerekmez |
+| true zero | "ölçülen sıfır" |
+| episode | "geçmişteki benzer investigation" |
+| fingerprint | "ortak belirtiler" |
+| human review | "önerilen kontrol" |
+| secondary | "buna bağlı ikincil etki", "… sonucu" |
+
+Aynı blokta üç kural daha vardır:
+
+* **İç kod ve alan anahtarı yazılmaz.** `row_lock` yerine problemin adı ("Row lock wait"); `http_mean_ms`,
+  `span_p95_ms`, `pool_ratio_avg` yerine neyi ölçtüğü ("ortalama latency", "p95 latency", "Connection Pool doluluğu").
+* **Oranlar yüzde olarak yazılır.** 0.202 → %20; data coverage 0.93 → %93.
+* **Düzey ve durum değerleri Türkçe yazılır.** high / medium / low → yüksek / orta / düşük; EMPTY → "veri gelmedi",
+  TIMEOUT → "query timeout oldu", PERMISSION → "yetki yok" vb.
+
+"Problem" kelimesi Dynatrace'in kendi Problem kaydıyla karışmasın diye, o kayıttan söz edilirken "Dynatrace Problem"
+yazılır.
+
+Deterministik metinler (LLM yanıt vermediğinde kullanılan açıklama, RCA bölümleri, Markdown rapor) aynı dili kullanır:
+`report.py` içindeki `level_text`, `gap_text` ve `reason_text` yalnız metni çevirir. **Şema anahtarları değişmez:**
+`mechanisms`, `causality.source_apps`, `impacted[].reasons`, `data_gaps`, `windows[].name` ve API alanları aynıdır.
+
+Denetim: `terminology.find_internal` deterministik metni testte denetler (`test_style.py`); LLM çıktısında yalnız
+log'a yazar ("okur dili: iç ad metne sızdı"), metni değiştirmez.
+
+Arayüzdeki sabit etiketler de aynı karşılıkları kullanır. İstisnalar: Context Window (LLM terimi), Agent Memory
+modülündeki "Source" / "Episode" (kaydın kaynağı ve bellek türü) ve MCP / Guardrails sayfalarındaki "parmak izi"
+(kayıt özeti); bunlar farklı kavramlardır.

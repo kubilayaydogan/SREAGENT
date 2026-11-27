@@ -17,7 +17,7 @@ export const COMPONENT_LABEL: Record<RiskComponent, string> = {
 };
 
 export const COMPONENT_HINT: Record<RiskComponent, string> = {
-  latency: "p95 (span) ya da ortalama süre / baseline oranı; ×1.2 → 0, ×3 → 1",
+  latency: "p95 (span) ya da ortalama sürenin önceki döneme oranı; ×1.2 → 0, ×3 → 1",
   errors: "5xx oranı; %0.5 → 0, %5 → 1",
   saturation: "max(connection pool, DB connection oranı); %75 → 0, %100 → 1",
   lock: "bekleyen oturum ortalaması; 0 → 0, 3 → 1",

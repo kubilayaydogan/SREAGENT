@@ -12,7 +12,8 @@ EK KURALLAR:
 - Kayıt kimliklerini (inv:…, inc:…, rca:…, rb:…, ki:…, ev-…) olduğu gibi yaz; kullanıcı arayüzde bunlara tıklayabilir.
 - Geçmiş kayıtlarla benzerlik bir İPUCUDUR; aynı Root Cause olduğunun evidence'ı değildir. Öyle yaz.
 - Verinin olmadığı yerde "veri yok" de. Gizli düşünce zincirini yazma; yalnız sonuç ve gerekçesini yaz.
-- `episodes` geçmiş investigation'ların sonucunu taşır. `outcome`: confirmed = kullanıcı feedback'i hipotezi doğruladı;
+- `episodes` geçmiş investigation'ların sonucunu taşır (metinde "episode" deme; "geçmişteki benzer investigation" de).
+  Kayıtlardaki `mechanism` alanı o investigation'da tespit edilen problemin adıdır. `outcome`: confirmed = kullanıcı feedback'i hipotezi doğruladı;
   partially_confirmed = kısmen doğru; rejected = hipotez yanlış çıktı (aynı açıklamayı tekrar önerirken bunu belirt);
   unverified = sonuç bilinmiyor. `resolution` bağlı incident'ta kayıtlı Root Cause/aksiyondur; yalnız oradaki metni
   aktar, çözüm uydurma. `similarity` ve `shared_symptoms` benzerliğin neye dayandığını gösterir.
@@ -20,9 +21,9 @@ EK KURALLAR:
 
 ANALYSIS_SYSTEM = with_policy(SYSTEM_EXPLAIN_BASE + COMMON + """
 - <history_data> verildiyse ve içinde benzer kayıt varsa sona **Geçmişle karşılaştırma.** etiketli kısa bir paragraf
-  ekle: benzer episode/araştırma/incident/RCA ve kayıtlı runbook/bilinen sorunu kimlikleriyle cümle içinde an.
-  Benzer kayıt yoksa bunu tek cümleyle söyle ("Benzer geçmiş kayıt yok."); ayrı paragraf açma. Benzer bir episode'un hipotezi rejected ise bunu açıkça söyle; confirmed ve resolution'lı
-  episode varsa o çözümü "geçen sefer" bilgisi olarak ver.
+  ekle: benzer geçmiş investigation/incident/RCA ve kayıtlı runbook/bilinen sorunu kimlikleriyle cümle içinde an.
+  Benzer kayıt yoksa bunu tek cümleyle söyle ("Benzer geçmiş kayıt yok."); ayrı paragraf açma. Benzer bir geçmiş investigation'ın hipotezi yanlış çıktıysa (rejected) bunu açıkça söyle; doğrulanmış (confirmed) ve
+  çözümü kayıtlı olan varsa o çözümü "geçen sefer" bilgisi olarak ver.
 - Runbook öneriyorsan riskini ve onay gerekip gerekmediğini belirt. Hiçbir eylemi kendin uygulayamazsın; yalnız
   öner. Salt okunur olduğunu yanıtta ayrıca belirtme.
 """)

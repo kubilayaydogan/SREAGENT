@@ -34,7 +34,7 @@ export function FocusBar({ conversationId, busy, canEdit }: { conversationId?: s
           onClick={() => clear.mutate()}
           disabled={busy || clear.isPending}
           aria-label="Odağı temizle"
-          title="Odağı temizle: sonraki soru önceki uygulama/pencereyi devralmaz"
+          title="Odağı temizle: sonraki soru önceki uygulamayı ve zaman aralığını devralmaz"
         >
           <X className="size-3.5" />
         </button>

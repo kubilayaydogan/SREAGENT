@@ -58,13 +58,11 @@ calques:
   - {pattern: 'kanıt(?!la(?!r))\w*', term: evidence, tr: kanıt}     # "kanıtlamak/kanıtlandı" (prove) fiili serbest
   - {pattern: 'güven düzey\w*|nedensellik güven\w*', term: confidence / causality confidence, tr: güven düzeyi}
   - {pattern: 'veri kapsam\w*', term: data coverage, tr: veri kapsamı}
-  - {pattern: 'veri boşlu\w*', term: data gap, tr: veri boşluğu}
   - {pattern: 'risk puan\w*|risk şiddet\w*', term: risk score, tr: risk puanı}
   - {pattern: 'istek izi\w*|izleme verisi\w*|dağıtık izleme\w*', term: trace / Distributed Tracing, tr: istek izi}
   - {pattern: 'sorgu\w*', term: query, tr: sorgu}
   - {pattern: 'yürütme plan\w*', term: Execution Plan, tr: yürütme planı}
   - {pattern: 'yürütme süre\w*', term: execution time, tr: yürütme süresi}
-  - {pattern: 'mekanizma\w*', term: mechanism, tr: mekanizma}
   - {pattern: 'bağlantı kullanım\w*|bağlantı baskı\w*', term: connection usage / connection pressure, tr: bağlantı kullanımı}
   - {pattern: 'dağıtık iz\w*', term: Distributed Tracing / trace, tr: dağıtık iz}
   - {pattern: 'bakım iş\w*', term: maintenance job, tr: bakım işi}
@@ -76,3 +74,25 @@ calques:
   - {pattern: 'izleme\w*', term: monitoring, tr: izleme}
   - {pattern: 'günlük kayd\w*|günlük kayıt\w*', term: log, tr: günlük kaydı}
   - {pattern: 'yığın izi\w*', term: Stack Trace, tr: yığın izi}
+
+# Okur dili. Buradakiler sektör terimi DEĞİL, uygulamanın iç adlarıdır (veri alanı, analiz adımı, iç kod).
+# Okur bunları bilmez; kullanıcıya giden metinde `say` karşılığı yazılır. Üç yerde kullanılır:
+#   - style.STYLE_PROMPT içindeki "iç ad → okura yazılacak karşılık" tablosu (her system prompt'a eklenir),
+#   - terminology.find_internal: deterministik metinleri testlerde denetler, LLM çıktısında yalnız log'lar,
+#   - docs/platform/response-style.md.
+# Şema anahtarları (`mechanisms`, `windows[].name`, `source_apps` …) sözleşmedir ve DEĞİŞMEZ; kural yalnız metindir.
+reader_terms:
+  - {pattern: 'mechanism\w*|mekanizma\w*', internal: mechanism, say: 'problem (tespit edilen sorun türü); nedeni anlatırken "olası neden"'}
+  - {pattern: 'pencere\w*|window\w*', internal: window / pencere, say: 'incelenen zaman aralığı'}
+  - {pattern: 'baseline\w*', internal: baseline, say: 'önceki dönem'}
+  - {pattern: 'source\w*', internal: source, say: 'problemi başlatan uygulama'}
+  - {pattern: 'impact\w*|affected\w*', internal: impact / impacted / affected, say: 'etki; etkilenen uygulama'}
+  - {pattern: 'signal\w*|sinyal\w*', internal: signal, say: 'ölçüm ya da veri kaynağı'}
+  - {pattern: 'data gap\w*|veri boşlu\w*', internal: data gap, say: 'eksik veri'}
+  - {pattern: 'motor\w*|engine\w*', internal: motor / engine, say: 'analiz ("analiz … gösteriyor"); çoğu zaman özne gerekmez'}
+  - {pattern: 'true zero\w*', internal: true zero, say: 'ölçülen sıfır'}
+  - {pattern: 'episode\w*', internal: episode, say: 'geçmişteki benzer investigation'}
+  - {pattern: 'fingerprint\w*|parmak iz\w*', internal: fingerprint, say: 'ortak belirtiler'}
+  - {pattern: 'human review\w*', internal: human review, say: 'önerilen kontrol'}
+  - {pattern: 'skorlan\w*', internal: skorlandı, say: 'risk score hesaplandı'}
+  - {pattern: 'secondary\w*', internal: secondary, say: 'buna bağlı ikincil etki'}

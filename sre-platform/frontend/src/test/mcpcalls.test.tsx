@@ -87,7 +87,7 @@ describe("McpCallsPage", () => {
     const dlg = await screen.findByRole("dialog");
     expect(await within(dlg).findByText("tools/call")).toBeInTheDocument();
     expect(within(dlg).getByText('DQL syntax error near "…"')).toBeInTheDocument();
-    expect(within(dlg).getByText("incident penceresi")).toBeInTheDocument();
+    expect(within(dlg).getByText("incelenen zaman aralığı")).toBeInTheDocument();
     expect(within(dlg).getByText('fetch logs, from:"…", to:"…" | limit 50')).toBeInTheDocument();
     expect(within(dlg).getByRole("link", { name: /Investigation'ı aç/ })).toHaveAttribute("href", "/investigations/i1?tab=tools");
     expect(within(dlg).getByRole("link", { name: /LangSmith span/ })).toHaveAttribute("href", "https://ls.test/r/c2");

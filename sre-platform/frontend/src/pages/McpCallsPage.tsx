@@ -31,7 +31,7 @@ const OUTCOME_DOT: Record<McpOutcome, string> = {
   unavailable: "bg-st-critical",
   cancelled: "bg-st-warning",
 };
-const WINDOW_TR = { incident: "incident penceresi", baseline: "baseline penceresi", custom: "özel aralık" } as const;
+const WINDOW_TR = { incident: "incelenen zaman aralığı", baseline: "önceki dönem", custom: "özel aralık" } as const;
 const FILTER_KEYS = ["from", "to", "connector", "tool", "status", "run_id"];
 
 const stepLabel = (id: string | null) => STEPS.find((s) => s.id === id)?.label ?? id ?? "—";
@@ -234,7 +234,7 @@ export function CallDetail({ d }: { d: McpCallDetail }) {
       </Section>
       {d.query && (
         <Section title="Dynatrace query">
-          <Row k="Query penceresi">{d.query.window ? WINDOW_TR[d.query.window] : null}</Row>
+          <Row k="Query zaman aralığı">{d.query.window ? WINDOW_TR[d.query.window] : null}</Row>
           <Row k="Parmak izi">
             <Mono>
               sha256 {d.query.dql_sha256} · {d.query.dql_chars} karakter

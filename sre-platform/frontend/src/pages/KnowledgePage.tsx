@@ -75,7 +75,7 @@ function IssueDetail({ id }: { id: string }) {
         )}
       </div>
       <div>
-        <div className="mb-1 text-xs font-medium text-muted">Aynı mechanism ile investigation'lar</div>
+        <div className="mb-1 text-xs font-medium text-muted">Aynı problemin görüldüğü investigation'lar</div>
         {k.related_investigations.length ? (
           <ul className="divide-y divide-line rounded-md border border-line">
             {k.related_investigations.map((i) => (
@@ -168,7 +168,7 @@ function NewIssue({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boo
             <AppSelect value={f.application_id} onChange={(v) => setF({ ...f, application_id: v })} allLabel="—" className="w-full" />
           </div>
           <div>
-            <Label htmlFor="ki-mech">Mechanism</Label>
+            <Label htmlFor="ki-mech">Problem</Label>
             <Select id="ki-mech" value={f.mechanism} onChange={(e) => setF({ ...f, mechanism: e.target.value })}>
               <option value="">—</option>
               {Object.entries(MECHANISM_LABEL).map(([k, l]) => (
@@ -241,7 +241,7 @@ export default function KnowledgePage() {
           <SearchInput value={g("q")} onChange={(v) => set({ q: v, page: "" })} placeholder="Ara…" />
           <AppSelect value={g("app")} onChange={(v) => set({ app: v, page: "" })} />
           <Select aria-label="mechanism" value={g("mechanism")} onChange={(e) => set({ mechanism: e.target.value, page: "" })} className="w-52">
-            <option value="">Tüm mechanism türleri</option>
+            <option value="">Tüm problem türleri</option>
             {Object.entries(MECHANISM_LABEL).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
