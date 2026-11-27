@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .errors import UserError
 from .redact import redact, redact_text
 from .terminology import find_violations, with_policy
+from .timefmt import tsi as _tsi
 from .tracing import child_config
 
 
@@ -87,8 +88,10 @@ def budget_add(task: str, model: str | None, msg) -> None:
 
 def data_json(obj) -> str:
     """LLM'e giden veri bloğu için JSON. `<` ve `>` JSON unicode kaçışıyla yazılır: güvenilmeyen metin (log, span adı,
-    DB satırı) `</analysis_data>` gibi bir etiketle veri bloğunu kapatıp talimat bölgesine taşamaz (P1.9)."""
-    return json.dumps(obj, ensure_ascii=False, default=str).replace("<", "\\u003c").replace(">", "\\u003e")
+    DB satırı) `</analysis_data>` gibi bir etiketle veri bloğunu kapatıp talimat bölgesine taşamaz (P1.9).
+    Zaman damgaları TSİ metnine çevrilir (timefmt.localize): model saat hesabı yapmaz, değeri aynen aktarır."""
+    from .timefmt import localize
+    return json.dumps(localize(obj), ensure_ascii=False, default=str).replace("<", "\\u003c").replace(">", "\\u003e")
 
 
 def bound_llm_output(m):
@@ -150,19 +153,29 @@ KURALLAR:
   tuttu, sıradaki uygulama neyi bekledi, beklerken neyi tutarak bir sonrakini etkiledi (wait sayılarıyla).
 - Correlation ≠ causation. `human_review` içindeki öneriler yapılmış kontroller değildir; öneri olarak aktar.
 
-BİÇİM:
-- İlk paragraf tek başına okunduğunda olayı anlatmalı: zaman aralığı, etkilenen uygulama, en belirgin ölçüm
-  (önceki → şimdiki değer, birimiyle) ve varsa olası neden. Kullanıcı sorusu verildiyse ilk cümle o soruyu yanıtlar.
-- Impact yoksa (ölçümler baseline ile aynıysa) bunu 2–4 cümleyle söyle ve dur: hangi aralık, hangi ölçümler
-  normal, hangi veri eksik. Başlık kullanma.
-- Hiç kullanılabilir veri yoksa 3–5 cümle yaz: neyi doğrulayamadığın, verinin neden olmadığı (kaynak veri üretmedi
-  mi, query mi yanıt vermedi) ve ilk kontrol. Signal'leri tek tek sayma; gruplayarak söyle. Başlık kullanma.
-- Impact varsa en fazla ~300 kelime yaz. Paragraf başına kalın kısa etiketi yalnız birden çok paragraf gerekiyorsa
-  koy ve yalnız içeriği olanları kullan: **Özet.** **Impact.** **Root Cause.** **Evidence.** **Sonraki kontrol.**
-  Madde işaretini yalnız birkaç uygulamayı ya da bulguyu yan yana karşılaştırırken kullan; tablo kullanma.
-- **Sonraki kontrol.** tek bir kontrol içerir: hipotezi doğrulayacak ya da çürütecek ilk adım.
+VERİ ALANLARI (metinde bu adları değil, karşılıklarını kullan):
+- `windows` içinde `name: "window"` incelenen zaman aralığıdır; `name: "baseline"` karşılaştırma için kullanılan,
+  hemen önceki dönemdir. `features_summary.window` incelenen aralıkta, `features_summary.baseline` önceki dönemde
+  ölçülen değerlerdir. Bir ölçümün önceki dönem değeri yoksa (null ya da alan yok) "karşılaştırma verisi yok" de;
+  değer tahmin etme.
+
+BİÇİM (varsayılan: ayrıntılı; en fazla ~450 kelime):
+- İlk paragraf tek başına okunduğunda olayı anlatmalı: saat aralığı, etkilenen uygulama, en belirgin ölçüm (önceki
+  dönemde ölçülen değer → incelenen aralıkta ölçülen değer, birimiyle) ve neden (doğrulanmışsa neden, değilse olası
+  neden). Kullanıcı sorusu verildiyse ilk cümle o soruyu yanıtlar.
+- Ardından sırasıyla ve yalnız içeriği olanları yaz; birden çok paragraf varsa başına kalın kısa etiket koy:
+  **Impact.** hangi uygulama ve işlemler etkilendi, hangileri etkilenmedi; iki dönemin ölçümleri yan yana.
+  **Root Cause.** neden ya da hipotez; yayılım birden çok uygulamayı kapsıyorsa adım adım (numaralı liste).
+  **Evidence.** hangi kayıt hangi sonucu destekliyor; hangi bağlantı doğrulanamadı; eksik ya da yanıt vermeyen veri.
+  **Sonraki kontrol.** tek bir kontrol: nerede neye bakılacağı ve hangi sonucun hipotezi güçlendireceği ya da
+  çürüteceği.
+- Etki ölçülmediyse (iki dönemin ölçümleri aynıysa) bunu söyle, hangi ölçümlerin iki dönemde de aynı kaldığını
+  değerleriyle yaz ve eksik veriyi belirt. Başlık kullanma; bu durumda birkaç cümle yeterlidir.
+- Hiç kullanılabilir veri yoksa: neyi doğrulayamadığını, verinin neden olmadığını (kaynak veri üretmedi mi, query mi
+  yanıt vermedi) ve ilk kontrolü yaz. Signal'leri tek tek sayma; gruplayarak söyle. Başlık kullanma.
+- Kullanıcı açıkça kısa yanıt istediyse yalnız ilk paragrafı yaz.
 - Sayıları (latency, oran, wait sayısı, risk score) veriden aynen aktar; birimleriyle yaz. Bir sayıyı bir kez yaz.
-- Evidence ID'lerini (ev-...) cümle içinde parantezle ver."""
+- Evidence ID'lerini (ev-...) cümle içinde parantezle ver. Tablo kullanma."""
 SYSTEM_EXPLAIN = with_policy(SYSTEM_EXPLAIN_BASE)
 
 _REL = re.compile(r"son\s+(\d+)\s*(dk|dakika|saat|sa)\b", re.I)
@@ -368,11 +381,12 @@ def resolve_window(req: AnalysisRequest, cfg: dict, now: datetime | None = None)
         end = latest
         start = end - timedelta(minutes=req.minutes or w["default_minutes"])
     if end > latest:
-        notes.append(f"Pencere sonu ingest lag ({w['ingest_lag_seconds']} sn) nedeniyle {latest:%H:%M}Z'ye çekildi.")
+        notes.append(f"İncelenen zaman aralığının sonu ingest lag ({w['ingest_lag_seconds']} sn) nedeniyle "
+                     f"{_tsi(latest, date=False)}'ye çekildi.")
         end = latest
     if (end - start) > timedelta(minutes=w["max_minutes"]):
         start = end - timedelta(minutes=w["max_minutes"])
-        notes.append(f"Pencere azami {w['max_minutes']} dakikaya kısaltıldı.")
+        notes.append(f"İncelenen zaman aralığı en fazla {w['max_minutes']} dakikaya kısaltıldı.")
     if end <= start:
-        raise UserError("geçersiz pencere: bitiş başlangıçtan önce")
+        raise UserError("geçersiz zaman aralığı: bitiş başlangıçtan önce")
     return start, end, notes

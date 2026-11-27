@@ -121,3 +121,36 @@ def test_frontend_texts_follow_policy():
     for p in sorted([*FRONTEND.rglob("*.ts"), *FRONTEND.rglob("*.tsx")]):
         hits += [f"{p.relative_to(FRONTEND)}:{ln}: {v}" for ln, _, v in T.scan_ts_source(p.read_text(encoding="utf-8"))]
     assert not hits, "\n".join(hits)
+
+
+def test_llm_data_blocks_and_rca_sections_use_tsi_only():
+    """prompts.dump (sohbet / RCA veri blogu) zamanlari TSI'ye cevirir; RCA bolumleri UTC yazmaz."""
+    import json
+
+    from sre_platform.services import rca_service
+    out = json.loads(prompts.dump({"at": "2026-11-21T20:42:00Z", "created_at": "2026-11-21T20:42:10.5+00:00"}))
+    assert out == {"at": "2026-11-21 23:42 TSİ", "created_at": "2026-11-21 23:42:10 TSİ"}
+    assert rca_service._tsi("2026-11-21T22:30:00Z") == "2026-11-22 01:30 TSİ"
+    assert rca_service._tsi(None) == "—"
+    for name, p in USER_FACING.items():
+        assert "hem UTC hem" not in p, name
+
+
+def test_user_facing_prompts_ask_for_detail_and_plain_period_wording():
+    """Her kullaniciya donuk prompt ayrintili yaniti ve dogal zaman / karsilastirma dilini ortak blokta tasir."""
+    for name, p in USER_FACING.items():
+        assert "Varsayılan olarak ayrıntılı" in p, name
+        assert "önceki dönem" in p and "Karşılaştırma verisi yoksa" in p, name
+    assert "tek paragraf" not in SUMMARY_SYSTEM.lower()
+
+
+def test_rca_summary_input_carries_both_periods_and_labels_blocker_wait():
+    """RCA ozet modeline iki donemin olcumleri gider; kayda yazilan bolum anahtarlari degismez."""
+    from sre_platform.services import rca_service
+    rep = {"features_summary": {"baseline": {"apps": {"checkin-service": {"span_p95_ms": 30.0}}},
+                                "window": {"apps": {"checkin-service": {"span_p95_ms": 3900.0}}}}}
+    m = rca_service._measurements(rep)
+    assert m["onceki_donem"]["checkin-service"]["span_p95_ms"] == 30.0
+    assert m["incelenen_aralik"]["checkin-service"]["span_p95_ms"] == 3900.0
+    assert rca_service._measurements({}) == {"onceki_donem": {}, "incelenen_aralik": {}}
+    assert "measurements" in SUMMARY_SYSTEM and "bloklayan session" in SUMMARY_SYSTEM

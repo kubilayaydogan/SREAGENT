@@ -91,9 +91,9 @@ def to_markdown(r: dict) -> str:
     if r.get("fixture"):
         L.append("> **FIXTURE / SENTETİK VERİ** — bu rapor test verisiyle üretildi, gerçek bir ölçüm değildir.\n")
     L.append(f"# airlab SRE report `{r['id']}`")
-    L.append(f"- Kind: {r['kind']} · Status: **{r['status']}** · Generated: {r['generated_at']}")
+    L.append(f"- Kind: {r['kind']} · Status: **{r['status']}** · Generated: {_stamp(r['generated_at'])}")
     for w in r.get("windows") or []:
-        L.append(f"- Window `{w['name']}`: {w['start']} → {w['end']}")
+        L.append(f"- Window `{w['name']}`: {_stamp(w['start'])} → {_stamp(w['end'])}")
     if r.get("question"):
         L.append(f"- Soru: {r['question']}")
     for n in r.get("notes", []):
@@ -145,13 +145,15 @@ def to_markdown(r: dict) -> str:
     return "\n".join(L) + "\n"
 
 
+def _stamp(iso_ts: str | None) -> str:
+    from .timefmt import tsi
+    return tsi(iso_ts, missing=str(iso_ts or "?"))
+
+
 def _clock(iso_ts: str | None) -> str:
-    """'2026-11-21T20:42:00Z' → '20:42 UTC (23:42 TSİ)'."""
-    if not iso_ts:
-        return "?"
-    from datetime import datetime, timedelta
-    t = datetime.fromisoformat(str(iso_ts).replace("Z", "+00:00"))
-    return f"{t:%H:%M} UTC ({t + timedelta(hours=3):%H:%M} TSİ)"
+    """'2026-11-21T20:42:00Z' → '23:42 TSİ'."""
+    from .timefmt import tsi
+    return tsi(iso_ts, date=False)
 
 
 def _join(items: list[str]) -> str:
@@ -172,16 +174,17 @@ def deterministic_explanation(r: dict) -> str:
 
     # 1) Özet
     if prim:
-        summary = (f"{period}, öncesindeki "
-                   + (f"{_clock(base['start'])} – {_clock(base['end'])} " if base else "")
-                   + f"baseline ile karşılaştırıldı. Tespit edilen mechanism: **{prim['title']}**. "
+        summary = (f"{period}, "
+                   + (f"{_clock(base['start'])} – {_clock(base['end'])} arasındaki önceki dönemle " if base
+                      else "önceki dönemle ")
+                   + f"karşılaştırıldı. Tespit edilen mechanism: **{prim['title']}**. "
                    f"Root cause source'u {_join(prim['source_apps']) or 'belirlenemeyen bir uygulama'}, etkilenen "
                    f"uygulamalar {_join(prim['affected_apps']) or 'yok'}. ")
     elif r["impacted"]:
         summary = (f"{period}nda {_join(list(r['impacted']))} uygulamalarında kötüleşme ölçüldü, ancak eldeki "
                    "evidence tek bir mechanism'e bağlanamadı. ")
     else:
-        summary = f"{period}nda baseline'a göre anlamlı bir kötüleşme ölçülmedi. "
+        summary = f"{period}nda önceki döneme göre anlamlı bir kötüleşme ölçülmedi. "
     summary += (f"Genel risk score {_fmt(o['score'])}/100 ({o.get('band') or 'hesaplanamadı'}); bu puan şiddeti "
                 "gösterir, nedenselliğin kesinliğini değil.")
     paras.append("**Özet.** " + summary)
@@ -192,7 +195,7 @@ def deterministic_explanation(r: dict) -> str:
         unaffected = [a for a in r["risk"]["apps"] if a not in r["impacted"]]
         txt = "Ölçülen impact şöyle: " + "; ".join(parts) + "."
         if unaffected:
-            txt += f" {_join(unaffected)} uygulamalarında baseline'a göre anlamlı değişiklik görülmedi."
+            txt += f" {_join(unaffected)} uygulamalarında önceki döneme göre anlamlı değişiklik görülmedi."
         paras.append("**Impact.** " + txt)
 
     # 3) Kök neden ve yayılım
@@ -206,7 +209,7 @@ def deterministic_explanation(r: dict) -> str:
                     txt += (f" {h['app']}, {_join([w['app'] for w in h['waits_on']])} uygulamasını "
                             f"{int(h['n'])} kez bekledi.")
         if prim.get("edges_total"):
-            txt += f" Pencerede toplam {int(prim['edges_total'])} blocking edge kaydı var."
+            txt += f" Bu aralıkta toplam {int(prim['edges_total'])} blocking edge kaydı var."
         secondary = [m["title"] for m in r["mechanisms"] if m.get("secondary_to") == prim["id"]]
         if secondary:
             txt += f" Buna bağlı ikincil etkiler: {_join(secondary)}."

@@ -56,7 +56,7 @@ def test_deterministic_report_is_paragraphs_with_chain():
     assert [p.split(".**")[0] for p in paras] == ["**Özet", "**Impact", "**Root cause ve yayılım", "**Evidence ve confidence",
                                                   "**Önerilen inceleme"]
     assert "- " not in txt                                           # madde işareti yok
-    assert "20:45 UTC (23:45 TSİ)" in paras[0] and "78.0/100" in paras[0]
+    assert "23:45 TSİ" in paras[0] and "UTC" not in "".join(paras) and "78.0/100" in paras[0]
     assert "baggage-service, checkin-service uygulamasını 80 kez bekledi" in paras[2]
     assert "3 halka" in paras[2]
 

@@ -9,7 +9,7 @@
 
 domains:
   SRE / Incident Management: [RCA, Incident Analysis, Root Cause, Bottleneck, Error Budget, SLO, SLI, SLA, MTTR, Runbook, Postmortem, On-call, Escalation, Blast Radius, Toil]
-  Observability: [metric, log, trace, span, Distributed Tracing, Latency, p95, p99, Throughput, Error Rate, Baseline, Threshold, Alert, Dashboard, Evidence, Confidence, Anomaly, Saturation]
+  Observability: [metric, log, trace, span, Distributed Tracing, Latency, p95, p99, Throughput, Error Rate, Threshold, Alert, Dashboard, Evidence, Confidence, Anomaly, Saturation]
   PostgreSQL / Database: [Lock Wait, Row Lock, Deadlock, Transaction, Commit, Rollback, Query, Query Latency, Execution Plan, Index, Vacuum, Checkpoint, WAL, Replication Lag, Connection, Session, max_connections, idle in transaction, pg_stat_activity, pg_stat_statements]
   JVM / Application Runtime: [Thread, Thread Pool, Virtual Thread, Pinning, Heap, Heap Dump, Thread Dump, Garbage Collection, GC Pause, OutOfMemoryError, Connection Pool, HikariCP, Pool Timeout, Exception, Stack Trace]
   Distributed Systems / Resilience: [Timeout, Retry, Backoff, Circuit Breaker, Rate Limit, Backpressure, Cascade, Failover, Idempotency, Consistency, Leader Election, Partition]
@@ -54,7 +54,6 @@ calques:
   - {pattern: 'işlem hacm\w*|iş hacm\w*', term: throughput, tr: işlem hacmi}
   - {pattern: 'yanıt süre\w*', term: response time, tr: yanıt süresi}
   - {pattern: 'toparlanma\w*', term: recovery, tr: toparlanma}
-  - {pattern: 'normal dönem\w*|karşılaştırma dönem\w*', term: baseline, tr: normal dönem}
   - {pattern: 'eşik değer\w*|eşiğ\w*', term: threshold, tr: eşik değeri}
   - {pattern: 'kanıt(?!la(?!r))\w*', term: evidence, tr: kanıt}     # "kanıtlamak/kanıtlandı" (prove) fiili serbest
   - {pattern: 'güven düzey\w*|nedensellik güven\w*', term: confidence / causality confidence, tr: güven düzeyi}

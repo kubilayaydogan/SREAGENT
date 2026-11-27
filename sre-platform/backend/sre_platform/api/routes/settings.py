@@ -586,7 +586,7 @@ async def test_notification(request: Request, u: User = Depends(perm(P.SETTINGS_
     await asyncio.to_thread(netguard.check_url, url)
     from ...services.slack_notify import _post
     payload = {"text": f"[TEST] airlab SRE Platform bildirim testi — gerçek bir olay değildir. "
-                       f"Gönderen: {u.username}, {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC"}
+                       f"Gönderen: {u.username}, {_tsi_now()}"}
     try:
         await _post(url, payload)
         ok, detail = True, "gönderildi"
@@ -775,3 +775,8 @@ async def section_rollback(section: str, body: RollbackIn, request: Request, u: 
                                actor=u.username, check=check)
     await _after_save(rt, s, section)
     return {**v, "status": _status(rt, section, v["values"])}
+
+
+def _tsi_now() -> str:
+    from airlab_agent.timefmt import tsi
+    return tsi(datetime.now(timezone.utc))

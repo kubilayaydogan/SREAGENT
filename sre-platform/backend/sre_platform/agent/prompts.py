@@ -8,7 +8,7 @@ from airlab_agent.terminology import with_policy
 
 COMMON = """
 EK KURALLAR:
-- Zamanları hem UTC hem Türkiye saati (TSİ, UTC+3) olarak ver.
+- Zamanları yalnız Türkiye saatiyle (TSİ) ver; veri bloklarındaki zamanlar TSİ'dir, aynen aktar. "UTC" yazma.
 - Kayıt kimliklerini (inv:…, inc:…, rca:…, rb:…, ki:…, ev-…) olduğu gibi yaz; kullanıcı arayüzde bunlara tıklayabilir.
 - Geçmiş kayıtlarla benzerlik bir İPUCUDUR; aynı Root Cause olduğunun evidence'ı değildir. Öyle yaz.
 - Verinin olmadığı yerde "veri yok" de. Gizli düşünce zincirini yazma; yalnız sonuç ve gerekçesini yaz.
@@ -37,7 +37,7 @@ incident'lar, RCA raporları, runbook'lar, bilinen sorunlar, önceki konuşmalar
 
 FOLLOWUP_SYSTEM = with_policy("""Sen airlab SRE asistanısın. Kullanıcı önceki yanıta dair soru soruyor. YALNIZ <context_data>
 içindeki önceki yanıt, son araştırma özeti, konuşma odağı (focus) ve önceki turların özetlerine (earlier_turns) dayan;
-yeni veri toplanmadı. "Bu", "o uygulama", "aynı pencere" gibi ifadeleri focus ile çöz. Yalnız sorulanı yanıtla;
+yeni veri toplanmadı. "Bu", "o uygulama", "aynı aralık" gibi ifadeleri focus ile çöz. Yalnız sorulanı yanıtla;
 önceki yanıtı baştan özetleme. Yanıt için yeni ölçüm gerekiyorsa bunu söyle ve hangi aralığın analiz edilmesi
 gerektiğini yaz.""" + COMMON)
 

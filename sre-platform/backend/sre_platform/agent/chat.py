@@ -147,11 +147,17 @@ OUTCOME_TR = {"confirmed": "feedback ile doğrulandı", "partially_confirmed": "
               "rejected": "hipotez yanlış çıktı (feedback)", "unverified": "sonuç doğrulanmadı"}
 
 
+def _when(v) -> str:
+    """Deterministik metinde zaman: TSİ; ayrıştırılamayan değer olduğu gibi kalır."""
+    from airlab_agent.timefmt import tsi
+    return tsi(v, missing=str(v or ""))
+
+
 def _det_episodes(items: list[dict]) -> list[str]:
     out = ["### Benzer geçmiş episode'lar"]
     for e in items:
         sim = f" · benzerlik {e['similarity']:.2f}" if e.get("similarity") is not None else ""
-        out.append(f"- `{e['ref']}` {e.get('at', '')} {e.get('mechanism') or 'mechanism yok'}{sim} — "
+        out.append(f"- `{e['ref']}` {_when(e.get('at'))} {e.get('mechanism') or 'mechanism yok'}{sim} — "
                    f"{OUTCOME_TR.get(e.get('outcome'), e.get('outcome'))}")
         if e.get("shared_symptoms"):
             out.append(f"  ortak belirtiler: {', '.join(e['shared_symptoms'][:6])}")
@@ -174,7 +180,7 @@ def _det_history(memory: dict) -> str:
         any_ = True
         lines.append(f"### {t}")
         for i in items:
-            when = i.get("created_at") or i.get("detected_at") or i.get("generated_at") or i.get("at") or ""
+            when = _when(i.get("created_at") or i.get("detected_at") or i.get("generated_at") or i.get("at"))
             extra = i.get("mechanism") or i.get("status") or i.get("risk_level") or ""
             lines.append(f"- `{i.get('ref', '')}` {i.get('title') or i.get('excerpt', '')} {when} {extra}".rstrip())
     if memory.get("last_investigation"):

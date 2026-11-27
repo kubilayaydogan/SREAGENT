@@ -32,6 +32,11 @@ log = logging.getLogger("sre.worker")
 STOP = asyncio.Event()
 
 
+def _span(start, end) -> str:
+    from airlab_agent.timefmt import span
+    return span(start, end)
+
+
 async def _noop(*_a, **_k):
     return None
 
@@ -133,7 +138,7 @@ async def _system_health_check(rt, params: dict) -> dict[str, Any]:
     start = end - timedelta(minutes=int(params.get("window_minutes", ps.health_check_window_minutes)))
     async with transaction(rt.sm) as s:
         inv = await investigations.create(s, run_id=new_run_id("hc"), trigger=Trigger.SCHEDULED,
-                                          title=f"Zamanlanmış sağlık kontrolü {start:%H:%M}–{end:%H:%M} UTC",
+                                          title=f"Zamanlanmış sağlık kontrolü {_span(start, end)}",
                                           window_start=start, window_end=end,
                                           description="Periyodik analiz (sre-worker)")
         inv_id = inv.id

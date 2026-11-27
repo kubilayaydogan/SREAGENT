@@ -231,7 +231,8 @@ async def investigate(body: InvestigateIn, request: Request, u: User = Depends(p
             baseline = (start - timedelta(minutes=b.minutes), start)
         elif b.start and b.end:
             baseline = (b.start, b.end)
-    title = body.title or f"Manuel araştırma {start:%Y-%m-%d %H:%M}–{end:%H:%M} UTC" + \
+    from airlab_agent.timefmt import span
+    title = body.title or f"Manuel araştırma {span(start, end)}" + \
         (f" ({body.application_id})" if body.application_id else "")
     inv = await investigations.create(s, run_id=new_run_id("man"), trigger=Trigger.MANUAL, title=title,
                                       window_start=start, window_end=end, user_id=u.id,
