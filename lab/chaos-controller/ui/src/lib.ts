@@ -109,7 +109,7 @@ export function newClientRequestId(): string {
 export const DISPLAY_TZ = 'Europe/Istanbul'
 
 /** Backend Instant.toString() nanosaniye kesir verebilir; tüm tarayıcılarda güvenli parse için kesiri ms'ye kısalt. */
-function toMs(iso: string | null | undefined): number {
+export function toMs(iso: string | null | undefined): number {
   if (!iso) return NaN
   return Date.parse(iso.replace(/(\.\d{3})\d+/, '$1'))
 }

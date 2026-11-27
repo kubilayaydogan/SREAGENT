@@ -106,3 +106,28 @@ describe('yerel saat gösterimi', () => {
     expect(agentWindows(tr.slice(0, 2)).chaos).toBeNull()
   })
 })
+
+import { humanDuration, intensityLabel, showValue, stateLabel, verdictLabel } from './labels'
+
+describe('okunur etiketler', () => {
+  it('durum, yoğunluk ve sonuç kodlarını çevirir; bilinmeyeni olduğu gibi bırakır', () => {
+    expect(stateLabel('RUNNING')).toBe('Chaos uygulanıyor')
+    expect(stateLabel('YENI_DURUM')).toBe('YENI_DURUM')
+    expect(stateLabel(null)).toBe('—')
+    expect(intensityLabel('MEDIUM')).toBe('Orta')
+    expect(verdictLabel('IMPACT_CONFIRMED')).toBe('Etki doğrulandı')
+    expect(verdictLabel(null)).toBe('—')
+  })
+  it('süreyi dakika ve saniye olarak yazar', () => {
+    expect(humanDuration(45)).toBe('45 sn')
+    expect(humanDuration(420)).toBe('7 dk')
+    expect(humanDuration(450)).toBe('7 dk 30 sn')
+    expect(humanDuration(null)).toBe('—')
+  })
+  it('parametre değerlerini JSON yerine düz metin gösterir', () => {
+    expect(showValue(2500)).toBe('2500')
+    expect(showValue(1.5)).toBe('1.5')
+    expect(showValue(null)).toBe('—')
+    expect(showValue({ holdMs: 2500, pool: 'main' })).toBe('Bağlantıyı tutma süresi (ms): 2500 · pool: main')
+  })
+})

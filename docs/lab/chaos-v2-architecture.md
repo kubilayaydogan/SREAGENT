@@ -202,7 +202,7 @@ docker compose build && docker compose up -d                         # uygulamal
 ```
 
 - **Arayüz:** `http://172.20.229.26:8080/ui/` adresinden açılır. Kimlik bilgileri `app-vm/.env` dosyasındaki `CHAOS_USER` ve `CHAOS_PASSWORD` değerleridir.
-- **Ekranlar:** Overview → Scenario Library → Experiment Builder (Önizle, sonra Başlat) → Live Experiment → History (tekrar çalıştırma).
+- **Ekranlar:** Genel durum → Senaryolar → Yeni deney ("Planı kontrol et", sonra "Deneyi başlat") → deney izleme → Geçmiş (tekrar çalıştırma). Durum, yoğunluk ve sonuç kodlarının ekrandaki karşılıkları `ui/src/labels.ts` içindedir; API değerleri değişmez.
 - **Klasik panel:** `/classic` adresinden erişilir.
 
 Uçtan uca doğrulama (APP_VM'de):
