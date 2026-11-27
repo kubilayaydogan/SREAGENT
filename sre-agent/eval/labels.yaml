@@ -37,4 +37,10 @@ heavy_read:        {primary: read_pressure, sources: [checkin-service], mechanis
 db_memory:         {primary: db_memory_pressure, sources: [reservation-service], not_mechanisms: [db_cpu]}
 idle_in_tx:        {primary: idle_in_transaction, sources_any: [checkin-service, flightops-service],
                     not_mechanisms: [network_path_latency, row_lock, update_churn]}
-busy_traffic:      {primary: null, not_mechanisms: [deadlock, serialization_conflict, temp_file_pressure, write_pressure, update_churn, read_pressure, db_memory_pressure, idle_in_transaction]}
+busy_traffic:      {primary: null, not_mechanisms: [deadlock, serialization_conflict, temp_file_pressure, write_pressure, update_churn, read_pressure, db_memory_pressure, idle_in_transaction, query_flood, table_lock, advisory_lock]}
+table_lock:        {primary: table_lock, sources: [reservation-service], affected: [checkin-service],
+                    not_mechanisms: [row_lock, advisory_lock]}
+advisory_lock:     {primary: advisory_lock, sources: [flightops-service], not_mechanisms: [row_lock, table_lock]}
+point_queries:     {primary: query_flood, sources: [flightops-service, checkin-service],
+                    not_mechanisms: [write_pressure, read_pressure, independent_load]}
+heavy_calls:       {not_mechanisms: [query_flood]}

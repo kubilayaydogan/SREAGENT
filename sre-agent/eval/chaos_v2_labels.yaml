@@ -1,6 +1,7 @@
 # Chaos v2 kör değerlendirmesi — beklenen sonuçlar (yalnız karşılaştırmada okunur; agent girdisine girmez).
 # DİKKAT: Bu etiketler 2026-11-24 koşusundaki senaryo setine aittir. S01, S11 ve S13 kimlikleri artık başka (yalnız PostgreSQL)
-# yük tiplerini gösterir; yeni koşular için bu üç etiket yeniden yazılmalıdır. S03, S04, S10 ve S17 aynı yük tipini korur.
+# yük tiplerini gösterir. S03, S04, S10 ve S17 aynı yük tipini korur. Güncel 19 yük tipinin etiketleri:
+# chaos_db_labels.yaml (koşu: scripts/chaos-agent-eval-runs.py --set db). Bu dosya 2026-11-24 kaydı olarak değiştirilmez.
 # Etiketler agent sonuçları görülmeden, senaryo tasarımına ve agent'ın mekanizma kataloğuna göre 2026-11-24'te yazıldı.
 # Katalogda karşılığı olan senaryolar: mekanizma + kaynak doğru mu? Karşılığı olmayanlar (S13 network): etkiyi görüyor mu,
 # ve yanlış bir paylaşılan-kaynak mekanizmasına (DB/lock/CPU) atfetmekten kaçınıyor mu?

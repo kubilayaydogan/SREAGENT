@@ -101,7 +101,7 @@ def test_memory_pressure_fields_and_confidence():
 
 def test_every_new_mechanism_has_review_guidance_and_evidence():
     seen = set()
-    for name in ("deadlock", "serialization", "temp_spill", "bulk_insert", "update_churn", "heavy_read", "db_memory",
+    for name in ("deadlock", "serialization", "temp_spill", "bulk_insert", "update_churn", "heavy_read", "db_memory", "point_queries",
                  "idle_in_tx"):
         _, q, a = run(name)
         scores = {"overall": {"score": 10}}
@@ -111,3 +111,27 @@ def test_every_new_mechanism_has_review_guidance_and_evidence():
             seen.add(m["id"])
     assert set(DB_WORKLOAD) | {"deadlock", "serialization_conflict", "db_memory_pressure", "idle_in_transaction"} <= seen
     assert set(DB_WORKLOAD) < SHARED
+
+
+def test_lock_kind_comes_from_wait_event_and_defaults_to_row():
+    q = dict(build_queries(windows(), cfg(), ["edges"]))["edges"]
+    assert "wait_event=waiter.wait_event" in q
+    _, _, a = run("table_lock")
+    m = a["mechanisms"][0]
+    assert (m["id"], m["title"], m["lock_kind"]) == ("table_lock", "Table lock wait", "table")
+    assert m["lock_kinds"] == {"table": 24, "row": 1} and "ACCESS EXCLUSIVE" in m["mechanism"]
+    assert any(x["id"] == "pool_saturation" and x["secondary_to"] == "table_lock" for x in a["mechanisms"])
+    _, _, a = run("advisory_lock")
+    assert a["mechanisms"][0]["id"] == "advisory_lock" and "pg_advisory_lock" in a["mechanisms"][0]["mechanism"]
+    _, _, a = run("row_lock")                          # wait_event transactionid → row lock (önceki davranış)
+    assert a["mechanisms"][0]["id"] == "row_lock" and a["mechanisms"][0]["lock_kind"] == "row"
+
+
+def test_query_flood_needs_many_cheap_calls():
+    _, q, a = run("point_queries")
+    m = mech(a, "query_flood")
+    assert m["calls_per_min_by_app"] == {"checkin-service": [10, 9566], "flightops-service": [10, 9860]}
+    assert "airlab.pg.db.xact_commit artışı" in m["signals"]
+    assert human_review(a, q, {"overall": {"score": 10}}) != ["Belirgin bir risk yok; rutin monitoring yeterli."]
+    _, _, a = run("commit_storm")                      # write pressure zaten açıklıyor
+    assert "query_flood" not in [x["id"] for x in a["mechanisms"]]

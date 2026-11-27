@@ -99,7 +99,8 @@ def build_multi(S: dict[str, dict], ws: list[Window], drop: tuple = (), stale: t
         R["db_sessions"].append(_ts(ws, {wn: {"s": sp["apps"][app].get("idle_tx", 0.0)} for wn, sp in S.items()},
                                     {"app": app, "state": "idle in transaction", "wait_type": "Client"}))
         role = "svc_" + app.split("-")[0]
-        R["statements"].append(_ts(ws, {wn: {"et": sp["apps"][app]["exec_ms"], "calls": 10.0} for wn, sp in S.items()},
+        R["statements"].append(_ts(ws, {wn: {"et": sp["apps"][app]["exec_ms"], "calls": sp["apps"][app].get("calls", 10.0)}
+                                        for wn, sp in S.items()},
                                    {"db.role": role}))
         img = "airlab/" + app.split("-")[0] + ":1.0.0"
         R["containers"].append(_ts(ws, {wn: {"u": sp["apps"][app]["cores"] * 60e9, "s": 0.0, "rss": 4e8}

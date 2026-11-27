@@ -1,0 +1,66 @@
+# Chaos Lab PostgreSQL yük seti (2026-11-27 ve sonrası, S01–S19) — beklenen sonuçlar. Yalnız karşılaştırmada okunur;
+# agent girdisine girmez. Koşu tanımları: scripts/chaos-agent-eval-runs.py --set db (case → senaryo, initiator, targets).
+#
+# Körlük düzeyi: etiketler 2026-11-27'de, bu set KOŞULMADAN yazıldı; ancak aynı yük tiplerinin çoğu agent'ın
+# mechanism eşikleri seçilirken farklı initiator / intensity ile ölçüldü (docs/lab/chaos-v2-agent-eval.md). Bu yüzden
+# set bir "doğrulama" setidir: initiator ve intensity kalibrasyon koşularından bilerek farklı seçildi. Daha önce hiç
+# ölçülmemiş tipler: S02, S03, S10 (yeni kodla), S17. S20 (rastgele birleşik yük) sette yoktur: beklenen sonucu tanımsızdır.
+#
+# Alanlar: primary (birincil mechanism), primary_any (bunlardan biri), mechanisms (listede bulunmalı),
+# sources_any (birincil mechanism'in source'larından en az biri), not_mechanisms (bulunmamalı).
+
+# Kontrol: chaos yok, yalnız sürekli trafik.
+D0:  {primary: null, max_score: 25}
+
+# --- Lock ---
+# Tablo ACCESS EXCLUSIVE ile tutulur; okuyan query'ler relation lock'ta bekler.
+D01: {primary: table_lock, sources_any: [flightops-service, baggage-service], not_mechanisms: [row_lock, advisory_lock, db_cpu]}
+# Aynı row'larda UPDATE + bekletme.
+D02: {primary: row_lock, sources_any: [baggage-service, reservation-service], not_mechanisms: [table_lock, advisory_lock, deadlock]}
+# Long-running transaction row lock'ları tutar; tüm uygulamalar katılır.
+D03: {primary: row_lock, not_mechanisms: [table_lock, advisory_lock, db_cpu]}
+# REPEATABLE READ altında çakışan güncellemeler.
+D08: {primary: serialization_conflict, sources_any: [baggage-service, flightops-service], not_mechanisms: [deadlock, table_lock]}
+# Ters sırayla lock'lama. Deadlock'a giren transaction'lar kısa süre beklediği için row_lock da görülebilir.
+D09: {primary: deadlock, sources_any: [reservation-service, flightops-service], not_mechanisms: [table_lock, advisory_lock, serialization_conflict]}
+# pg_advisory_lock key'lerinde bekleme.
+D13: {primary: advisory_lock, sources_any: [baggage-service, reservation-service], not_mechanisms: [row_lock, table_lock]}
+
+# --- Connection ---
+# Pool dışı kısa ömürlü connection'lar → max_connections'a yaklaşma.
+D10: {mechanisms: [global_connection_pressure], sources_any: [checkin-service, reservation-service], not_mechanisms: [row_lock, table_lock]}
+# Transaction açık bırakılan session'lar. Network path latency DEĞİL.
+D14: {primary: idle_in_transaction, sources_any: [reservation-service, baggage-service],
+      not_mechanisms: [network_path_latency, row_lock, update_churn]}
+
+# --- CPU ---
+# CPU-intensive query'ler. Kalibrasyonda bu yükün temp dosyasına taştığı ve çok tuple okuduğu görüldü; bu yüzden
+# birincil mechanism serbest, db_cpu listede olmalı.
+D04: {mechanisms: [db_cpu], primary_any: [db_cpu, temp_file_pressure, read_pressure], sources_any: [reservation-service],
+      not_mechanisms: [row_lock, write_pressure]}
+# Parallel query ile seq scan.
+D15: {primary_any: [read_pressure, db_cpu], sources_any: [flightops-service, checkin-service], not_mechanisms: [write_pressure, update_churn]}
+# Çok sayıda küçük primary key sorgusu.
+D16: {primary: query_flood, sources_any: [baggage-service, reservation-service], not_mechanisms: [write_pressure, read_pressure]}
+
+# --- I/O ve WAL ---
+# Toplu INSERT.
+D05: {primary: write_pressure, sources_any: [flightops-service], not_mechanisms: [update_churn, query_flood]}
+# Sequential scan okumaları.
+D06: {primary: read_pressure, sources_any: [baggage-service], not_mechanisms: [write_pressure, temp_file_pressure]}
+# Temp dosyasına taşan sort.
+D07: {primary: temp_file_pressure, sources_any: [reservation-service], not_mechanisms: [write_pressure, update_churn]}
+# Tek satırlık, ayrı ayrı commit edilen INSERT'ler.
+D11: {primary: write_pressure, sources_any: [flightops-service, checkin-service], not_mechanisms: [update_churn, query_flood]}
+
+# --- Maintenance ve memory ---
+# Sürekli toplu UPDATE.
+D12: {primary: update_churn, sources_any: [baggage-service], not_mechanisms: [write_pressure, idle_in_transaction]}
+# Bellekte yapılan büyük sort'lar (bellek sort sonrası tutulur).
+D18: {mechanisms: [db_memory_pressure], not_mechanisms: [temp_file_pressure, write_pressure]}
+
+# --- Birleşik ---
+# CPU-intensive query + seq scan, tüm uygulamalar.
+D17: {mechanisms: [db_cpu], primary_any: [db_cpu, read_pressure, temp_file_pressure], not_mechanisms: [row_lock, write_pressure]}
+# Idle in transaction session'ları + update churn (vacuum eski snapshot'lar yüzünden temizleyemez).
+D19: {primary: update_churn, mechanisms: [update_churn, idle_in_transaction], not_mechanisms: [network_path_latency, write_pressure]}

@@ -25,8 +25,9 @@ def _w(**over):
 R, C, F, B = "reservation-service", "checkin-service", "flightops-service", "baggage-service"
 
 
-def _edge(waiter, blocker, n, blocker_wait="Timeout"):
-    return {"waiter_app": waiter, "blocker_app": blocker, "wait_type": "Lock", "waiter_op": "checkin",
+def _edge(waiter, blocker, n, blocker_wait="Timeout", wait_event="transactionid"):
+    return {"waiter_app": waiter, "blocker_app": blocker, "wait_type": "Lock", "wait_event": wait_event,
+            "waiter_op": "checkin",
             "blocker_op": "hold", "blocker_state": "active", "blocker_wait": blocker_wait, "n": str(n),
             "wait_max": "4.2", "waiter.experiment_id": "exp-LEAK", "blocker.lab_hold": "hold-inventory-lock"}
 
@@ -89,6 +90,19 @@ SCENARIOS = {
     "db_memory": lambda: (_w(host_mem={"db-vm": 52.0}), _w(host_mem={"db-vm": 58.0}, pg=_pg(active_ms=100000.0),
                                                            apps={R: {"exec_ms": 60000.0}}), {}),
     "idle_in_tx": lambda: (NORMAL, _w(apps={C: {"idle_tx": 5.0}, F: {"idle_tx": 5.0}}), {}),
+    "table_lock": lambda: (NORMAL, _w(
+        apps={C: {"mean_ms": 700.0, "p95": 2500.0, "pool_a": 7.0, "sessions": 8.0}},
+        lock_total=5.0, lock_pairs={(C, R): 4.0, (R, R): 1.0},
+        edges=[_edge(C, R, 11, wait_event="relation"), _edge(R, R, 10, wait_event="relation"),
+               _edge(C, C, 3, blocker_wait="Lock", wait_event="relation"), _edge(C, R, 1)], pg_lock_logs=40), {}),
+    "advisory_lock": lambda: (NORMAL, _w(
+        lock_total=4.0, lock_pairs={(C, F): 3.0, (F, F): 1.0},
+        edges=[_edge(C, F, 14, wait_event="advisory"), _edge(F, F, 11, wait_event="advisory"),
+               _edge(F, C, 7, blocker_wait="Lock", wait_event="advisory")]), {}),
+    "point_queries": lambda: (NORMAL, _w(dbstats={"cm": 44000.0}, pg=_pg(ret=1.3e7),
+                                         apps={C: {"calls": 9566.0, "exec_ms": 348.0}, F: {"calls": 9860.0, "exec_ms": 303.0}}), {}),
+    # Çağrı sayısı arttı ama query'ler ağır (seq scan): query flood değil
+    "heavy_calls": lambda: (NORMAL, _w(apps={C: {"calls": 6000.0, "exec_ms": 150000.0}}), {}),
     # Arka plan trafiği arttı ama hiçbir workload mechanism'i yok (rollback, commit ve tuple okuma trafikle artar)
     "busy_traffic": lambda: (_w(dbstats={"rb": 70.0, "cm": 1500.0}, pg=_pg(ret=1.4e6, ins=60.0, wal=2.0e5)),
                              _w(dbstats={"rb": 190.0, "cm": 4700.0}, pg=_pg(ret=5.5e6, ins=180.0, wal=4.0e5, writes=250.0),

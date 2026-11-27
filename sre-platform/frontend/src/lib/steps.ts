@@ -54,6 +54,9 @@ export const MECHANISM_LABEL: Record<string, string> = {
   read_pressure: "PostgreSQL read (scan) pressure",
   db_memory_pressure: "DB_VM memory pressure",
   idle_in_transaction: "Idle in transaction session'ları",
+  table_lock: "Table lock wait",
+  advisory_lock: "Advisory lock wait",
+  query_flood: "Query flood",
 };
 
 export function mechanismLabel(id: string | null | undefined): string {

@@ -39,6 +39,15 @@ def human_review(attr: dict, quality: dict, scores: dict) -> list[str]:
         if m["id"] == "app_container_cpu":
             out.append(f"{m['source_apps'][0]} container'ında CPU harcayan thread'leri (thread dump, profiler) ve GC "
                        "aktivitesini inceleyin; container CPU limitini ve son deploy'u kontrol edin.")
+        if m["id"] == "table_lock":
+            out.append("Tabloyu lock'layan işlemi bulun (pg_locks: locktype = 'relation', mode = 'AccessExclusiveLock'; "
+                       "DDL, LOCK TABLE, TRUNCATE, VACUUM FULL). DDL'leri lock_timeout ile ve trafiğin az olduğu saatte çalıştırın.")
+        if m["id"] == "advisory_lock":
+            out.append("Advisory lock'u tutan session'ı (pg_locks: locktype = 'advisory') ve uygulamada lock'un alınıp "
+                       "bırakıldığı kod yolunu inceleyin; lock'un transaction sonunda bırakıldığını doğrulayın.")
+        if m["id"] == "query_flood":
+            out.append(f"{', '.join(m['source_apps'])} için en çok çağrılan query'leri (pg_stat_statements: calls) "
+                       "inceleyin; döngü içindeki tekil lookup'ları tek query'de toplayın (batch, IN listesi, JOIN).")
         if m["id"] == "deadlock":
             out.append("PostgreSQL logundaki 'deadlock detected' DETAIL satırlarından çakışan query'leri bulun; "
                        "transaction'ların row'ları aynı sırayla lock'lamasını sağlayın.")

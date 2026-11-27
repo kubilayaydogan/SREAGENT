@@ -23,7 +23,7 @@ from airlab_agent.tracing import child_config
 
 MECHANISMS = ("row_lock", "pool_saturation", "global_connection_pressure", "db_cpu", "app_vm_cpu", "app_container_cpu",
               "network_path_latency", "independent_load", "deadlock", "serialization_conflict", "temp_file_pressure", "write_pressure", "update_churn",
-              "read_pressure", "db_memory_pressure", "idle_in_transaction")
+              "read_pressure", "db_memory_pressure", "idle_in_transaction", "table_lock", "advisory_lock", "query_flood")
 SCOPES = ("investigations", "incidents", "rca", "runbooks", "known_issues", "conversations")
 
 
@@ -53,7 +53,8 @@ class ChatRoute(BaseModel):
     mechanism: Literal["row_lock", "pool_saturation", "global_connection_pressure", "db_cpu", "app_vm_cpu",
                        "app_container_cpu", "network_path_latency", "independent_load",
                        "deadlock", "serialization_conflict", "temp_file_pressure", "write_pressure", "update_churn",
-                       "read_pressure", "db_memory_pressure", "idle_in_transaction"] | None = Field(None, description=_MECH_DESC)
+                       "read_pressure", "db_memory_pressure", "idle_in_transaction",
+                       "table_lock", "advisory_lock", "query_flood"] | None = Field(None, description=_MECH_DESC)
     search_terms: str | None = Field(None, description=_SEARCH_DESC)
 
     @model_validator(mode="after")

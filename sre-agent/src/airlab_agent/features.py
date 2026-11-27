@@ -173,7 +173,7 @@ def extract(results: dict[str, Any], ws: list[Window], cfg: dict) -> dict[str, d
         wn = rec.get("w")
         if wn in F:
             F[wn]["db"].setdefault("edges", []).append(
-                {k: rec.get(k) for k in ("waiter_app", "blocker_app", "wait_type", "waiter_op", "blocker_op",
+                {k: rec.get(k) for k in ("waiter_app", "blocker_app", "wait_type", "wait_event", "waiter_op", "blocker_op",
                                          "blocker_state", "blocker_wait")} | {"n": num(rec.get("n")) or 0,
                                                               "wait_max_s": num(rec.get("wait_max"))})
     edges_answered = _qr(results, "edges")["status"] in ("OK", "EMPTY")

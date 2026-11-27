@@ -130,3 +130,17 @@ python3 scripts/chaos-agent-eval-runs.py --set validation --out /opt/airlab/depl
 python eval/run_eval.py --real --windows chaos_v2_windows.yaml --labels chaos_v2_labels.yaml
 python eval/run_eval.py --real --windows chaos_v2_validation_windows.yaml --labels chaos_v2_validation_labels.yaml
 ```
+
+### PostgreSQL yük seti (S01–S19)
+
+Senaryo seti 2026-11-27'de yalnız PostgreSQL yükü üretecek biçimde yenilendi; yukarıdaki S kimliklerinin bir kısmı artık
+başka yük tiplerini gösterir. Güncel set için koşu tanımları `--set db` (20 case: `D0` kontrol + `D01`–`D19`), etiketler
+`sre-agent/eval/chaos_db_labels.yaml` dosyasındadır. Etiketler set koşulmadan yazıldı; ancak yük tiplerinin çoğu agent'ın
+mechanism eşikleri seçilirken farklı initiator / intensity ile ölçüldüğü için bu set kör değil, doğrulama setidir.
+
+```bash
+# APP_VM (host uykuya girmemeli; ~4 saat)
+python3 scripts/chaos-agent-eval-runs.py --set db --out /opt/airlab/deploy/evidence/chaos-db-agent-eval
+# windows.yaml'ı sre-agent/eval/chaos_db_windows.yaml olarak kopyalayın
+python eval/run_eval.py --real --windows chaos_db_windows.yaml --labels chaos_db_labels.yaml
+```

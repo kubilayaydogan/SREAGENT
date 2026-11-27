@@ -142,6 +142,7 @@ def q_edges(ws, cfg):
     return (f'fetch logs, {_rng(ws)} | filter airlab.event == "airlab.pg.blocking_edge" | {_bucket(ws, "timestamp")} '
             f'| summarize n=count(), wait_max=max(toDouble(waiter.wait_seconds)), '
             f'by:{{w, waiter_app=waiter.app, blocker_app=blocker.app, wait_type=waiter.wait_event_type, '
+            f'wait_event=waiter.wait_event, '
             f'waiter_op=waiter.op, blocker_op=blocker.op, blocker_state=blocker.state, '
             f'blocker_wait=blocker.wait_event_type}}')
 

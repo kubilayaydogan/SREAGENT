@@ -98,6 +98,12 @@ mechanisms:
   db_mem_pct: 90                   # DB_VM memory kullanımı (mutlak)
   db_mem_rise_pp: 4                # ...ya da dönem içi en yüksek değer önceki dönem ortalamasından +4 puan
                                    # (ölçüm: bellekte sort yükünde +4,6 / +5,8 / +6,0; boşta dalgalanma ~2 puan)
+  # Query flood: bir uygulamanın pg_stat_statements çağrı sayısı. Ölçüm (point query seli, uygulama başına çağrı/dk):
+  # hafif ~10.600-11.300, orta ~9.600-9.900 (kısa koşu), yüksek ~72.000, kritik ~138.000; çağrı başına 0,01-0,04 ms.
+  # Yalnız arka plan trafiği ≤ 1.400 çağrı/dk; seq scan yükü çağrı başına ~45 ms. Dört yoğunlukta da tetiklendi.
+  flood_min_calls_per_min: 5000
+  flood_ratio: 5.0
+  flood_max_exec_ms_per_call: 1.0
   idle_tx_sessions: 1.5            # uygulama başına idle in transaction session artışı (dönem ortalaması; ölçüm: 2 ve 5)
                                    # ya da tüm uygulamaların toplamı bunun 2 katı (her uygulamada az sayıda session)
 

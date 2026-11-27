@@ -4,6 +4,7 @@
 APP_VM'de çalıştırın (kimlik bilgileri app-vm/.env'den okunur, ekrana basılmaz):
   python3 scripts/chaos-agent-eval-runs.py [--only C0,S03] [--out /opt/airlab/deploy/evidence/chaos-v2-agent-eval]
   python3 scripts/chaos-agent-eval-runs.py --set validation --out /opt/airlab/deploy/evidence/chaos-v2-agent-validation
+  python3 scripts/chaos-agent-eval-runs.py --set db --out /opt/airlab/deploy/evidence/chaos-db-agent-eval
 
 Çıktı:
   <out>/windows.yaml       YALNIZ zaman aralıkları (case adı → baseline_from/to, from/to). Agent'a girdi olarak giden
@@ -35,7 +36,7 @@ _spec.loader.exec_module(e2e)
 # case → (senaryo, intensity, initiator, targetMode, targets). C0 = chaos yok (yalnız sürekli trafik) kontrol penceresi.
 # Tüm senaryolar yalnız PostgreSQL yükü üretir. S03, S04, S10 ve S17 2026-11-24 koşusuyla aynı yük tipidir;
 # S01, S11 ve S13 yeni yük tipleridir (table lock, commit storm, advisory lock) → eval/chaos_v2_labels.yaml'daki
-# eski etiketleri bu case'ler için geçersizdir, koşudan önce etiketler kör olarak yeniden yazılmalıdır.
+# eski etiketleri bu case'ler için geçersizdir. Güncel yük tipleri için --set db ve eval/chaos_db_labels.yaml kullanın.
 CASES = {
     "C0": None,
     "S03": ("S03", "MEDIUM", "flightops", "AUTO", []),
@@ -55,6 +56,31 @@ VALIDATION = {
     "V14": ("S14", "HIGH", "checkin", "MULTI", ["baggage"]),
     "V03": ("S03", "HIGH", "flightops", "AUTO", []),
     "V19": ("S19", "MEDIUM", "reservation", "AUTO", []),
+}
+# PostgreSQL yük seti (--set db): S01–S19'un her biri bir kez. Etiketler: sre-agent/eval/chaos_db_labels.yaml.
+# Initiator / intensity, mechanism eşikleri seçilirken kullanılan koşulardan bilerek farklıdır. S20 (rastgele birleşik
+# yük) yoktur: beklenen sonucu tanımsızdır.
+DB = {
+    "D0": None,
+    "D01": ("S01", "HIGH", "flightops", "MULTI", ["baggage"]),
+    "D02": ("S02", "MEDIUM", "baggage", "MULTI", ["reservation"]),
+    "D03": ("S03", "MEDIUM", "checkin", "AUTO", []),
+    "D04": ("S04", "HIGH", "reservation", "SINGLE", []),
+    "D05": ("S05", "MEDIUM", "flightops", "SINGLE", []),
+    "D06": ("S06", "MEDIUM", "baggage", "SINGLE", []),
+    "D07": ("S07", "HIGH", "reservation", "SINGLE", []),
+    "D08": ("S08", "HIGH", "baggage", "MULTI", ["flightops"]),
+    "D09": ("S09", "HIGH", "reservation", "MULTI", ["flightops"]),
+    "D10": ("S10", "MEDIUM", "checkin", "MULTI", ["reservation"]),
+    "D11": ("S11", "MEDIUM", "flightops", "MULTI", ["checkin"]),
+    "D12": ("S12", "HIGH", "baggage", "SINGLE", []),
+    "D13": ("S13", "MEDIUM", "baggage", "MULTI", ["reservation"]),
+    "D14": ("S14", "HIGH", "reservation", "MULTI", ["baggage"]),
+    "D15": ("S15", "MEDIUM", "flightops", "MULTI", ["checkin"]),
+    "D16": ("S16", "HIGH", "baggage", "MULTI", ["reservation"]),
+    "D17": ("S17", "HIGH", "checkin", "AUTO", []),
+    "D18": ("S18", "HIGH", "flightops", "MULTI", ["baggage"]),
+    "D19": ("S19", "MEDIUM", "checkin", "AUTO", []),
 }
 DURATIONS = {"baselineSec": 210, "rampSec": 30, "durationSec": 270, "recoverySec": 90, "maxDurationSec": 0}
 CONTROL_SEC = 8 * 60
@@ -128,9 +154,9 @@ def main() -> int:
     ap.add_argument("--base", default="http://172.20.229.26:8080")
     ap.add_argument("--out", default="/opt/airlab/deploy/evidence/chaos-v2-agent-eval")
     ap.add_argument("--only", default="")
-    ap.add_argument("--set", choices=["eval", "validation"], default="eval")
+    ap.add_argument("--set", choices=["eval", "validation", "db"], default="eval")
     a = ap.parse_args()
-    cases = VALIDATION if a.set == "validation" else CASES
+    cases = {"validation": VALIDATION, "db": DB}.get(a.set, CASES)
     e = e2e.env(a.env)
     api = e2e.Api(a.base, e.get("CHAOS_USER", "chaos"), e["CHAOS_PASSWORD"])
     os.makedirs(a.out, exist_ok=True)

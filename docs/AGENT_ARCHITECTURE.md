@@ -142,7 +142,7 @@ flowchart TD
 | `plan` | İncelenen pencereyi ve hemen öncesindeki baseline'ı belirler, ingest gecikmesini düşer | – | – |
 | `collect` | Katalogdaki signal'ları çalıştırır; her sonucu veri durumuyla evidence olarak yazar | – | Evet |
 | `analyze` | Feature çıkarır, veri kalitesini ölçer, risk score ve mechanism'i hesaplar | – | – |
-| `extra_evidence` | `row_lock` bulunduysa lock edge ayrıntısını, `db_cpu`, `global_connection_pressure`, `db_memory_pressure` ya da bir PostgreSQL workload mechanism'i bulunduysa en pahalı statement'ları toplar | – | Evet |
+| `extra_evidence` | `row_lock`, `table_lock` ya da `advisory_lock` bulunduysa lock edge ayrıntısını, `db_cpu`, `global_connection_pressure`, `db_memory_pressure` ya da bir PostgreSQL workload mechanism'i bulunduysa en pahalı statement'ları toplar | – | Evet |
 | `explain` | Bulguları Türkçe anlatır. LLM yoksa, ulaşılamazsa ya da guardrail engellerse deterministik metin kullanılır | Evet | – |
 | `finalize` | Durumu (`completed` / `partial`) belirler, raporu oluşturur | – | – |
 
@@ -295,6 +295,8 @@ değiştirilebilir ve değişiklik öncesinde geçmiş veriye karşı önizleneb
 | Mechanism | Belirti |
 |---|---|
 | `row_lock` | Lock bekleyen oturumlar ve bloklayan / bekleyen çiftleri (lock edge) |
+| `table_lock` | Aynı belirti; lock edge'lerin çoğunda bekleme türü `relation` (tablo düzeyinde lock) |
+| `advisory_lock` | Aynı belirti; lock edge'lerin çoğunda bekleme türü `advisory` |
 | `pool_saturation` | Bir uygulamanın Connection Pool'u dolu, bekleyen istek var |
 | `global_connection_pressure` | Veritabanı toplam bağlantı kullanımı sınıra yakın ya da hızla artmış |
 | `db_cpu` | Veritabanı host'unda CPU saturation. Alt neden: `query_load`, `maintenance`, `mixed`, `undetermined` |
@@ -310,6 +312,7 @@ değiştirilebilir ve değişiklik öncesinde geçmiş veriye karşı önizleneb
 | `read_pressure` | Okunan tuple hacmi ya da diskten okunan blok arttı (ör. sequential scan) |
 | `db_memory_pressure` | Veritabanı host'unda memory kullanımı arttı |
 | `idle_in_transaction` | Bir uygulamanın idle in transaction session'ları birikti |
+| `query_flood` | Bir uygulamanın query çağrı sayısı çok arttı, çağrı başına süre çok kısa |
 
 Her mechanism; source uygulamaları, etkilenen uygulamaları, dayandığı evidence kimliklerini ve bir confidence
 düzeyini taşır. Sonuç bir **hipotez** olarak sunulur; alternatif açıklamalar ayrıca listelenir.

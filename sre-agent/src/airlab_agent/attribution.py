@@ -163,8 +163,9 @@ def db_cpu_cause(cur_db: dict, base_db: dict, m: dict, lock_active: bool = False
 
 
 # Paylaşılan PostgreSQL'de ölçülen mechanism'ler: bunlardan biri varken "bağımsız load" ya da "network path" denmez.
-DB_WORKLOAD = ("temp_file_pressure", "write_pressure", "update_churn", "read_pressure")
-SHARED = {"row_lock", "global_connection_pressure", "db_cpu", "app_vm_cpu", "deadlock", "serialization_conflict",
+DB_WORKLOAD = ("temp_file_pressure", "write_pressure", "update_churn", "read_pressure", "query_flood")
+LOCK_IDS = ("row_lock", "table_lock", "advisory_lock")
+SHARED = {*LOCK_IDS, "global_connection_pressure", "db_cpu", "app_vm_cpu", "deadlock", "serialization_conflict",
           "db_memory_pressure", *DB_WORKLOAD}
 
 
@@ -332,6 +333,30 @@ def db_workload(cur: dict, base: dict, cfg: dict, imp: dict, ev) -> list[dict]:
             "evidence_ids": ev("pg_server", "db_stats", "pg_io", "statements"),
         })
 
+    # h) Query flood: çok sayıda küçük query (write / update yükü zaten bulunduysa ayrıca yazılmaz)
+    if not {"write_pressure", "update_churn"} & {x["id"] for x in out}:
+        flood = {}
+        for app in cfg["apps"]:
+            c, b = cur["apps"].get(app) or {}, base["apps"].get(app) or {}
+            calls, before, ex = c.get("db_calls_per_min"), b.get("db_calls_per_min") or 0.0, c.get("db_exec_ms_per_min")
+            if (calls and ex is not None and calls >= m["flood_min_calls_per_min"] and calls >= before * m["flood_ratio"]
+                    and ex / calls <= m["flood_max_exec_ms_per_call"]):
+                flood[app] = [round(before), round(calls)]
+        if flood:
+            commits_up = rose("commits_per_min", 1, 2.0)
+            who = sorted(sorted(flood), key=lambda a: flood[a][1], reverse=True)
+            out.append({
+                "id": "query_flood", "title": "Query flood (çok sayıda küçük query)",
+                "source_apps": who, "affected_apps": aff,
+                "mechanism": "Uygulama çok sayıda küçük, hızlı query gönderiyor (ör. döngü içinde tek tek primary key "
+                             "lookup, N+1 pattern). Tek tek ucuz olan query'ler toplamda CPU, network round-trip ve "
+                             "connection harcar; her biri ayrı transaction ise commit sayısı da artar.",
+                "calls_per_min_by_app": flood, "commits_per_min": pair("commits_per_min", nd=0),
+                "tuples_read_per_min": pair("pg_tup_read_per_min", nd=0),
+                "signals": ["pg_stat_statements calls"] + (["airlab.pg.db.xact_commit artışı"] if commits_up else []),
+                "confidence": _conf(1 + commits_up, bool(imp)), "evidence_ids": ev("statements", "db_stats", "pg_server"),
+            })
+
     # g) DB_VM memory
     dbh, bdbh = cur["hosts"].get(cfg["hosts"]["db"]) or {}, base["hosts"].get(cfg["hosts"]["db"]) or {}
     now, before = dbh.get("mem_max", dbh.get("mem")), bdbh.get("mem")
@@ -428,13 +453,33 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
         blocker_states = sorted({e.get("blocker_state") for e in edges if e.get("blocker_state")})
         chain_hops = lock_chain(sources, edges)
         depth = max((h["level"] for h in chain_hops), default=0)
+        # Lock türü: blocking edge'lerdeki wait_event (relation → tablo, advisory → advisory, diğerleri → row).
+        # Alan yoksa (eski kayıt) row lock sayılır. 2026-11-27 ölçümü: table lock yükünde tüm edge'ler `relation`,
+        # advisory lock yükünde tümü `advisory`, deadlock / row lock yükünde `transactionid`.
+        kinds: dict[str, float] = {}
+        for e in edges:
+            k = {"relation": "table", "advisory": "advisory"}.get(e.get("wait_event"), "row")
+            kinds[k] = kinds.get(k, 0) + e["n"]
+        total = sum(kinds.values())
+        kind = next((k for k in ("table", "advisory") if total and kinds.get(k, 0) >= total * 0.5), "row")
+        name = {"row": "Row lock wait", "table": "Table lock wait", "advisory": "Advisory lock wait"}[kind]
+        text = {
+            "row": "Problemi başlatan uygulamanın açık transaction'ı row lock'u tutarken etkilenen uygulamanın "
+                   "UPDATE/SELECT FOR UPDATE işlemleri Lock/transactionid wait'e düşüyor; bekleyen request'ler "
+                   "Hikari connection'ını tuttuğu için connection pool doluluğu ve latency artıyor.",
+            "table": "Bir transaction tabloyu güçlü bir lock mode'unda tutuyor (ör. ACCESS EXCLUSIVE: DDL, LOCK TABLE, "
+                     "TRUNCATE). O tabloya erişen tüm query'ler — SELECT dahil — Lock/relation wait'e düşüyor ve "
+                     "arkasında sıraya giriyor; bekleyen request'ler connection tuttuğu için connection pool doluluğu "
+                     "ve latency artıyor.",
+            "advisory": "Uygulamalar aynı advisory lock key'i için bekliyor (pg_advisory_lock). Advisory lock'lar "
+                        "uygulamanın kendi tanımladığı lock'lardır; tabloya ya da row'a bağlı değildir. Lock'u tutan "
+                        "session bırakana kadar diğerleri Lock/advisory wait'te kalır.",
+        }[kind]
         mechs.append({
-            "id": "row_lock",
-            "title": "Zincirleme row lock wait" if depth >= 2 else "Row lock wait",
+            "id": f"{kind}_lock",
+            "title": ("Zincirleme " + name[0].lower() + name[1:]) if depth >= 2 else name,
             "source_apps": sources, "affected_apps": affected,
-            "mechanism": "Problemi başlatan uygulamanın açık transaction'ı row lock'u tutarken etkilenen uygulamanın "
-                         "UPDATE/SELECT FOR UPDATE işlemleri Lock/transactionid wait'e düşüyor; bekleyen request'ler "
-                         "Hikari connection'ını tuttuğu için connection pool doluluğu ve latency artıyor.",
+            "mechanism": text, "lock_kind": kind, "lock_kinds": {k: round(v) for k, v in kinds.items()},
             "signals": lock_srcs, "edges_total": edges_total, "edge_pairs": edges[:10],
             "blocker_states": blocker_states, "chain_blockers": chain,
             "lock_chain": chain_hops, "chain_depth": depth, "chain_path": chain_text(chain_hops) if depth else None,
@@ -465,7 +510,7 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
                 "mechanism": ("Lock wait'in sonucu: bekleyen request'ler connection'ları tutuyor." if secondary else
                               "Uygulamanın kendi load'u connection pool kapasitesini aşıyor; DB genelinde connection pressure yok, "
                               "diğer uygulamalara yayılma beklenmez."),
-                "secondary_to": "row_lock" if secondary else None,
+                "secondary_to": mechs[0]["id"] if secondary else None,
                 "pool_ratio": round(pr, 3), "pending_max": c.get("pool_pending_max"),
                 "timeouts": c.get("pool_timeouts"), "rpm_ratio": round(loads.get(app, 0), 2) if app in loads else None,
                 "signals": srcs, "confidence": _conf(len(srcs), app in imp),
@@ -513,7 +558,7 @@ def detect(cur: dict, base: dict, cfg: dict, evidence_ids: dict[str, str | None]
             if c is not None:
                 incs[app] = c - (b or 0)
         sources = [a for a in sorted(incs, key=incs.get, reverse=True) if incs[a] > 0][:2]
-        cause = db_cpu_cause(db, base["db"], m, lock_active=any(x["id"] == "row_lock" for x in mechs))
+        cause = db_cpu_cause(db, base["db"], m, lock_active=any(x["id"] in LOCK_IDS for x in mechs))
         # Neden maintenance ise CPU'yu uygulama query'leri harcamıyor: exec time artışı CPU sıkışmasının sonucudur,
         # bu yüzden source uygulama gösterilmez (2026-11-27 gerçek autovacuum olayında görüldü).
         maint = cause["kind"] == "maintenance"
@@ -644,6 +689,8 @@ def alternatives(attr: dict, quality: dict) -> list[str]:
     """Rapor için alternatif açıklamalar ve dikkat notları (deterministik)."""
     ids = {m["id"] for m in attr["mechanisms"]}
     out = []
+    if ids & set(LOCK_IDS):                      # aşağıdaki notlar lock türünden bağımsızdır
+        ids = ids | {"row_lock"}
     if "row_lock" in ids and "app_vm_cpu" in ids:
         out.append("Latency, lock yerine APP_VM CPU saturation'dan da kaynaklanabilir; iki problem aynı anda aktif.")
     if "row_lock" in ids and "global_connection_pressure" in ids:

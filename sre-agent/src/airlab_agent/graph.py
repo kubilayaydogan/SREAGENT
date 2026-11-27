@@ -18,7 +18,7 @@ from langgraph.graph import END, START, StateGraph
 
 from .tracing import child_config
 from . import report as rpt
-from .attribution import DB_WORKLOAD, alternatives, detect
+from .attribution import DB_WORKLOAD, LOCK_IDS, alternatives, detect
 from .features import assess_quality, extract, window_list
 from .llm import RUN_BUDGET, LlmBudgetExceeded, LlmUnavailable
 from .mcp_gateway import OUTCOME, McpUnavailable, QueryResult
@@ -138,7 +138,7 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
         """Ek evidence kararı (yönlendirme ve trace için TEK kaynak)."""
         ids = {m["id"] for m in st["attribution"]["mechanisms"]}
         keys, why = [], []
-        if "row_lock" in ids and "edges_detail" not in st["extra"]:
+        if ids & set(LOCK_IDS) and "edges_detail" not in st["extra"]:
             keys.append("edges_detail")
             why.append("row_lock → lock edge ayrıntısı")
         if TOP_STATEMENT_MECHS & ids and "top_statements" not in st["extra"]:
@@ -242,7 +242,7 @@ def build_graph(settings, gateway_factory, llm=None, checkpointer=None, persist_
         ws = _windows(state)
         ids = {m["id"] for m in state["attribution"]["mechanisms"]}
         keys = []
-        if "row_lock" in ids and "edges_detail" not in state["extra"]:
+        if ids & set(LOCK_IDS) and "edges_detail" not in state["extra"]:
             keys.append("edges_detail")
         if TOP_STATEMENT_MECHS & ids and "top_statements" not in state["extra"]:
             keys.append("top_statements")
