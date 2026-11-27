@@ -334,13 +334,14 @@ bazı kayıt adları laboratuvar denemelerinden kalma test verisidir.
 Aşağıdaki ekranların görüntüsü alınmadı. Sahte görsel ya da mockup üretilmedi; bu ekranlar için dokümanlarda görsel
 bağlantısı yoktur.
 
-| Ekran | Neden alınmadı | Eklemek için |
+| Ekran | Neden alınmadı 
 |---|---|---|
 | Giriş ekranı (`/login`) | Görüntü almak için açık oturumu kapatmak gerekiyordu | 
 | Hesabım (`/account`) | Oturum listesi istemci IP adreslerini gösterir | 
-| Settings › MCP Servers | Connector adresi Dynatrace tenant kimliğini içerir | Adres alanını kapatarak görüntüleyin |
-| Settings › Agent, Risk Scoring, Observability, Notifications, Retention & Memory, Security & Governance, Users & API Keys | Kapsam dışında bırakıldı; Users & API Keys kullanıcı adlarını gösterir | İsteğe bağlı |
-| Incident ayrıntısı | Alınmadı | Bir incident açıp görüntüleyin |
+| Settings › MCP Servers | Connector adresi Dynatrace tenant kimliğini içerir |
+| Settings › Agent, Risk Scoring, Observability, Notifications, Retention & Memory, Security & Governance, Users & API Keys | Kapsam dışında bırakıldı; Users & API Keys kullanıcı adlarını gösterir | 
+|
+| Incident ayrıntısı | Alınmadı | 
 | Agent Memory, Agent Middleware ve Guardrails'in diğer sekmeleri | Yalnız ana sekmeler alındı |
 | Chaos Controller (Overview, Library, Builder, Live, History) | Ayrı bir kullanıcı adı ve parola gerektirir; bu çalışmada parola girilmedi | 
 | Laboratuvar servis arayüzleri (reservation, check-in, flight operations, baggage) | Laboratuvar uygulamaları bu dokümantasyonun odağı değil | 
