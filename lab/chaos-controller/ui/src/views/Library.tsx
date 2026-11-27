@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { categoryLabel, intensityLabel, paramLabel, showValue } from '../labels'
+import { categoryLabel, intensityLabel, metricLabel, paramLabel, showValue } from '../labels'
 import type { Scenario } from '../types'
 
 type Presets = Record<string, Record<string, Record<string, unknown>>>
@@ -15,11 +15,19 @@ function PresetTable({ p }: { p: Record<string, Record<string, unknown>> }) {
         return (
           <tr key={k}><td><b>{intensityLabel(k)}</b></td>
             <td>{params.map(([kk, x]) => <span key={kk} className="kvchip">{paramLabel(kk)}: <b>{showValue(x)}</b></span>)}</td>
-            <td>{c ? `${c.metric} → ${showValue(c.target)}` : 'sabit seviye'}</td></tr>
+            <td>{c ? `${metricLabel(String(c.metric))} → ${showValue(c.target)}` : 'sabit seviye'}</td></tr>
         )
       })}</tbody>
     </table>
   )
+}
+
+const REAL = 'Gerçek hayattaki karşılığı:'
+
+/** Açıklama iki parçadır: ne olduğu ve (varsa) gerçek hayattaki karşılığı. */
+function splitDescription(d: string): [string, string | null] {
+  const i = d.indexOf(REAL)
+  return i < 0 ? [d, null] : [d.slice(0, i).trim(), d.slice(i + REAL.length).trim()]
 }
 
 export function Library({ go }: { go: (h: string) => void }) {
@@ -45,12 +53,12 @@ export function Library({ go }: { go: (h: string) => void }) {
       <div className="pagehead">
         <div>
           <h2>Senaryolar</h2>
-          <p className="muted">Her senaryo sisteme belirli bir sorunu bilerek uygular. Ne yaptığını okuyun, sonra “Bu senaryoyu kur” ile deneyi hazırlayın.</p>
+          <p className="muted">Her senaryo, paylaşılan PostgreSQL'de gerçek hayatta karşılaşılan bir sorunu bilerek üretir. Kartta ne olduğunu ve hangi durumu canlandırdığını, “Ayrıntı”da belirtileri nerede göreceğinizi bulursunuz.</p>
         </div>
       </div>
       {err && <p className="error">Senaryolar alınamadı: {err}</p>}
       <div className="filters">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Senaryo ara (ör. lock, pool, CPU)" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Senaryo ara (ör. lock, vacuum, CPU, migration)" />
         <div className="chips">
           <button className={'chipbtn ' + (cat === '' ? 'on' : '')} onClick={() => setCat('')}>Tümü ({list.length})</button>
           {cats.map((c) => (
@@ -68,14 +76,17 @@ export function Library({ go }: { go: (h: string) => void }) {
               <h3>{s.name}</h3>
               <span className="chip">{categoryLabel(s.category)}</span>
             </header>
-            <p>{s.description}</p>
+            <p>{splitDescription(s.description)[0]}</p>
+            {splitDescription(s.description)[1] && (
+              <p className="realworld"><b>Gerçek hayattaki karşılığı:</b> {splitDescription(s.description)[1]}</p>
+            )}
             <dl className="kv">
-              <dt>Yükü başlatan</dt><dd>{s.initiatorRole}</dd>
-              <dt>Doğrudan hedef</dt><dd>{s.directTarget}</dd>
+              <dt>Yükün bindiği yer</dt><dd>{s.directTarget}</dd>
             </dl>
             {open === s.id && (
               <div className="detail">
-                <h4>Beklenen etki</h4><ul>{s.expectedImpact.map((x) => <li key={x}>{x}</li>)}</ul>
+                <h4>Belirtileri nerede görürsünüz</h4><ul>{s.expectedImpact.map((x) => <li key={x}>{x}</li>)}</ul>
+                <h4>İlk başlatan uygulamanın rolü</h4><p>{s.initiatorRole}</p>
                 <h4>Ön koşullar</h4><ul>{s.prerequisites.map((x) => <li key={x}>{x}</li>)}</ul>
                 <h4>Deney kendiliğinden durur, eğer</h4><ul>{s.abortConditions.map((x) => <li key={x}>{x}</li>)}</ul>
                 <h4>Bittiğinde temizlik</h4><p>{s.cleanup}</p>

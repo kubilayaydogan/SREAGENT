@@ -164,7 +164,7 @@ export function Builder({ preset, go }: { preset?: string; go: (h: string) => vo
                 {sc && <p className="help"><span className="chip">{categoryLabel(sc.category)}</span> {sc.description}</p>}
                 {sc && sc.expectedImpact.length > 0 && (
                   <details className="impact">
-                    <summary>Beklenen etki</summary>
+                    <summary>Belirtileri nerede görürsünüz</summary>
                     <ul>{sc.expectedImpact.map((x) => <li key={x}>{x}</li>)}</ul>
                   </details>
                 )}

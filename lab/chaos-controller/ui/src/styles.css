@@ -167,3 +167,4 @@ label.inline select { width: auto; }
 details.impact { margin-top: 6px; font-size: 12px; color: var(--ink2); }
 details.impact summary { cursor: pointer; }
 details.impact ul { margin: 4px 0 0; padding-left: 18px; }
+.realworld { font-size: 13px; color: var(--ink2); border-left: 3px solid var(--line); padding-left: 8px; margin: 4px 0 8px; }

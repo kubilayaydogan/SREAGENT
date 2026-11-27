@@ -126,15 +126,20 @@ public final class ScenarioRegistry {
 
     private void register() {
         add(new ScenarioDef("S01", "Table-level lock queue", "lock",
-                "Bir uygulama chaos.lock_target tablosunu ACCESS EXCLUSIVE kilitleyip tutar (DDL / VACUUM FULL "
-                        + "benzeri); tabloyu okuyan tüm uygulamalar relation lock kuyruğunda bekler.",
+                "Bir uygulama bir tabloyu ACCESS EXCLUSIVE lock ile tutar; o tabloya gelen tüm "
+                        + "query'ler, SELECT dahil, lock bırakılana kadar sırada bekler. Gerçek hayattaki "
+                        + "karşılığı: yoğun saatte çalıştırılan ALTER TABLE, VACUUM FULL ya da uzun süren bir "
+                        + "migration.",
                 List.of("V7 chaos şeması (chaos.lock_target)", "log_lock_waits=on"),
-                "tabloyu kilitleyen uygulama", "PostgreSQL relation lock kuyruğu (chaos.lock_target)", 2, true,
-                List.of("DB: pg_locks NOT granted ↑ (locktype = relation), Lock wait event",
-                        "tabloyu okuyan her uygulama: okuma süresi ≈ kilidin tutulma süresi",
-                        "kilit süresi lock_timeout'a (8 s) yaklaşırsa okuyanlarda 55P03 hataları"),
-                List.of("lock_timeout ile yaygın hata (error % > 50)", "budget aşımı"),
-                "worker'lar durur; /lab/cleanup kilidi tutan backend'i iptal eder → kuyruk boşalır",
+                "tabloyu lock'layan uygulama",
+                "tek bir tablo (relation lock kuyruğu)", 2, true,
+                List.of("pg_locks'ta granted = false olan relation lock'ları ve Lock wait event'i artar",
+                        "Tabloyu okuyan her uygulamada query süresi, lock'un tutulduğu süre kadar uzar",
+                        "Bekleme lock_timeout'a (8 sn) ulaşırsa okuyan uygulamalar 55P03 hatası alır"),
+                List.of("lock_timeout hataları yaygınlaşırsa (error rate > %50)",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur ve lock'u tutan session sonlandırılır; bekleyen query'ler hemen devam"
+                        + " eder.",
                 c -> {
                     double tgt = target(c, c.pick(2.0, 4.0, 8.0, 14.0));
                     int hold = Math.min(6000, txMs(c, c.pick(500, 1000, 2000, 4000)));
@@ -154,15 +159,19 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S02", "Row lock contention", "lock",
-                "Az sayıdaki paylaşılan satır (chaos.shared_records) üzerinde UPDATE + bekletme; diğer worker'lar "
-                        + "ve uygulamalar aynı satırlarda row lock bekler.",
+                "Uygulamalar az sayıda ortak row'u güncelleyip transaction'ı bir süre açık tutar; "
+                        + "aynı row'ları isteyen diğer transaction'lar row lock için bekler. Gerçek hayattaki "
+                        + "karşılığı: sayaç, stok ya da bakiye gibi herkesin güncellediği 'sıcak' row'lar.",
                 List.of("V6 chaos şeması", "log_lock_waits=on"),
-                "lock'u tutan ilk transaction", "paylaşılan PostgreSQL satırları", 1, false,
-                List.of("DB: pg_locks NOT granted ↑, Lock wait event, log'da 'still waiting for ShareLock'",
-                        "yüke katılan her uygulama: workload gecikmesi ≈ hold süresi kadar artar",
-                        "Tomcat thread'leri bekleyen isteklerle dolabilir (CRITICAL)"),
-                List.of("lock_timeout (8 s) ile yaygın hata (error % > 50)", "budget aşımı"),
-                "worker'lar durur; /lab/cleanup lab:-etiketli backend'leri iptal eder → lock'lar bırakılır",
+                "row lock'u tutan ilk transaction",
+                "ortak row'lar (row lock)", 1, false,
+                List.of("pg_locks'ta bekleyen (granted = false) lock'lar ve PostgreSQL logunda 'still waiting"
+                                + " for ShareLock' satırları",
+                        "Yüke katılan uygulamalarda işlem süresi, lock'un tutulduğu süre kadar artar",
+                        "Kritik yoğunlukta bekleyen request'ler uygulamanın thread'lerini doldurabilir"),
+                List.of("lock_timeout hataları yaygınlaşırsa (error rate > %50)",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur ve lock tutan session'lar sonlandırılır; row lock'lar bırakılır.",
                 c -> {
                     double tgt = target(c, c.pick(1.0, 3.0, 6.0, 12.0));
                     int hold = txMs(c, c.pick(300, 600, 1000, 2000));
@@ -179,16 +188,21 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S03", "Long-running transactions", "lock",
-                "Uygulamalar transaction'ı uzun süre açık tutar: initiator sıcak uçuşların envanter satırını (NO-OP "
-                        + "UPDATE, veri değişmez), her katılımcı da ortak chaos satırlarını kilitler. Aynı satırlara "
-                        + "gelen diğer transaction'lar bekler → blocking chain.",
+                "Uygulamalar transaction'ı uzun süre açık bırakır ve bu sürede aldığı row lock'ları "
+                        + "tutar; aynı row'lara gelen işlemler arkasında zincirleme bekler (blocking chain). "
+                        + "Gerçek hayattaki karşılığı: transaction içinde dış servis çağrısı yapan ya da commit"
+                        + " etmeyi unutan kod.",
                 List.of("seed'de sıcak uçuşlar (lab.seed hot-flights)", "V6 chaos şeması"),
-                "uzun transaction'ı açan uygulama", "PostgreSQL transaction süresi + tutulan row lock'lar", 1, true,
-                List.of("DB: longest transaction age ↑, lock waiters ↑, active-in-transaction session'lar",
-                        "sıcak uçuşa giden check-in / booking / status işlemleri: p95/p99 ↑, lock_timeout 503",
-                        "aynı chaos satırlarını isteyen diğer uygulamaların workload'ı sırada bekler"),
-                List.of("longest xact > süre + 30 s (cleanup başarısız)", "budget aşımı"),
-                "long-tx döngüsü cleanup generation ile sonlanır; /lab/cleanup backend'i iptal eder",
+                "transaction'ı açık tutan uygulama",
+                "açık transaction ve tuttuğu row lock'lar", 1, true,
+                List.of("En uzun transaction'ın yaşı ve lock bekleyen session sayısı artar",
+                        "Yoğun kullanılan uçuşlara giden check-in, booking ve status işlemlerinde p95 / p99 "
+                                + "yükselir; lock_timeout dolarsa 503 döner",
+                        "Aynı row'ları isteyen diğer uygulamaların işlemleri sıraya girer"),
+                List.of("En uzun transaction planlanan süreyi 30 sn'den fazla aşarsa (temizlik başarısız "
+                                + "demektir)",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Açık transaction'lar kapatılır; kapanmayan session'lar sonlandırılır.",
                 c -> {
                     int dur = txMs(c, c.pick(5000, 15000, 30000, 60000));
                     List<Action> a = new ArrayList<>();
@@ -211,14 +225,18 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S04", "CPU-intensive queries", "db-cpu",
-                "Sentetik veri üzerinde md5 + join + agregasyon sorguları; adaptive controller DB_VM CPU'yu hedef "
-                        + "yüzdede tutar.",
+                "Uygulama; hash hesaplayan, join ve aggregation yapan pahalı query'ler gönderir. Yük,"
+                        + " DB CPU'su seçilen yüzdeye ulaşacak şekilde kendiliğinden ayarlanır. Gerçek "
+                        + "hayattaki karşılığı: index'siz bir rapor query'si ya da kötü bir execution plan.",
                 List.of("chaos.synthetic_data (chaos-seed)", "lab_os.host_stats() (DB CPU ölçümü)"),
-                "pahalı sorguyu gönderen uygulama", "paylaşılan PostgreSQL CPU'su", 1, false,
-                List.of("DB_VM CPU ≈ hedef", "DB active sessions ↑",
-                        "diğer uygulamalar: paylaşılan DB CPU nedeniyle sorgu ve p95 gecikmesi artabilir (yüksek yoğunlukta)"),
-                List.of("DB CPU > budget (3 örnek)", "statement_timeout yaygın"),
-                "worker'lar durur, çalışan sorgular /lab/cleanup ile iptal edilir",
+                "pahalı query'leri gönderen uygulama",
+                "PostgreSQL CPU'su", 1, false,
+                List.of("DB_VM CPU kullanımı hedef yüzdeye çıkar, active session sayısı artar",
+                        "Yüksek yoğunlukta diğer uygulamaların query süreleri ve p95'i de artar (CPU "
+                                + "paylaşılır)"),
+                List.of("DB CPU, güvenlik sınırını art arda 3 ölçümde aşarsa",
+                        "Query'ler yaygın biçimde statement_timeout'a takılırsa"),
+                "Yük durdurulur, çalışan query'ler iptal edilir.",
                 c -> {
                     double tgt = target(c, c.pick(35.0, 55.0, 70.0, 85.0));
                     return new Plan(each(c, "cpu-query", "/lab/chaos/cpu-query",
@@ -233,14 +251,17 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S05", "Bulk insert / WAL volume", "db-io",
-                "Çok satırlı toplu INSERT (chaos.write_sink): WAL hacmi, checkpoint ve disk write baskısı. Tablo "
-                        + "periyodik budanır.",
+                "Uygulama büyük partiler hâlinde INSERT yapar; WAL hacmi, checkpoint yükü ve disk "
+                        + "write artar. Gerçek hayattaki karşılığı: toplu veri yükleme, ETL job'ı ya da "
+                        + "kontrolsüz bir import.",
                 List.of("chaos.write_sink", "pg_stat_io (PG16+)"),
-                "yazma yükünü üreten uygulama", "PostgreSQL WAL / disk write", 1, false,
-                List.of("DB: tuples inserted/s ↑, I/O write MB/s ↑",
-                        "diğer uygulamalar: commit gecikmesi (fsync) nedeniyle yazma işlemlerinde p95 ↑ olabilir"),
-                List.of("DB boyutu deney başından beri > 1 GB arttı", "budget aşımı"),
-                "worker'lar durur; write_sink TRUNCATE (SECURITY DEFINER trim_write_sink)",
+                "INSERT yükünü üreten uygulama",
+                "WAL ve disk write", 1, false,
+                List.of("Saniyede eklenen row sayısı, WAL üretimi ve disk write hızı artar",
+                        "Diğer uygulamaların write işlemlerinde commit süresi (WAL flush) ve p95 yükselebilir"),
+                List.of("Veritabanı boyutu deney başından beri 1 GB'tan fazla artarsa",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur ve deneyin yazdığı tablo boşaltılır (TRUNCATE).",
                 c -> {
                     double tgt = target(c, c.pick(1000.0, 4000.0, 10000.0, 20000.0));
                     int rows = c.pick(200, 500, 1000, 2000);
@@ -261,13 +282,16 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S06", "Sequential scan reads", "db-io",
-                "İndeks kullanmayan, tablonun büyük kısmını tarayan okuma + agregasyon (seq scan).",
+                "Uygulama, index kullanmadan tablonun büyük bölümünü tarayan query'ler gönderir "
+                        + "(sequential scan). Gerçek hayattaki karşılığı: eksik index, WHERE koşulu olmayan bir"
+                        + " query ya da tüm tabloyu okuyan bir rapor.",
                 List.of("chaos.synthetic_data"),
-                "tarama sorgularını gönderen uygulama", "PostgreSQL buffer cache / CPU / disk read", 1, false,
-                List.of("DB CPU ↑, shared buffer okuma ↑ (cache dışına taşarsa I/O read ↑)",
-                        "diğer uygulamalar: okuma sorgularında gecikme artışı"),
-                List.of("budget aşımı"),
-                "worker'lar durur, sorgular iptal edilir",
+                "tarama query'lerini gönderen uygulama",
+                "buffer cache, CPU ve disk read", 1, false,
+                List.of("DB CPU ve okunan row sayısı artar; veri bellekte değilse disk read de artar",
+                        "Diğer uygulamaların okuma query'leri yavaşlayabilir"),
+                List.of("Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur, çalışan query'ler iptal edilir.",
                 c -> {
                     double tgt = target(c, c.pick(30.0, 50.0, 65.0, 80.0));
                     return new Plan(each(c, "heavy-read", "/lab/chaos/heavy-read",
@@ -281,13 +305,18 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S07", "Temporary file pressure", "db-io",
-                "work_mem transaction içinde 64kB'a düşürülüp büyük sort yapılır → gerçek temp file yazımı.",
+                "Uygulama, belleğe sığmayan büyük sort'lar yapar; PostgreSQL ara sonucu diskteki temp"
+                        + " dosyalarına yazar. Gerçek hayattaki karşılığı: work_mem'e sığmayan ORDER BY, hash "
+                        + "join ya da büyük bir GROUP BY.",
                 List.of("svc_* temp_file_limit=2GB (disk koruması)"),
-                "sort sorgularını gönderen uygulama", "PostgreSQL temp tablespace / disk", 1, false,
-                List.of("DB: temp_files / temp_bytes ↑, I/O write ↑, log'da temporary file satırları",
-                        "diğer uygulamalar: disk I/O paylaşımı nedeniyle gecikme artabilir"),
-                List.of("temp_file_limit hatası yaygın", "DB boyutu > 1 GB arttı"),
-                "worker'lar durur; temp dosyaları sorgu bitince PostgreSQL tarafından silinir",
+                "sort query'lerini gönderen uygulama",
+                "temp dosyaları ve disk", 1, false,
+                List.of("temp_files / temp_bytes sayaçları ve disk write artar; PostgreSQL logunda 'temporary"
+                                + " file' satırları görülür",
+                        "Aynı diski kullanan diğer query'ler yavaşlayabilir"),
+                List.of("temp_file_limit hataları yaygınlaşırsa",
+                        "Veritabanı boyutu deney başından beri 1 GB'tan fazla artarsa"),
+                "Yük durdurulur; temp dosyalarını PostgreSQL query bitince kendisi siler.",
                 c -> {
                     double tgt = target(c, c.pick(5.0, 15.0, 40.0, 80.0));
                     return new Plan(each(c, "temp-spill", "/lab/chaos/temp-spill",
@@ -300,15 +329,19 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S08", "Serialization conflicts", "lock",
-                "Uygulamalar REPEATABLE READ transaction içinde aynı satırları okuyup günceller; PostgreSQL çakışan "
-                        + "transaction'ı 40001 (could not serialize access) ile geri alır, uygulama sınırlı retry yapar.",
+                "Uygulamalar REPEATABLE READ isolation level'ında aynı row'ları okuyup günceller; "
+                        + "PostgreSQL çakışan transaction'ı 'could not serialize access' (40001) hatasıyla "
+                        + "iptal eder, uygulama sınırlı sayıda retry yapar. Gerçek hayattaki karşılığı: yüksek "
+                        + "isolation level kullanan ve aynı kayıtlar üzerinde yarışan servisler.",
                 List.of("V6 chaos şeması", "en az 2 uygulama"),
-                "çakışan transaction'ları başlatan ilk uygulama", "PostgreSQL MVCC / snapshot isolation", 2, true,
-                List.of("DB: rollback/s ↑ (xact_rollback), log'da 'could not serialize access due to concurrent update'",
-                        "katılan uygulamalarda 40001 hataları ve retry → workload gecikmesi ve hata oranı ↑",
-                        "kısa süreli row lock beklemeleri (çakışan güncelleme commit olana dek)"),
-                List.of("budget aşımı"),
-                "worker'lar durur; açık transaction kalmaz",
+                "çakışan transaction'ları başlatan ilk uygulama",
+                "eşzamanlı güncellenen row'lar (snapshot isolation)", 2, true,
+                List.of("PostgreSQL logunda 'could not serialize access due to concurrent update' satırları "
+                                + "ve rollback sayısında artış",
+                        "Katılan uygulamalarda 40001 hataları ve retry'lar: işlem süresi ve error rate artar",
+                        "Çakışan güncelleme commit olana kadar kısa row lock beklemeleri"),
+                List.of("Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur; açık transaction kalmaz.",
                 c -> {
                     double tgt = target(c, c.pick(1.0, 3.0, 8.0, 15.0));
                     int hold = Math.min(5000, txMs(c, c.pick(50, 100, 150, 250)));
@@ -327,14 +360,19 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S09", "Deadlock", "lock",
-                "Uygulamalar aynı satır çiftini ters sırayla kilitler; PostgreSQL deadlock_timeout sonrası birini "
-                        + "40P01 ile iptal eder, uygulama sınırlı retry yapar.",
+                "İki uygulama aynı iki row'u ters sırayla lock'lar ve birbirini bekler; PostgreSQL "
+                        + "bunu 1 saniye sonra fark edip transaction'lardan birini 'deadlock detected' (40P01) "
+                        + "hatasıyla iptal eder. Gerçek hayattaki karşılığı: aynı kayıtları farklı sırayla "
+                        + "güncelleyen iki kod yolu.",
                 List.of("chaos.deadlock_pairs", "deadlock_timeout=1s"),
-                "a→b sırasıyla kilitleyen uygulama", "chaos.deadlock_pairs satır çiftleri", 1, false,
-                List.of("DB: pg_stat_database.deadlocks ↑, log'da 'deadlock detected'",
-                        "katılan uygulamalarda 40P01 hataları ve retry", "workload gecikmesi ≈ deadlock_timeout"),
-                List.of("budget aşımı"),
-                "worker'lar durur",
+                "row'ları ilk sırayla lock'layan uygulama",
+                "ters sırayla lock'lanan row çiftleri", 1, false,
+                List.of("pg_stat_database.deadlocks sayacı artar; PostgreSQL logunda 'deadlock detected' "
+                                + "satırları görülür",
+                        "Katılan uygulamalarda 40P01 hataları ve retry'lar",
+                        "Deadlock'a giren her işlem yaklaşık 1 saniye (deadlock_timeout) gecikir"),
+                List.of("Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur; açık transaction kalmaz.",
                 c -> {
                     double tgt = target(c, c.pick(2.0, 6.0, 15.0, 30.0));
                     int hold = txMs(c, c.pick(300, 300, 500, 800));
@@ -360,14 +398,22 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S10", "Connection storm", "connection",
-                "Havuz DIŞI kısa ömürlü fiziksel bağlantılar (TCP + auth + backend fork); DB bağlantı slotlarını işgal eder.",
+                "Uygulama, connection pool kullanmadan çok sayıda kısa ömürlü connection açıp "
+                        + "kapatır; her biri veritabanında bir connection slot'u ve yeni bir backend process'i "
+                        + "harcar. Gerçek hayattaki karşılığı: pool'suz çalışan bir script, yanlış ayarlanmış "
+                        + "bir pool ya da restart sonrası aynı anda bağlanan servisler.",
                 List.of("rol CONNECTION LIMIT (40)", "max_connections"),
-                "bağlantı fırtınasını başlatan uygulama", "PostgreSQL max_connections / auth", 1, false,
-                List.of("DB connections ↑ (hedef %), backend fork CPU ↑",
-                        "yüksek seviyede diğer uygulamaların yeni bağlantıları reddedilir (FATAL: too many connections)",
-                        "tek uygulama rol limiti (40) ile sınırlanır — birden fazla uygulama daha yüksek doluluk üretir"),
-                List.of("DB connections ≥ %95 (3 örnek)", "budget aşımı"),
-                "storm bağlantıları holdMs sonunda kapanır; worker'lar durur",
+                "connection'ları açan uygulama",
+                "max_connections (connection slot'ları)", 1, false,
+                List.of("DB connection kullanımı hedef yüzdeye çıkar; connection kurma maliyeti CPU'yu "
+                                + "artırır",
+                        "Yüksek yoğunlukta diğer uygulamaların yeni connection'ları 'too many connections' "
+                                + "ile reddedilir",
+                        "Tek uygulama en fazla 40 connection açabilir; daha yüksek doluluk için birden fazla "
+                                + "uygulama seçin"),
+                List.of("DB connection kullanımı art arda 3 ölçümde %95'e ulaşırsa",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur; açılan connection'lar kısa süre içinde kendiliğinden kapanır.",
                 c -> {
                     double tgt = target(c, c.pick(40.0, 55.0, 70.0, 85.0));
                     int count = c.custom() != null && c.custom().dbConnections() != null
@@ -386,14 +432,20 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S11", "Commit storm", "db-io",
-                "Her biri ayrı transaction olan tek satırlık INSERT'ler: satır hacmi küçük, commit sayısı çok yüksek. "
-                        + "Her commit WAL flush (fsync) ister.",
+                "Uygulama tek row'luk INSERT'leri ayrı ayrı commit eder: veri hacmi küçük, commit "
+                        + "sayısı çok yüksektir ve her commit WAL'ın diske yazılmasını (fsync) bekler. Gerçek "
+                        + "hayattaki karşılığı: döngü içinde her kaydı ayrı transaction'da yazan kod (batch "
+                        + "yerine tek tek INSERT).",
                 List.of("chaos.write_sink", "synchronous_commit=on"),
-                "commit yükünü üreten uygulama", "PostgreSQL WAL flush / commit yolu", 1, false,
-                List.of("DB: TPS (commit/s) ↑, WAL flush sıklığı ↑, I/O write küçük ve sık",
-                        "diğer uygulamalar: her commit aynı WAL flush kuyruğuna girer → yazma işlemlerinde p95 ↑ olabilir"),
-                List.of("DB boyutu deney başından beri > 1 GB arttı", "budget aşımı"),
-                "worker'lar durur; write_sink budanır",
+                "commit yükünü üreten uygulama",
+                "WAL flush (commit yolu)", 1, false,
+                List.of("Saniyedeki commit sayısı (TPS) ve WAL flush sıklığı artar; disk write küçük ama çok "
+                                + "sık olur",
+                        "Diğer uygulamaların commit'leri aynı WAL flush sırasına girer; write işlemlerinde "
+                                + "p95 yükselebilir"),
+                List.of("Veritabanı boyutu deney başından beri 1 GB'tan fazla artarsa",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur ve deneyin yazdığı tablo temizlenir.",
                 c -> {
                     double tgt = target(c, c.pick(200.0, 500.0, 1000.0, 2000.0));
                     int commits = c.pick(100, 200, 400, 800);
@@ -410,15 +462,21 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S12", "Update churn / dead tuples", "db-maintenance",
-                "chaos.churn satırları toplu ve sürekli güncellenir (indeksli sütun değişir → HOT olmayan UPDATE): "
-                        + "dead tuple birikir, indeks ve WAL büyür, autovacuum işi artar.",
+                "Uygulama aynı row'ları sürekli ve toplu hâlde günceller; her UPDATE eski row "
+                        + "sürümünü dead tuple olarak bırakır. Tablo, index'ler ve WAL büyür, autovacuum'un işi"
+                        + " artar. Gerçek hayattaki karşılığı: sık güncellenen durum ya da sayaç tabloları; "
+                        + "vacuum'un yetişemediği yoğun UPDATE trafiği.",
                 List.of("V7 chaos şeması (chaos.churn)", "autovacuum açık"),
-                "güncelleme yükünü üreten uygulama", "PostgreSQL MVCC bakımı (dead tuple / autovacuum)", 1, false,
-                List.of("DB: tuples updated/s ↑, chaos şemasında dead tuple ↑, autovacuum worker devreye girer",
-                        "I/O write ↑ (heap + indeks + WAL)",
-                        "diğer uygulamalar: autovacuum ve WAL paylaşımı nedeniyle gecikme artabilir"),
-                List.of("DB boyutu deney başından beri > 1 GB arttı", "budget aşımı"),
-                "worker'lar durur; dead tuple'ları autovacuum temizler (tablo boyutu sabit satır sayısıyla sınırlı)",
+                "UPDATE yükünü üreten uygulama",
+                "dead tuple birikimi ve autovacuum", 1, false,
+                List.of("Saniyede güncellenen row sayısı ve dead tuple sayısı artar; autovacuum worker'ları "
+                                + "devreye girer",
+                        "Disk write artar (tablo, index ve WAL birlikte)",
+                        "Autovacuum ve WAL paylaşıldığı için diğer uygulamalarda gecikme artabilir"),
+                List.of("Veritabanı boyutu deney başından beri 1 GB'tan fazla artarsa",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur; dead tuple'ları autovacuum temizler. Tablodaki row sayısı sabit "
+                        + "olduğu için boyut sınırlı kalır.",
                 c -> {
                     double tgt = target(c, c.pick(2000.0, 6000.0, 15000.0, 30000.0));
                     int rows = c.pick(500, 1000, 2000, 4000);
@@ -436,15 +494,20 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S13", "Advisory lock contention", "lock",
-                "Uygulamalar az sayıdaki advisory lock anahtarını (pg_advisory_xact_lock) transaction boyunca tutar; "
-                        + "aynı anahtarı isteyen diğer oturumlar sırada bekler. Tablo ya da satır kilitlenmez.",
+                "Uygulamalar az sayıdaki advisory lock key'ini transaction boyunca tutar; aynı key'i "
+                        + "isteyen diğer session'lar sırada bekler. Tablo ya da row lock'lanmaz. Gerçek "
+                        + "hayattaki karşılığı: 'aynı anda tek işlem çalışsın' diye advisory lock alan job'lar "
+                        + "ya da PostgreSQL'in distributed lock olarak kullanılması.",
                 List.of("en az 2 uygulama"),
-                "anahtarı ilk alan uygulama", "PostgreSQL advisory lock alanı", 2, true,
-                List.of("DB: pg_locks NOT granted ↑ (locktype = advisory), Lock wait event",
-                        "katılan uygulamalar: workload gecikmesi ≈ sıradaki oturum sayısı × tutma süresi",
-                        "iş tabloları etkilenmez: bekleme yalnız uygulama seviyesindeki kilitte"),
-                List.of("lock_timeout (8 s) ile yaygın hata (error % > 50)", "budget aşımı"),
-                "worker'lar durur; transaction bitince advisory lock kendiliğinden bırakılır",
+                "key'i ilk alan uygulama",
+                "advisory lock key'leri", 2, true,
+                List.of("pg_locks'ta bekleyen advisory lock'lar (locktype = advisory) ve Lock wait event'i",
+                        "Katılan uygulamalarda işlem süresi, sıradaki session sayısı × lock'un tutulma süresi"
+                                + " kadar artar",
+                        "İş tabloları etkilenmez; bekleme yalnız uygulamanın kendi tanımladığı lock'tadır"),
+                List.of("lock_timeout hataları yaygınlaşırsa (error rate > %50)",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur; advisory lock'lar transaction bitince kendiliğinden bırakılır.",
                 c -> {
                     double tgt = target(c, c.pick(1.0, 3.0, 5.0, 7.0));
                     int hold = Math.min(10000, txMs(c, c.pick(200, 400, 600, 1000)));
@@ -461,16 +524,22 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S14", "Idle-in-transaction sessions", "connection",
-                "Havuz DIŞI oturumlar transaction açıp bir kez okur ve hiçbir şey yapmadan bekler: 'idle in "
-                        + "transaction'. Bağlantı slotu dolu kalır, snapshot tutulduğu için vacuum eski satır "
-                        + "sürümlerini temizleyemez. Lock tutulmaz.",
+                "Uygulama, connection pool dışında session'lar açar, transaction başlatır ve hiçbir "
+                        + "şey yapmadan bekler ('idle in transaction'). Connection slot'u dolu kalır ve açık "
+                        + "snapshot yüzünden vacuum eski row sürümlerini temizleyemez; lock tutulmaz. Gerçek "
+                        + "hayattaki karşılığı: commit / rollback edilmeden bırakılmış bir psql oturumu ya da "
+                        + "transaction'ı kapatmayan bir uygulama hatası.",
                 List.of("rol CONNECTION LIMIT (40)", "idle_in_transaction_session_timeout=30s"),
-                "oturumları açık bırakan uygulama", "PostgreSQL bağlantı slotları + en eski snapshot (xmin)", 1, false,
-                List.of("DB: idle in transaction session sayısı ↑, longest transaction age ↑, connections ↑",
-                        "CPU ve I/O belirgin değişmez (oturumlar boşta)",
-                        "birden fazla uygulama katılırsa boş bağlantı slotu azalır; vacuum geride kalır"),
-                List.of("DB connections ≥ %95 (3 örnek)", "budget aşımı"),
-                "oturumlar cleanup generation ile kapanır; sunucu tarafı sınır 30 s",
+                "session'ları açık bırakan uygulama",
+                "connection slot'ları ve en eski snapshot", 1, false,
+                List.of("pg_stat_activity'de 'idle in transaction' session sayısı, en uzun transaction'ın "
+                                + "yaşı ve connection sayısı artar",
+                        "CPU ve I/O belirgin değişmez (session'lar boşta bekler)",
+                        "Birden fazla uygulama katılırsa boş connection slot'u azalır ve vacuum geride kalır"),
+                List.of("DB connection kullanımı art arda 3 ölçümde %95'e ulaşırsa",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Açılan session'lar kapatılır; kapanmayan olursa PostgreSQL 30 sn sonra kendisi "
+                        + "sonlandırır (idle_in_transaction_session_timeout).",
                 c -> {
                     int sessions = c.custom() != null && c.custom().dbConnections() != null
                             ? c.custom().dbConnections() : c.pick(3, 5, 8, 10);
@@ -491,16 +560,19 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S15", "Parallel query fan-out", "db-cpu",
-                "Sorgular parallel query ile çalıştırılır: her sorgu birkaç parallel worker süreci ister ve aynı "
-                        + "anda birden fazla CPU çekirdeğini kullanır. Eşzamanlı sorgular sunucunun ortak worker "
-                        + "havuzunu (max_parallel_workers) tüketir.",
+                "Uygulama, her biri birkaç parallel worker process'i kullanan query'ler gönderir; tek"
+                        + " bir query aynı anda birden fazla CPU çekirdeğini meşgul eder ve eşzamanlı query'ler"
+                        + " sunucunun ortak worker havuzunu tüketir. Gerçek hayattaki karşılığı: büyük tablolar"
+                        + " üzerinde çalışan analitik ve rapor query'leri.",
                 List.of("chaos.synthetic_data", "max_parallel_workers > 0"),
-                "parallel sorguları gönderen uygulama", "PostgreSQL parallel worker havuzu + CPU çekirdekleri", 2, false,
-                List.of("DB: parallel worker süreçleri ↑, CPU çekirdeklerinin çoğu aynı anda meşgul",
-                        "havuz dolunca yeni sorgular daha az worker ile (ya da tek süreçte) çalışır → süre dalgalanır",
-                        "diğer uygulamalar: CPU paylaşımı nedeniyle p95 ↑ olabilir"),
-                List.of("DB CPU > budget (3 örnek)"),
-                "worker'lar durur, çalışan sorgular /lab/cleanup ile iptal edilir",
+                "parallel query'leri gönderen uygulama",
+                "parallel worker havuzu ve CPU çekirdekleri", 2, false,
+                List.of("Parallel worker process sayısı artar; CPU çekirdeklerinin çoğu aynı anda meşgul olur",
+                        "Worker havuzu dolunca yeni query'ler daha az worker ile çalışır ve süreleri "
+                                + "dalgalanır",
+                        "CPU paylaşıldığı için diğer uygulamalarda p95 yükselebilir"),
+                List.of("DB CPU, güvenlik sınırını art arda 3 ölçümde aşarsa"),
+                "Yük durdurulur, çalışan query'ler iptal edilir.",
                 c -> {
                     // Ölçüm (2026-11-27, 6 vCPU): 2 worker'lı tek sorgu ≈ 3 süreç ≈ %50 DB CPU; iki uygulamada birer
                     // kesintisiz döngü DB CPU'yu %96'ya çıkardı. Bu yüzden çağrılar seyrekleştirilir (worker başına
@@ -518,15 +590,19 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S16", "Point-query flood", "db-cpu",
-                "Çok sayıda küçük primary key sorgusu (her biri ayrı transaction): sorgu başına iş çok az, sorgu "
-                        + "sayısı çok yüksek. Yük parse / plan / round-trip maliyetinden gelir; yazma yoktur.",
+                "Uygulama çok sayıda küçük primary key query'si gönderir; her biri çok ucuzdur ama "
+                        + "sayıları çok yüksektir. Yük, query başına sabit maliyetten (parse, plan, network "
+                        + "round-trip) gelir; write yoktur. Gerçek hayattaki karşılığı: N+1 query pattern'i ya "
+                        + "da döngü içinde tek tek lookup yapan kod.",
                 List.of("chaos.synthetic_data"),
-                "sorgu selini üreten uygulama", "PostgreSQL sorgu işleme hattı (TPS)", 1, false,
-                List.of("DB: TPS ↑ (salt okuma), sorgu başına süre düşük kalır, CPU sorgu sayısıyla orantılı ↑",
-                        "I/O write ve lock değişmez",
-                        "diğer uygulamalar: CPU paylaşımı nedeniyle yüksek yoğunlukta gecikme artabilir"),
-                List.of("DB CPU > budget (3 örnek)"),
-                "worker'lar durur",
+                "query selini üreten uygulama",
+                "query işleme kapasitesi (TPS)", 1, false,
+                List.of("Saniyedeki query / transaction sayısı (TPS) artar, query başına süre düşük kalır; "
+                                + "CPU query sayısıyla orantılı yükselir",
+                        "Disk write ve lock sayısı değişmez",
+                        "Yüksek yoğunlukta CPU paylaşımı nedeniyle diğer uygulamalarda gecikme artabilir"),
+                List.of("DB CPU, güvenlik sınırını art arda 3 ölçümde aşarsa"),
+                "Yük durdurulur.",
                 c -> {
                     double tgt = target(c, c.pick(500.0, 1500.0, 4000.0, 8000.0));
                     int queries = c.pick(200, 500, 1000, 2000);
@@ -542,14 +618,18 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S17", "CPU + scan saturation", "combined",
-                "İki yük tipi birlikte: CPU-yoğun sorgular (S04) + seq scan okumaları (S06). Paylaşılan DB doyar, "
-                        + "aynı DB'yi kullanan tüm uygulamaların sorguları yavaşlar.",
+                "İki yük birlikte uygulanır: CPU-intensive query'ler (S04) ve sequential scan "
+                        + "okumaları (S06). Veritabanı doygunluğa ulaşır; aynı veritabanını kullanan tüm "
+                        + "uygulamaların query'leri yavaşlar. Gerçek hayattaki karşılığı: yoğun saatte çalışan "
+                        + "ağır bir rapor ile index'siz bir query'nin üst üste gelmesi.",
                 List.of("chaos.synthetic_data", "en az 2 uygulama"),
-                "DB'yi doyuran uygulama", "paylaşılan PostgreSQL (CPU + buffer cache + active sessions)", 2, true,
-                List.of("DB CPU yüksek, active sessions ↑, query mean latency ↑",
-                        "tüm uygulamalar: p95 ↑, pool usage ↑ (sorgular uzadığı için), yüksek seviyede pool timeout"),
-                List.of("DB CPU > budget (3 örnek)"),
-                "worker'lar durur, çalışan sorgular iptal edilir",
+                "veritabanını doyuran uygulamalar",
+                "PostgreSQL CPU, buffer cache ve active session'lar", 2, true,
+                List.of("DB CPU yüksek kalır; active session sayısı ve ortalama query süresi artar",
+                        "Tüm uygulamalarda p95 ve connection pool kullanımı yükselir; yüksek yoğunlukta pool "
+                                + "timeout görülür"),
+                List.of("DB CPU, güvenlik sınırını art arda 3 ölçümde aşarsa"),
+                "Yük durdurulur, çalışan query'ler iptal edilir.",
                 c -> {
                     double tgt = target(c, c.pick(50.0, 65.0, 80.0, 90.0));
                     List<Action> a = each(c, "cpu-query", "/lab/chaos/cpu-query",
@@ -568,15 +648,20 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S18", "In-memory sort pressure", "db-memory",
-                "work_mem transaction içinde yükseltilir ve büyük sort'lar tamamen bellekte yapılır: temp dosyası "
-                        + "yazılmaz, her backend onlarca MB özel bellek kullanır.",
+                "Uygulama, tamamı bellekte yapılan büyük sort'lar çalıştırır; temp dosyası yazılmaz, "
+                        + "her backend onlarca MB bellek kullanır. Gerçek hayattaki karşılığı: work_mem'in "
+                        + "yüksek ayarlandığı bir sistemde aynı anda çalışan çok sayıda büyük sort ya da hash "
+                        + "işlemi.",
                 List.of("lab_os.host_stats() (DB bellek ölçümü)"),
-                "sort sorgularını gönderen uygulama", "PostgreSQL backend belleği (DB_VM RAM)", 1, false,
-                List.of("DB_VM bellek kullanımı ↑ (eşzamanlı sort sayısı × sort boyutu); CPU yalnız sort anında kısa süre ↑",
-                        "temp dosyası yazılmaz (S07'nin tersi)",
-                        "page cache daralırsa diğer uygulamaların okuma sorguları yavaşlayabilir"),
-                List.of("DB_VM memory > %95", "budget aşımı"),
-                "worker'lar durur; bellek sorgu bitince serbest kalır",
+                "sort query'lerini gönderen uygulama",
+                "PostgreSQL backend belleği (DB_VM RAM)", 1, false,
+                List.of("DB_VM bellek kullanımı artar (eşzamanlı sort sayısı × sort boyutu); CPU yalnız sort "
+                                + "sırasında kısa süre yükselir",
+                        "Temp dosyası yazılmaz (S07'nin tersi)",
+                        "Page cache daralırsa diğer uygulamaların okuma query'leri yavaşlayabilir"),
+                List.of("DB_VM bellek kullanımı %95'i aşarsa",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Yük durdurulur; bellek query bitince serbest kalır.",
                 c -> {
                     int mb = c.pick(24, 48, 80, 110);                       // sort başına yaklaşık bellek
                     int total = c.pick(3, 5, 8, 12);                        // tüm uygulamalarda eşzamanlı sort
@@ -600,16 +685,22 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S19", "Vacuum blocked by old snapshots", "combined",
-                "İki yük tipi birlikte: idle-in-transaction oturumları eski snapshot'ı tutar (S14) + yoğun UPDATE "
-                        + "dead tuple üretir (S12). Vacuum snapshot yüzünden temizleyemez → bloat hızla büyür.",
+                "İki yük birlikte uygulanır: idle in transaction session'ları eski snapshot'ı açık "
+                        + "tutar (S14) ve yoğun UPDATE dead tuple üretir (S12). Vacuum, açık snapshot yüzünden "
+                        + "bu dead tuple'ları temizleyemez; tablo ve index'ler hızla büyür (bloat). Gerçek "
+                        + "hayattaki karşılığı: unutulmuş açık bir transaction yüzünden autovacuum'un işe "
+                        + "yaramadığı ve tabloların şiştiği durum.",
                 List.of("V7 chaos şeması (chaos.churn)", "en az 2 uygulama"),
-                "snapshot'ı tutan ve güncelleme yükünü başlatan uygulama",
-                "PostgreSQL MVCC bakımı (xmin horizon + dead tuple)", 2, true,
-                List.of("DB: longest transaction age ↑ ve idle in transaction oturumları",
-                        "tuples updated/s ↑; dead tuple sayısı autovacuum çalışsa da düşmez",
-                        "tablo ve indeks büyür → aynı sorgular daha çok sayfa okur; tüm uygulamalar etkilenebilir"),
-                List.of("DB boyutu deney başından beri > 1 GB arttı", "budget aşımı"),
-                "oturumlar kapanır, worker'lar durur; snapshot bırakılınca autovacuum dead tuple'ları temizler",
+                "snapshot'ı tutan ve UPDATE yükünü başlatan uygulama",
+                "vacuum (en eski snapshot ve dead tuple'lar)", 2, true,
+                List.of("En uzun transaction'ın yaşı artar; idle in transaction session'ları görülür",
+                        "Güncellenen row sayısı artar; dead tuple sayısı autovacuum çalışsa da düşmez",
+                        "Tablo ve index büyüdükçe aynı query'ler daha çok sayfa okur; tüm uygulamalar "
+                                + "etkilenebilir"),
+                List.of("Veritabanı boyutu deney başından beri 1 GB'tan fazla artarsa",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Session'lar kapatılır ve yük durdurulur; snapshot bırakılınca autovacuum dead "
+                        + "tuple'ları temizler.",
                 c -> {
                     double tgt = target(c, c.pick(2000.0, 5000.0, 10000.0, 20000.0));
                     int rows = c.pick(500, 1000, 2000, 2000);
@@ -633,14 +724,18 @@ public final class ScenarioRegistry {
                 }));
 
         add(new ScenarioDef("S20", "Randomized mixed database load", "combined",
-                "Seed'e bağlı olarak tek başına güvenli DB yük tiplerinden 2-3'ü seçilir, farklı uygulamalardan "
-                        + "kademeli (staggered) başlatılır. Aynı seed aynı planı üretir.",
+                "Tek başına güvenli olan yük tiplerinden 2–3'ü rastgele seçilir ve farklı "
+                        + "uygulamalardan kademeli olarak başlatılır; aynı seed aynı seçimi üretir. Gerçek "
+                        + "hayattaki karşılığı: nedeni tek olmayan, birden fazla sorunun üst üste bindiği "
+                        + "incident'lar. Teşhis pratiği için uygundur.",
                 List.of("CASCADE_POOL senaryolarının önkoşulları"),
-                "seçilen yük tiplerini başlatan uygulamalar", "paylaşılan PostgreSQL (birden fazla kaynak birlikte)",
-                2, true,
-                List.of("seçilen yük tiplerinin beklenen etkileri birlikte", "en az 2 uygulamada gözlenen etki"),
-                List.of("alt senaryoların abort koşulları", "budget aşımı"),
-                "tüm alt workload'lar durur ve temizlenir",
+                "seçilen yükleri başlatan uygulamalar",
+                "PostgreSQL (birden fazla kaynak aynı anda)", 2, true,
+                List.of("Seçilen yük tiplerinin belirtileri birlikte görülür",
+                        "En az iki uygulamada etki gözlenir"),
+                List.of("Seçilen yüklerden herhangi birinin durma koşulu oluşursa",
+                        "Deney için belirlenen güvenlik sınırları (budget) aşılırsa"),
+                "Tüm yükler durdurulur ve her biri kendi temizliğini yapar.",
                 c -> composite(c, pickCascade(c.rnd(), c.i() >= 2 ? 3 : 2), true)));
     }
 
