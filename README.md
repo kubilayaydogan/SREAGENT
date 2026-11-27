@@ -52,7 +52,7 @@ platform üzerinden (`sre-backend` ve `sre-worker`) çalışır.
   gelmediğinde değer "bilinmiyor" olarak kalır ve rapor bunu açıkça yazar.
 - **Kontrolsüz otomasyon.** Agent salt okunurdur. Bir sistemi değiştirecek her adım, bir insanın karar verdiği onay
   talebi olarak açılır.
-- **Açıklanamayan AI kararı.** Skor ve mechanism Python kurallarıyla hesaplanır; her LLM çağrısı, MCP çağrısı ve graph
+- **Açıklanamayan AI kararı.** Skor ve sorunlar Python kurallarıyla hesaplanır; her LLM çağrısı, MCP çağrısı ve graph
   adımı platform ekranlarından izlenebilir.
 
 ## Hedef kullanıcılar
