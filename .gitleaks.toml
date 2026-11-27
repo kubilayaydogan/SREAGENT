@@ -15,6 +15,6 @@ regexes = [
 ]
 # Tek tek dosya (dizin değil): içerikleri incelendi, secret yok
 paths = [
-  '''^docs/security/SECURITY_IMPLEMENTATION\.md$''',                    # gereksinim metni ("signing/encryption keys" vb. düz metin)
+  '''^docs/(platform/)?security/SECURITY_IMPLEMENTATION\.md$''',       # (eski ve yeni yol) gereksinim metni ("signing/encryption keys" vb. düz metin)
   '''^scripts/export-openapi\.sh$''',                                   # curl URL'sinde kabuk değişkeni ($H:${s#*:}), kimlik bilgisi yok
 ]

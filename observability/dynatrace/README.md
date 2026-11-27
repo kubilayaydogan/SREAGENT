@@ -2,7 +2,7 @@
 
 > Durum: **tasarım + yapılandırma hazır, tenant üzerinde DOĞRULANMADI.** Bu laboratuvarın geliştirildiği
 > ortamda Dynatrace tenant'ına, OneAgent'a veya ActiveGate'e erişim yoktu. Aşağıdaki her adımın sonunda
-> "kabul kontrolü" vardır; sonuçları `docs/acceptance-gate.md` tablosuna işleyin.
+> "kabul kontrolü" vardır; sonuçları `docs/lab/acceptance-gate.md` tablosuna işleyin.
 
 ## 1. Yerleşim
 
@@ -30,7 +30,7 @@
 |---|---|---|---|
 | OneAgent full-stack | APP_VM | Java code module: servis, PurePath, JDBC çağrıları, JVM/GC/thread; Docker container metrikleri; container stdout logları | Docker'da otomatik enjeksiyon resmi destek tablosunda var (`Auto-injection in Docker container (Deep monitoring)`) |
 | OneAgent (Infrastructure/Foundation modu) | DB_VM | Host CPU/RAM/disk/ağ, postgres process'leri. PostgreSQL iç metriklerini OneAgent'a bırakmıyoruz | Rocky Linux 8/9/10 x86-64 destek tablosunda |
-| Environment ActiveGate | **APP_VM** (karar: `docs/deploy-plan.md` §0). Rocky 10.1 ActiveGate destek tablosunda var | PostgreSQL extension uzaktan izleme ActiveGate grubunda koşar | Düşük kaynaklı lab'da ayrı VM yoksa APP_VM; ActiveGate bellek tüketimi APP_VM ölçümlerine **eklenir** — raporda ayrı gösterin. Ayrı VM varsa `ACTIVEGATE_IP` ile DB_VM firewall'una eklenir |
+| Environment ActiveGate | **APP_VM** (karar: `docs/lab/deploy-plan.md` §0). Rocky 10.1 ActiveGate destek tablosunda var | PostgreSQL extension uzaktan izleme ActiveGate grubunda koşar | Düşük kaynaklı lab'da ayrı VM yoksa APP_VM; ActiveGate bellek tüketimi APP_VM ölçümlerine **eklenir** — raporda ayrı gösterin. Ayrı VM varsa `ACTIVEGATE_IP` ile DB_VM firewall'una eklenir |
 | PostgreSQL extension (Extensions 2.0) | ActiveGate grubu | `postgres.*` metrikleri, top queries/longest queries **log** olarak | Varsayılan sorgu aralığı 1 dk, long query 5 dk |
 | pg-lock-collector | APP_VM container (değiştirilebilir) | 5 sn aralıkla blocking zinciri + rol/app oturumları + rol bazlı statement deltaları | Agent değildir, salt-okur |
 
@@ -59,7 +59,7 @@ ve veritabanı servisi görünür; iki host görünür.
    dışa aktarılan JSON'u `observability/dynatrace/postgres-extension.monitoring.json` olarak (parolasız) saklayın.
 
 **Kabul:** `postgres.numbackends`, `postgres.activity.active_waiting`, `postgres.locks`, `postgres.xact_commit.count`
-metrikleri DQL ile okunur (bkz. `docs/telemetry-contract.md` §B).
+metrikleri DQL ile okunur (bkz. `docs/lab/telemetry-contract.md` §B).
 
 ### 2.3 Uygulama metrikleri (Hikari / HTTP p95 / JVM)
 İki yol; birini seçin, ikisini aynı anda açmayın (çift sayım):
@@ -71,7 +71,7 @@ metrikleri DQL ile okunur (bkz. `docs/telemetry-contract.md` §B).
 
 Yerelde sahte bir ingest ucuna gönderim doğrulandı: `airlab.app.hikaricp.connections.{active,idle,pending,acquire,timeout,usage}`,
 `airlab.app.http.server.requests` (`service`, `db_role`, `operation`, `uri`, `status`, `outcome` boyutları),
-`airlab.app.jvm.*`. Ayrıntı: `docs/telemetry-contract.md` §C.
+`airlab.app.jvm.*`. Ayrıntı: `docs/lab/telemetry-contract.md` §C.
 
 ### 2.4 pg-lock-collector
 ```

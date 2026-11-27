@@ -78,4 +78,4 @@ Sentetik raporlar `fixture: true` ile işaretlenir ve Markdown'da "FIXTURE / SEN
 Ajan ayrı dağıtılmaz; `sre-platform/README.md` → Kurulum. Gizli değerler `app-vm/agent.env`
 (`scripts/gen-agent-env.sh`), platform servisleri bunu `env_file` olarak okur.
 
-Ayrıntı: `docs/sre-agent-runbook.md`, `docs/decisions/ADR-007-sre-agent.md`.
+Ayrıntı: `docs/platform/sre-agent-runbook.md`, `docs/lab/decisions/ADR-007-sre-agent.md`.

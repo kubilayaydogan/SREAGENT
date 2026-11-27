@@ -1,7 +1,7 @@
 """Sinyal kataloğu: DQL üretimi ve MCP sonuçlarının pencere/varlık bazında normalizasyonu.
 
 Tüm sorgu biçimleri 2026-11-21'de tenant `mfi74785` üzerinde MCP `execute-dql` ile doğrulandı
-(docs/telemetry-contract.md §J). Tenant Smartscape on Grail: `dt.entity.*` yok → `dt.smartscape.*` + getNodeName().
+(docs/lab/telemetry-contract.md §J). Tenant Smartscape on Grail: `dt.entity.*` yok → `dt.smartscape.*` + getNodeName().
 `dt.service.request.*` controller bazında bölündüğü için servis bazında Micrometer (`service` boyutu) ve span'lar
 (`spring.application.name`) kullanılır.
 """

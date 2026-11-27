@@ -4,7 +4,7 @@ Son güncelleme: 2026-11-24 · Aşama: **2 — SRE Agent yazıldı, testlendi, A
 
 ## Chaos Controller v2 (2026-11-24)
 
-Ayrıntı: `docs/chaos-v2-architecture.md` · API: `docs/openapi/chaos-controller.yaml` (`/api/v2/*`, canlı springdoc çıktısı).
+Ayrıntı: `docs/lab/chaos-v2-architecture.md` · API: `docs/lab/openapi/chaos-controller.yaml` (`/api/v2/*`, canlı springdoc çıktısı).
 
 | Konu | Durum |
 |---|---|
@@ -18,8 +18,8 @@ Ayrıntı: `docs/chaos-v2-architecture.md` · API: `docs/openapi/chaos-controlle
 Chaos v2 açık maddeleri:
 1. Frontend ekran görüntüsü üretilmedi.
 2. `chaos.*` alanları log'da JSON içinde; Dynatrace'te ayrı öznitelik olarak aranabilmesi için OpenPipeline kuralı yok (query'de `parse` gerekir).
-3. SRE Agent kör değerlendirmesi (2026-11-24, `docs/chaos-v2-agent-eval.md`): **6/8** — row_lock, db_cpu, pool_saturation doğru; S10 (connection storm, ratio 0.63 < eşik 0.80) ve S11 (container CPU) kaçtı; network (S13) katalog dışı ama yanlış atıf yok. Ardından 4 kural eklendi (597e04f): regresyon 7/8, **bağımsız doğrulama seti 6/7** (V13 network kaçtı; `network_path_latency` kırılgan). Platform yeniden derlendi.
-4. Bilinen sınırlamalar: `docs/chaos-v2-architecture.md` §7 (S10 tek uygulamada role limiti, DB_VM disk ölçülmez, lock senaryoları yalnız `chaos.*` satırları vb.).
+3. SRE Agent kör değerlendirmesi (2026-11-24, `docs/lab/chaos-v2-agent-eval.md`): **6/8** — row_lock, db_cpu, pool_saturation doğru; S10 (connection storm, ratio 0.63 < eşik 0.80) ve S11 (container CPU) kaçtı; network (S13) katalog dışı ama yanlış atıf yok. Ardından 4 kural eklendi (597e04f): regresyon 7/8, **bağımsız doğrulama seti 6/7** (V13 network kaçtı; `network_path_latency` kırılgan). Platform yeniden derlendi.
+4. Bilinen sınırlamalar: `docs/lab/chaos-v2-architecture.md` §7 (S10 tek uygulamada role limiti, DB_VM disk ölçülmez, lock senaryoları yalnız `chaos.*` satırları vb.).
 
 ## SRE Operations Platform (2026-11-21)
 
@@ -42,7 +42,7 @@ Chaos v2 açık maddeleri:
 | Gerçek Dynatrace + MCP | tenant `mfi74785`, Remote MCP `execute-dql` | ✅ 13/15 kapı sinyali veriyle okundu; ❌ PostgreSQL extension (ActiveGate hazır; extension 3.x bu ActiveGate'te INVALID_CONFIG_ERROR) |
 | VM'de kontrollü deneyler | E0 → E2 → E1×3 + durdurma testi | ✅ hepsi COMPLETED, 5xx/timeout/drop 0, integrity 0; Dynatrace'te E2 etkisi var, E1'de yok |
 
-Ayrıntı ve kanıt: `docs/acceptance-gate.md`, `deploy/evidence/vm/`, `deploy/evidence/mcp-gate-*.json`.
+Ayrıntı ve kanıt: `docs/lab/acceptance-gate.md`, `deploy/evidence/vm/`, `deploy/evidence/mcp-gate-*.json`.
 
 ## Aşama 1 kabul kriterleri (kısa)
 
@@ -72,12 +72,12 @@ Erişim: `ssh airlab-app` / `ssh airlab-db` (kullanıcı `kubilay`, anahtar `~/.
 
 ## Kurulumda bulunan ve düzeltilen sorunlar
 
-`docs/deploy-plan.md` "Gerçek kurulumda karşılaşılanlar" tablosu: Hyper-V Dynamic Memory, kayan VM saati (`makestep 1 -1`),
+`docs/lab/deploy-plan.md` "Gerçek kurulumda karşılaşılanlar" tablosu: Hyper-V Dynamic Memory, kayan VM saati (`makestep 1 -1`),
 tr_TR yerel ayarında OneAgent/ActiveGate kurulumunun `<LiNUX>` hatası (`LC_ALL=C`), `install-docker.sh` sözdizimi hatası,
 Docker 29'un kaynak IP'yi koruması (lab uçları 403 → `LAB_ALLOWED_CIDRS`), psql bağlantı bilgisinin kelime bölünmesi,
 `verify-db.sh`'in `lab_owner` ile diğer rollerin oturumlarını görememesi, logs ingest'in `event.type`'ı silmesi.
 
-## Telemetri bulguları (Aşama 2 için bağlayıcı) — `docs/telemetry-contract.md` §J
+## Telemetri bulguları (Aşama 2 için bağlayıcı) — `docs/lab/telemetry-contract.md` §J
 
 - Tenant **Smartscape on Grail**: `dt.entity.*`/`entityName()` yok → `smartscapeNodes`, `dt.smartscape.*`, `getNodeName()`.
 - Servis p95 kaynağı **OneAgent** (`percentile(dt.service.request.response_time, 95)`); Micrometer yüzdelik göndermiyor.
@@ -108,7 +108,7 @@ Docker 29'un kaynak IP'yi koruması (lab uçları 403 → `LAB_ALLOWED_CIDRS`), 
 
 ## Aşama 2 — SRE Agent (2026-11-21)
 
-Kod `sre-agent/`; mimari kararlar `docs/decisions/ADR-007-sre-agent.md`; işletim `docs/sre-agent-runbook.md`.
+Kod `sre-agent/`; mimari kararlar `docs/lab/decisions/ADR-007-sre-agent.md`; işletim `docs/platform/sre-agent-runbook.md`.
 
 | Konu | Durum |
 |---|---|
@@ -118,7 +118,7 @@ Kod `sre-agent/`; mimari kararlar `docs/decisions/ADR-007-sre-agent.md`; işleti
 | Puan / atıf | Deterministik. Risk, data coverage ve causality confidence ayrı. Mechanism'ler: row_lock (kök engelleyici), pool_saturation, global_connection_pressure (mutlak veya göreli), db_cpu, app_vm_cpu (agent'ın kendi CPU'su `self_is_source`), app_container_cpu, network_path_latency, independent_load; tail latency (mean ×5) |
 | Testler | ✅ 38/38 (`pytest`): puan formülü, veri kalitesi, 10 senaryo, graf (MCP/Claude kesintisi, checkpoint, redaksiyon, prompt injection), watch durum makinesi |
 | Değerlendirme | ✅ sentetik 10/10 (`deploy/evidence/sre-agent-eval-synthetic.json`, fixture). ✅ **gerçek VM deneyleri 5/5** (`deploy/evidence/sre-agent-eval-real.json`): E0 sorun yok; E2 row_lock reservation → checkin (yüksek güven); E1×3 baggage bağımsız yük, yayılma yok |
-| Örnek raporlar | `docs/examples/sre-agent/` (gerçek veri + Claude açıklaması) |
+| Örnek raporlar | `docs/platform/examples/sre-agent/` (gerçek veri + Claude açıklaması) |
 | Dağıtım | Ayrı container yok: çekirdek `sre-platform` imajına paket olarak kurulur. Ağ `airlab-agent` (dışa HTTPS). Gizli bilgiler `app-vm/agent.env` (gitignored, `scripts/gen-agent-env.sh`). `agent-data` volume'u yalnız eski raporlar için (salt-okur) |
 
 Aşama 2 açık maddeleri:

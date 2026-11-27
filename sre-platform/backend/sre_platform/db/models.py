@@ -1,6 +1,6 @@
 """SRE platform veritabanı modeli (SQLAlchemy 2.x, PostgreSQL 17, şema `sre`).
 
-İlkeler (SRE-Frontend-DB.md §3, §9):
+İlkeler (docs/specs/SRE-Frontend-DB.md §3, §9):
 * Dynatrace ana kaynak olarak kalır; burada yalnız analiz metadatası, kanıt ÖZETİ, sorgu referansı (DQL +
   Dynatrace queryId), trace/entity kimlikleri, RCA, incident yaşam döngüsü ve araç geçmişi saklanır. Ham metrik,
   log ve trace kopyalanmaz.

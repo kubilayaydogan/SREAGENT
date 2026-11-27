@@ -63,7 +63,7 @@ services:
   reservation:
     <<: *app
     image: airlab/reservation:${IMAGE_TAG:-1.0.0}
-    build: { context: .., target: reservation }
+    build: { context: .., dockerfile: lab/Dockerfile, target: reservation }
     container_name: airlab-reservation
     hostname: reservation
     environment:
@@ -78,7 +78,7 @@ services:
   checkin:
     <<: *app
     image: airlab/checkin:${IMAGE_TAG:-1.0.0}
-    build: { context: .., target: checkin }
+    build: { context: .., dockerfile: lab/Dockerfile, target: checkin }
     container_name: airlab-checkin
     hostname: checkin
     environment:
@@ -93,7 +93,7 @@ services:
   flightops:
     <<: *app
     image: airlab/flightops:${IMAGE_TAG:-1.0.0}
-    build: { context: .., target: flightops }
+    build: { context: .., dockerfile: lab/Dockerfile, target: flightops }
     container_name: airlab-flightops
     hostname: flightops
     environment:
@@ -108,7 +108,7 @@ services:
   baggage:
     <<: *app
     image: airlab/baggage:${IMAGE_TAG:-1.0.0}
-    build: { context: .., target: baggage }
+    build: { context: .., dockerfile: lab/Dockerfile, target: baggage }
     container_name: airlab-baggage
     hostname: baggage
     environment:
@@ -155,7 +155,7 @@ services:
   chaos:
     restart: unless-stopped
     image: airlab/chaos-controller:${IMAGE_TAG:-1.0.0}
-    build: { context: .., target: chaos }
+    build: { context: .., dockerfile: lab/Dockerfile, target: chaos }
     container_name: airlab-chaos
     hostname: chaos
     networks:
@@ -217,7 +217,7 @@ services:
   db-migrator:
     profiles: [tools]
     image: airlab/db-migrator:${IMAGE_TAG:-1.0.0}
-    build: { context: .., target: migrator }
+    build: { context: .., dockerfile: lab/Dockerfile, target: migrator }
     networks: [airlab]
     environment:
       DB_HOST: ${DB_HOST}

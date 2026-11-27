@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.lab.air</groupId>
+        <artifactId>airlab-parent</artifactId>
+        <version>1.0.0</version>
+    </parent>
+    <artifactId>test-support</artifactId>
+    <name>test-support</name>
+    <description>Testcontainers PostgreSQL 17 + gerçek rol/migration/seed (yalnız testlerde)</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.lab.air</groupId>
+            <artifactId>db-migrator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <resources>
+            <!-- Tek kaynak: DB_VM'de kullanılan rol betiği testlerde de aynen kullanılır -->
+            <resource>
+                <directory>${project.basedir}/../../db-vm</directory>
+                <includes>
+                    <include>create-roles.sql</include>
+                    <include>chaos-v2-superuser.sql</include>
+                </includes>
+            </resource>
+        </resources>
+    </build>
+</project>

@@ -3,13 +3,9 @@ kontrolü, saklama, bilgi bankası tohumu, eski rapor içe aktarımı, kanıt il
 from __future__ import annotations
 
 import asyncio
-import sys
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path[:0] = [str(ROOT / "sre-agent/tests"), str(ROOT / "sre-agent/eval")]
 
 from sqlalchemy import select, text  # noqa: E402
 

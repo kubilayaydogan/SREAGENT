@@ -16,10 +16,10 @@ Yalnız `main` dalı desteklenir.
 
 ## Güvenlik mimarisi ve durum
 
-- Gereksinimler: [docs/security/SECURITY_IMPLEMENTATION.md](docs/security/SECURITY_IMPLEMENTATION.md)
-- Gap analizi: [docs/security/SECURITY_GAP_ANALYSIS.md](docs/security/SECURITY_GAP_ANALYSIS.md)
-- Uygulama planı ve kararlar: [docs/security/SECURITY_IMPLEMENTATION_PLAN.md](docs/security/SECURITY_IMPLEMENTATION_PLAN.md)
-- P0 uygulama kanıtı: [docs/security/SECURITY_P0_EVIDENCE.md](docs/security/SECURITY_P0_EVIDENCE.md)
+- Gereksinimler: [docs/platform/security/SECURITY_IMPLEMENTATION.md](docs/platform/security/SECURITY_IMPLEMENTATION.md)
+- Gap analizi: [docs/platform/security/SECURITY_GAP_ANALYSIS.md](docs/platform/security/SECURITY_GAP_ANALYSIS.md)
+- Uygulama planı ve kararlar: [docs/platform/security/SECURITY_IMPLEMENTATION_PLAN.md](docs/platform/security/SECURITY_IMPLEMENTATION_PLAN.md)
+- P0 uygulama kanıtı: [docs/platform/security/SECURITY_P0_EVIDENCE.md](docs/platform/security/SECURITY_P0_EVIDENCE.md)
 
 ## Secret'lar
 

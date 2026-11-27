@@ -4,15 +4,15 @@ Dört Java 21 / Spring Boot iş uygulaması (Reservation, Check-in, Flight Opera
 yalnız HTTP ile yük veren **chaos-controller** ve Dynatrace gözlemlenebilirlik hazırlığı.
 Aşama 2: Dynatrace MCP üzerinden çalışan salt-okunur Python SRE Agent — `sre-agent/`.
 SRE Operations Platform (PostgreSQL hafızası, FastAPI, React arayüz `:8090`, watch/zamanlanmış kontroller) — `sre-platform/README.md`.
-Chaos Controller v2: 20 gerçek senaryo, adaptive control, safety budget, recovery doğrulaması, React UI `:8080/ui/`, API `/api/v2` — `docs/chaos-v2-architecture.md`.
+Chaos Controller v2: 20 gerçek senaryo, adaptive control, safety budget, recovery doğrulaması, React UI `:8080/ui/`, API `/api/v2` — `docs/lab/chaos-v2-architecture.md`.
 
-- Topoloji: APP_VM (Rocky 9/10, Docker) ↔ DB_VM (Rocky 9, postgresql-17 systemd) — `docs/architecture.md`
-- Tablo/transaction/kilit bağımlılıkları — `docs/sql-dependencies.md`
-- Deney reçeteleri ve yerel ölçümler — `docs/experiments.md`
-- Telemetri sözleşmesi (Aşama 2 girdisi) — `docs/telemetry-contract.md`
-- Kurulum / işletim / acil durdurma — `docs/runbook.md` · bu ortama özel sıralı plan — `docs/deploy-plan.md`
-- Kabul kapısı — `docs/acceptance-gate.md` · Durum — `PROJECT_STATE.md`
-- Sürüm ve tasarım kararları — `docs/decisions/` · OpenAPI — `docs/openapi/*.yaml`
+- Topoloji: APP_VM (Rocky 9/10, Docker) ↔ DB_VM (Rocky 9, postgresql-17 systemd) — `docs/lab/architecture.md`
+- Tablo/transaction/kilit bağımlılıkları — `docs/lab/sql-dependencies.md`
+- Deney reçeteleri ve yerel ölçümler — `docs/lab/experiments.md`
+- Telemetri sözleşmesi (Aşama 2 girdisi) — `docs/lab/telemetry-contract.md`
+- Kurulum / işletim / acil durdurma — `docs/lab/runbook.md` · bu ortama özel sıralı plan — `docs/lab/deploy-plan.md`
+- Kabul kapısı — `docs/lab/acceptance-gate.md` · Durum — `PROJECT_STATE.md`
+- Sürüm ve tasarım kararları — `docs/lab/decisions/` · OpenAPI — `docs/lab/openapi/*.yaml`
 
 ## Hızlı başlangıç (yerel, yalnız Docker gerekir)
 ```bash
@@ -26,23 +26,29 @@ $C --profile observability up -d
 cd .. && scripts/smoke.sh                          # 4 UI → API → DB doğrulaması
 CHAOS_PASSWORD=... python3 scripts/run-experiment.py E2-hot-row-lock --baseline 40 --load 50 --recovery 30
 ```
-Hedef VM kurulumu: `docs/runbook.md`.
+Hedef VM kurulumu: `docs/lab/runbook.md`.
 
 ## Depo yapısı
 ```
-pom.xml                    Maven çok modüllü (Java 21, Spring Boot 4.1.3)
-lab-common/                istek bağlamı, SQL etiketleme, hata sınıflandırma, erişim logu, /lab/** uçları
-db-migrator/               TEK Flyway runner + seed + onaylı reset + integrity check; SQL: src/main/resources/db/migration
-test-support/              Testcontainers PG17 + gerçek rol betiği + migration + seed
-reservation-service/ checkin-service/ flightops-service/ baggage-service/
-chaos-controller/          v1 panel (/classic) + v2 motoru (/api/v2, chaos/v2/*) + React UI (ui/ → /ui/)
-Dockerfile                 çok hedefli imaj (reservation|checkin|flightops|baggage|chaos|migrator)
-app-vm/                    docker-compose.yml, compose.local.yml (yalnız yerel PG), .env.example, install-docker.sh
+lab/                       Java 21 laboratuvarı: tek Maven reactor (lab/pom.xml) ve çok hedefli lab/Dockerfile
+  lab-common/              istek bağlamı, SQL etiketleme, hata sınıflandırma, erişim logu, /lab/** uçları
+  db-migrator/             TEK Flyway runner + seed + onaylı reset + integrity check; SQL: src/main/resources/db/migration
+  test-support/            Testcontainers PG17 + gerçek rol betiği + migration + seed
+  reservation-service/ checkin-service/ flightops-service/ baggage-service/
+  chaos-controller/        v1 panel (/classic) + v2 motoru (/api/v2, chaos/v2/*) + React UI (ui/ → /ui/)
+sre-agent/                 Python analiz motoru (airlab_agent): graph, signal/feature/scoring, MCP ve LLM adaptörleri, eval
+sre-platform/              backend/ (FastAPI + worker + Alembic migration'ları), frontend/ (React)
+observability/             pg-lock-collector (Python), netem-agent, dynatrace/ (yerleşim, kurulum, token kapsamları)
+app-vm/                    docker-compose.yml (tüm servisler), compose.local.yml (yalnız yerel PG), .env.example
 db-vm/                     install-postgres17.sh, bootstrap-db.sh, create-roles.sql, postgresql.lab.conf, verify-db-vm.sh
-observability/             pg-lock-collector (Python), dynatrace/ (yerleşim, kurulum, token kapsamları)
 scripts/                   build.sh/.ps1, smoke.sh, run-experiment.py, lock-chain-demo.sh, verify-db.sh, export-openapi.sh
-docs/                      mimari, SQL bağımlılıkları, deneyler, telemetri sözleşmesi, runbook, kabul kapısı, ADR, OpenAPI
+docs/lab/                  mimari, SQL bağımlılıkları, deneyler, telemetri sözleşmesi, runbook, kabul kapısı, ADR, OpenAPI
+docs/platform/             SRE platformu: memory, guardrails, security, settings, agent builder, trace, örnek raporlar
+docs/specs/                özgün gereksinim ve prompt metinleri (tarihsel; eski yolları içerebilir)
+deploy/evidence/           kurulum ve deney kanıtları
 ```
+Docker build context her zaman repo köküdür (`app-vm/docker-compose.yml` içinde `context: ..`); lab imajları
+`lab/Dockerfile`, platform backend imajı `sre-platform/backend/Dockerfile` ile derlenir.
 
 ## Test komutları
 | Komut | Ne yapar |

@@ -11,10 +11,16 @@ import os
 import secrets
 import sys
 from collections.abc import Callable, Coroutine
+from pathlib import Path
 from typing import Any
 
 import pytest
 import sqlalchemy as sa
+
+# Agent motorunun test yardimcilari (synth, FakeLlm, senaryolar) tek yerden eklenir: backend testleri ayni sahte
+# MCP / LLM verisini kullanir. Bu, backend testlerinin sre-agent/tests ve sre-agent/eval'e tek bagimlilik noktasidir.
+_REPO = Path(__file__).resolve().parents[3]
+sys.path[:0] = [str(_REPO / "sre-agent/tests"), str(_REPO / "sre-agent/eval")]
 
 ADMIN_URL = os.getenv("SRE_TEST_DATABASE_URL", "")
 os.environ.setdefault("SRE_JWT_SECRET", "test-" + "x" * 40)

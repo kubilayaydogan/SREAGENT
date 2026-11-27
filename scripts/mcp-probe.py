@@ -32,7 +32,7 @@ from pathlib import Path
 PROTOCOL_VERSION = "2025-06-18"
 MCP_PATH = "/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp"
 
-# Kabul kapısı (docs/acceptance-gate.md "Telemetri / MCP kapısı") satırları → DQL.
+# Kabul kapısı (docs/lab/acceptance-gate.md "Telemetri / MCP kapısı") satırları → DQL.
 # {since} yerine --since değeri konur. Sorgular salt-okur ve limitlidir.
 GATE_QUERIES: list[tuple[str, str]] = [
     # Tenant "Smartscape on Grail" kullanıyor: dt.entity.* ve entityName() YOK (2026-11-21 mfi74785'te doğrulandı).

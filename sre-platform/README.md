@@ -59,7 +59,7 @@ tarayıcı ──:8090──► sre-frontend (nginx: SPA + /api ters vekil, SSE 
 | Kimlik | `POST auth/login`, `GET auth/me`, `GET/POST users`, `PATCH users/{id}` |
 | Katalog | `GET applications`, `GET applications/{id}/health`, `GET applications/{id}/metrics`, `GET dashboard/summary` |
 | Ajan | `POST agent/chat` (202), `POST agent/investigate`, `GET agent/stream/{run_id}` (SSE, `Last-Event-ID`), `GET agent/runs[/{id}]`, `POST agent/runs/{id}/cancel` |
-| Sohbet | `GET/POST conversations`, `GET/PATCH conversations/{id}`, `GET conversations/{id}/messages`, `POST conversations/{id}/resume`, `GET conversations/{id}/memory`, `DELETE conversations/{id}/memory/focus` (working memory — [docs/agent-memory.md](docs/agent-memory.md)) |
+| Sohbet | `GET/POST conversations`, `GET/PATCH conversations/{id}`, `GET conversations/{id}/messages`, `POST conversations/{id}/resume`, `GET conversations/{id}/memory`, `DELETE conversations/{id}/memory/focus` (working memory — [docs/platform/agent-memory.md](../docs/platform/agent-memory.md)) |
 | Araştırma | `GET investigations`, `GET investigations/{id}` + `/evidence` `/tools` `/similar` `/recommendations` `/feedback` |
 | Incident | `GET/POST incidents`, `GET/PATCH incidents/{id}`, `POST incidents/{id}/notes`, `POST incidents/{id}/investigations` |
 | RCA | `GET rca`, `POST rca/{inv_id}/generate`, `GET rca/{id}`, `GET rca/{id}/markdown` |
@@ -67,7 +67,7 @@ tarayıcı ──:8090──► sre-frontend (nginx: SPA + /api ters vekil, SSE 
 | Bilgi bankası | `GET/POST known-issues`, `GET known-issues/{id}`, `GET/POST runbooks`, `GET runbooks/{id}` |
 | Onay | `GET/POST approvals`, `POST approvals/{id}/decision`, `POST approvals/{id}/cancel` |
 | İşler | `GET jobs`, `GET jobs/runs`, `POST jobs/{name}/enabled` |
-| Settings | `GET settings`, `GET/PATCH settings/{section}` (+ `/revisions`, `/rollback`), `settings/connectors` (+ `/test`, `/discover`), `settings/llm-providers` (+ `/test`, `/models`), `settings/secrets`, `settings/scheduling/jobs` (+ `/{name}/run`), `settings/risk/preview`, `settings/memory`, `settings/audit`, `settings/security` — ayrıntı: [docs/settings.md](docs/settings.md) |
+| Settings | `GET settings`, `GET/PATCH settings/{section}` (+ `/revisions`, `/rollback`), `settings/connectors` (+ `/test`, `/discover`), `settings/llm-providers` (+ `/test`, `/models`), `settings/secrets`, `settings/scheduling/jobs` (+ `/{name}/run`), `settings/risk/preview`, `settings/memory`, `settings/audit`, `settings/security` — ayrıntı: [docs/platform/settings.md](../docs/platform/settings.md) |
 
 SSE olayları: `investigation_started`, `agent_thinking`, `tool_started`, `tool_completed`, `tool_failed`,
 `evidence_found`, `message_delta`, `investigation_completed`, `rca_ready`, `error`, `done` (+ keepalive).

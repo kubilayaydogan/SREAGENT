@@ -14,12 +14,8 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-import sys
 import uuid
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path[:0] = [str(ROOT / "sre-agent/tests"), str(ROOT / "sre-agent/eval")]
 
 from sqlalchemy import func, select  # noqa: E402
 from test_api import api_settings, lg_ready, login, mkuser, sse, with_client  # noqa: E402,F401

@@ -16,12 +16,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path[:0] = [str(ROOT / "sre-agent/tests"), str(ROOT / "sre-agent/eval")]
 
 from sqlalchemy import func, select, text, update  # noqa: E402
 from test_agent_memory import FakePort, _ctx  # noqa: E402

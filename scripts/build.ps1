@@ -4,7 +4,7 @@
 $root = Split-Path -Parent $PSScriptRoot
 $mvnArgs = if ($args.Count -gt 0) { $args } else { @('-B','-ntp','verify') }
 docker run --rm `
-  -v "${root}:/src" -w /src `
+  -v "${root}:/src" -w /src/lab `
   -v airlab-m2:/root/.m2 `
   -v /var/run/docker.sock:/var/run/docker.sock `
   -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal `

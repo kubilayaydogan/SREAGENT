@@ -8,15 +8,11 @@
 """
 from __future__ import annotations
 
-import sys
 import uuid
-from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path[:0] = [str(ROOT / "sre-agent/tests"), str(ROOT / "sre-agent/eval")]
 
 from airlab_agent.config import Settings  # noqa: E402
 from airlab_agent.graph import new_run_id  # noqa: E402

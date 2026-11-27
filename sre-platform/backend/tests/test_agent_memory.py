@@ -2,15 +2,11 @@
 geçmiş incident/araştırma araması, kesinti/iptal/sürdürme. MCP ve Claude sahte; PostgreSQL gerçek."""
 from __future__ import annotations
 
-import sys
 import uuid
-from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path[:0] = [str(ROOT / "sre-agent/tests"), str(ROOT / "sre-agent/eval")]
 
 from airlab_agent.config import Settings  # noqa: E402
 from airlab_agent.llm import LlmUnavailable  # noqa: E402

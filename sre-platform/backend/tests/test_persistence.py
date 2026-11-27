@@ -22,7 +22,7 @@ from sre_platform.repositories import (applications, approvals, conversations, i
 from sre_platform.repositories.base import Conflict, InvalidTransition, NotFound
 
 ROOT = Path(__file__).resolve().parents[3]
-E2 = json.loads((ROOT / "docs/examples/sre-agent/real-E2-row-lock.json").read_text(encoding="utf-8"))
+E2 = json.loads((ROOT / "docs/platform/examples/sre-agent/real-E2-row-lock.json").read_text(encoding="utf-8"))
 NOW = datetime.now(timezone.utc)
 
 

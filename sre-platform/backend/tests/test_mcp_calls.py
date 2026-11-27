@@ -11,12 +11,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import sys
-from pathlib import Path
 from types import SimpleNamespace as NS
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path[:0] = [str(ROOT / "sre-agent/tests"), str(ROOT / "sre-agent/eval")]
 
 from sqlalchemy import select, text  # noqa: E402
 from synth import build, windows  # noqa: E402

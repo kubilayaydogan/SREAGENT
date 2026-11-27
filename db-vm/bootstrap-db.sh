@@ -21,4 +21,4 @@ run_psql -v ON_ERROR_STOP=1 -d postgres \
   -v monitor_pw="$MONITOR_PW" -v dynatrace_pw="$DYNATRACE_PW" \
   -f "$HERE/create-roles.sql"
 
-echo "Roller ve '$DB_NAME' hazır. Migration/seed APP_VM'den db-migrator ile çalıştırılır (bkz. docs/runbook.md)."
+echo "Roller ve '$DB_NAME' hazır. Migration/seed APP_VM'den db-migrator ile çalıştırılır (bkz. docs/lab/runbook.md)."

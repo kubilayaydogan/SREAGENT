@@ -1,4 +1,4 @@
-# CI: regresyon testleri + güvenlik taramaları (docs/security/SECURITY_IMPLEMENTATION_PLAN.md P0.9).
+# CI: regresyon testleri + güvenlik taramaları (docs/platform/security/SECURITY_IMPLEMENTATION_PLAN.md P0.9).
 # Secret gerektirmez: testler sahte MCP/LLM ve geçici PostgreSQL kullanır. Dış servise (Dynatrace, Anthropic,
 # LangSmith, Slack) istek atılmaz.
 name: ci

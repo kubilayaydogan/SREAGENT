@@ -14,11 +14,7 @@ Doğrulananlar
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path[:0] = [str(ROOT / "sre-agent/tests"), str(ROOT / "sre-agent/eval")]
 
 from sqlalchemy import select, text  # noqa: E402
 from test_agent_memory import FakePort, _ctx  # noqa: E402

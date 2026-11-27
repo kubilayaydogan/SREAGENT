@@ -1,6 +1,6 @@
 """Güvenlik P0 kontrolleri — gerçek PostgreSQL, gerçek FastAPI uygulaması, sahte MCP/LLM.
 
-Kapsam (docs/security/SECURITY_IMPLEMENTATION_PLAN.md):
+Kapsam (docs/platform/security/SECURITY_IMPLEMENTATION_PLAN.md):
   P0.2 sunucu tarafı oturumlar (logout, iptal, idle, parola/rol değişikliği)   → T04
   P0.3 resume yolunda policy kontrolü                                          → T12
   P0.4 güvenlik audit'i + append-only                                          → T02, T14

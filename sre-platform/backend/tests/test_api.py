@@ -2,15 +2,11 @@
 from __future__ import annotations
 
 import json
-import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import httpx
 import pytest
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path[:0] = [str(ROOT / "sre-agent/tests"), str(ROOT / "sre-agent/eval")]
 
 from airlab_agent.mcp_gateway import QueryResult  # noqa: E402
 from conftest import run  # noqa: E402
