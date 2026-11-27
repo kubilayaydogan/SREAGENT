@@ -64,7 +64,7 @@ platform üzerinden (`sre-backend` ve `sre-worker`) çalışır.
 
 ## Temel özellikler
 
-- **Deterministik analiz, LLM açıklaması.** Skorlama ve Root Cause ataması düz Python'dur; LLM skoru değiştiremez ve
+- **Deterministik analiz, LLM açıklaması.** Skorlama ve Root Cause ataması Python servislerinde yapılmaktadır; LLM skoru değiştiremez ve
   tool çağıramaz.
 - **Veri kalitesini bilen evidence.** Her signal `OK`, `EMPTY`, `PERMISSION`, `ERROR`, `STALE`, `UNAVAILABLE` ya da
   `SKIPPED_BUDGET` olarak işaretlenir. MCP'ye ulaşılamazsa agent kısmi rapor yazar; başka bir kaynağa geçmez.
